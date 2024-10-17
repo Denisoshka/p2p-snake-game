@@ -1,16 +1,16 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
 import d.zhdanov.ccfit.nsu.core.game.Context
-import d.zhdanov.ccfit.nsu.core.game.map.GameType
 import d.zhdanov.ccfit.nsu.core.game.map.MapPoint
 
-class Apple(x: Int, y: Int) : Entity {
+class Apple(x: Int, y: Int, context: Context) : Entity {
   private var isDead: Boolean = false
   private val position: List<MapPoint>
   private val point: MapPoint = MapPoint(x, y, GameType.Apple)
 
   init {
     position = listOf(point)
+    context.map.addEntity(this)
   }
 
   override fun checkCollisions(entity: Entity, context: Context) {

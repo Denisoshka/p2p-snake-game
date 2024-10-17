@@ -1,23 +1,32 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
 import d.zhdanov.ccfit.nsu.core.game.Context
-import d.zhdanov.ccfit.nsu.core.game.map.GameType
 import d.zhdanov.ccfit.nsu.core.game.map.MapPoint
 import d.zhdanov.ccfit.nsu.core.messages.Direction
 
-class Snake(x: Int, y: Int, val id: Int, var direction: Direction) : Entity {
+class Snake(
+  mapPoint: MapPoint,
+  val id: Int,
+  var direction: Direction,
+  context: Context
+) : Entity {
   private var isDead: Boolean = false;
   private var score: Int = 0
   private val body: MutableList<MapPoint> = mutableListOf(
+    mapPoint.apply {
+      gameType = GameType.Snake;
+      ownerId = id
+    },
     MapPoint(
-      x, y,
-      GameType.Snake
-    ).apply { ownerId = id },
-    MapPoint(
-      x - direction.dx, y - direction.dy,
+      mapPoint.x - direction.dx,
+      mapPoint.y - direction.dy,
       GameType.Snake
     ).apply { ownerId = id },
   )
+
+  init {
+    context.map.addEntity(this)
+  }
 
   override fun getType(): GameType {
     return GameType.Snake
@@ -40,14 +49,13 @@ class Snake(x: Int, y: Int, val id: Int, var direction: Direction) : Entity {
   }
 
   override fun update(context: Context) {
-    val head = MapPoint(
+    val tail = body.removeLast()
+    context.map.movePoint(
+      tail,
       body[0].x + direction.dx,
-      body[0].y + direction.dy,
-      GameType.Snake
+      body[0].y + direction.dy
     )
-    head.ownerId = id
-    body.add(0, head)
-    body.removeAt(body.size - 1)
+    body.add(0, tail)
   }
 
   override fun checkCollisions(entity: Entity, context: Context) {
@@ -57,7 +65,8 @@ class Snake(x: Int, y: Int, val id: Int, var direction: Direction) : Entity {
     ) {
       when (entity.getType()) {
         GameType.Snake -> isDead = true
-        GameType.Apple -> if (!entity.isDead()) score++
+        GameType.Apple -> if (!entity.isDead()) ++score
+        else -> {}
       }
     }
   }
@@ -71,9 +80,6 @@ class Snake(x: Int, y: Int, val id: Int, var direction: Direction) : Entity {
   private fun getHead(): MapPoint = body.first()
 
   private fun isOpposite(newDirection: Direction): Boolean {
-    return (direction == Direction.UP && newDirection == Direction.DOWN) ||
-        (direction == Direction.DOWN && newDirection == Direction.UP) ||
-        (direction == Direction.LEFT && newDirection == Direction.RIGHT) ||
-        (direction == Direction.RIGHT && newDirection == Direction.LEFT)
+    return direction.opposite() == newDirection
   }
 }

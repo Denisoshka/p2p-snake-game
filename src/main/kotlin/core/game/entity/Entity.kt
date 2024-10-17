@@ -1,7 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
 import d.zhdanov.ccfit.nsu.core.game.Context
-import d.zhdanov.ccfit.nsu.core.game.map.GameType
 import d.zhdanov.ccfit.nsu.core.game.map.MapPoint
 
 interface Entity {
