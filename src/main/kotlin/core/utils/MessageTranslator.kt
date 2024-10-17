@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
-import d.zhdanov.ccfit.nsu.core.network.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.messages.GameMessage
 import dzhdanov.ccfit.nsu.ru.SnakesProto
 
 object MessageTranslator {

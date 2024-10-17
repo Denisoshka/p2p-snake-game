@@ -1,45 +1,50 @@
 package d.zhdanov.ccfit.nsu.core.network
 
 import core.network.nethandlers.UnicastNetHandler
-import d.zhdanov.ccfit.nsu.core.network.messages.GameMessage
-import d.zhdanov.ccfit.nsu.core.network.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.messages.types.Ack
+import d.zhdanov.ccfit.nsu.core.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.messages.types.AckMsg
+import d.zhdanov.ccfit.nsu.core.messages.types.ErrorMsg
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 import java.util.*
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 
 class StateMachine {
-  private val nodeConfig: NodeConfig
-  private val connections: ConcurrentHashMap<InetSocketAddress, ConnectionInfo> =
-    ConcurrentHashMap<InetSocketAddress, ConnectionInfo>()
+  private val joinQueueIsFull =
+    "The join queue is full. Please try again later."
+
   private val unicastNetHandler: UnicastNetHandler = TODO()
 
-  private val messageForApprove: ConcurrentHashMap<InetSocketAddress,
-      MutableSet<GameMessage>> =
+  //  в обычном режиме храним только мастера, в режиме сервера храним уже всех
+  private val connectionsInfo: ConcurrentHashMap<InetSocketAddress,
+      ConnectionState> =
     TODO("нужно добавить время последнего действия в мапку ?")
+  private val mes: EnumMap<MessageType, Int> = EnumMap(MessageType::class.java)
+  private val joinQueue: ArrayBlockingQueue<InetSocketAddress>
 
   @Volatile
   private var state: NodeRole = NodeRole.NORMAL
-
-  private val mes: EnumMap<MessageType, Int> = EnumMap(MessageType::class.java)
-
-  fun handleMessage(
+  fun handleUnicastMessage(
     message: GameMessage, inetSocketAddress: InetSocketAddress
   ) {
-    if (state == NodeRole.MASTER || state == NodeRole.DEPUTY) {
+    if (message.messageType == MessageType.AckMsg) {
+      connectionsInfo[inetSocketAddress]?.let { state ->
+        { state.approveMessage(message) }
+      }
+    } else if (state == NodeRole.MASTER) {
       masterHandle(message, inetSocketAddress);
-    } else if () {
-
     } else {
 
     }
-    TODO()
+    TODO("блять а что мне сделать чтобы все нормально обрабатывалось")
   }
 
   private fun sendMessage(
     message: GameMessage, inetSocketAddress: InetSocketAddress
   ) {
+    TODO()
     if (MessageUtils.needToApprove(message)) {
 
     }
@@ -48,38 +53,35 @@ class StateMachine {
   private fun masterHandle(
     message: GameMessage, inetSocketAddress: InetSocketAddress
   ) {
-    if (message.messageType == MessageType.AckMsg) {
-      messageForApprove[inetSocketAddress]?.let { map ->
-        synchronized(map) { map.remove(message) }
+    if (message.messageType == MessageType.JoinMsg) {
+      if (!joinQueue.offer(inetSocketAddress)) {
+        sendMessage(ErrorMsg(joinQueueIsFull), inetSocketAddress)
       }
       return
     }
+
     if (MessageUtils.needToApprove(message)) {
       approveMessage(message, inetSocketAddress)
     }
+    applyMessage(message)
   }
 
-  fun launchDeputyTask() {
-  }
-
-  fun lastApprovedMsg() {
-  }
-
-  fun changeDeputy(address: InetSocketAddress?) {
+  private fun applyMessage(message: GameMessage) {
+    TODO("Not yet implemented")
   }
 
   private fun onRoleChanged(role: NodeRole) {
     this.state = role
   }
 
-  private fun onMasterRole() {
-  }
-
-  private fun onDeputyRole() {
-  }
-
   private fun approveMessage(message: GameMessage, address: InetSocketAddress) {
-    val ack = Ack(message.msgSeq)
-    unicastNetHandler.sendMessage(ack, address)
+    val ackMsg = AckMsg(message.msgSeq)
+    unicastNetHandler.sendMessage(ackMsg, address)
+  }
+
+  class ClusterStateMonitor(cluster: StateMachine) {
+    fun launch() {
+
+    }
   }
 }

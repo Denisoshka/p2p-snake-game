@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.messages
+package d.zhdanov.ccfit.nsu.core.messages
 
 enum class MessageType {
     PingMsg,

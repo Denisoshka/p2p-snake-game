@@ -1,6 +1,6 @@
 package core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.inboundhandlers.UnicastHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
