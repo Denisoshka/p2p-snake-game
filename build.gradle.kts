@@ -25,6 +25,11 @@ dependencies {
     implementation("com.google.protobuf:protobuf-java-util:${protobufVersion}")
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
     implementation("io.netty:netty-all:4.1.114.Final")
+    // https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm
+    runtimeOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0")
+
+//    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 protobuf {

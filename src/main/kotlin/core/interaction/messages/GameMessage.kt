@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.messages
+package d.zhdanov.ccfit.nsu.core.interaction.messages
 
 /**
  * GameMessage class represents a message in the game system.

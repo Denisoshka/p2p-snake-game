@@ -1,7 +1,7 @@
-package d.zhdanov.ccfit.nsu.core.messages.innerTypes
+package d.zhdanov.ccfit.nsu.core.interaction.messages.innerTypes
 
-import d.zhdanov.ccfit.nsu.core.messages.Direction
-import d.zhdanov.ccfit.nsu.core.messages.SnakeState
+import d.zhdanov.ccfit.nsu.core.interaction.messages.Direction
+import d.zhdanov.ccfit.nsu.core.interaction.messages.SnakeState
 
 data class GameState(
   val stateOrder: Int,              // Порядковый номер состояния

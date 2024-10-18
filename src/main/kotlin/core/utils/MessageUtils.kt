@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
-import d.zhdanov.ccfit.nsu.core.messages.GameMessage
-import d.zhdanov.ccfit.nsu.core.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
 
 object MessageUtils {
   fun needToApprove(message: GameMessage): Boolean {

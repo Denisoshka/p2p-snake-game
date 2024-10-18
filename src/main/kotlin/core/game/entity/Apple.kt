@@ -1,15 +1,15 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
 import d.zhdanov.ccfit.nsu.core.game.Context
-import d.zhdanov.ccfit.nsu.core.game.map.MapPoint
+import d.zhdanov.ccfit.nsu.core.game.map.EntityOnMapInfo
 
 class Apple(x: Int, y: Int, context: Context) : Entity {
   private var isDead: Boolean = false
-  private val position: List<MapPoint>
-  private val point: MapPoint = MapPoint(x, y, GameType.Apple)
+  private val hitBox: List<EntityOnMapInfo>
+  private val point: EntityOnMapInfo = EntityOnMapInfo(x, y, GameType.Apple)
 
   init {
-    position = listOf(point)
+    hitBox = listOf(point)
     context.map.addEntity(this)
   }
 
@@ -24,8 +24,8 @@ class Apple(x: Int, y: Int, context: Context) : Entity {
 
   override fun update(context: Context) {}
 
-  override fun getHitBox(): Iterable<MapPoint> {
-    return position;
+  override fun getHitBox(): Iterable<EntityOnMapInfo> {
+    return hitBox;
   }
 
   override fun getType(): GameType {

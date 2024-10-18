@@ -3,9 +3,9 @@ package d.zhdanov.ccfit.nsu.core.game.map
 import d.zhdanov.ccfit.nsu.core.game.entity.Entity
 
 class GameMap(val width: Int, val height: Int) {
-  private val objects = mutableSetOf<MapPoint>()
+  private val objects = mutableSetOf<EntityOnMapInfo>()
 
-  private fun isSquareFree(point: MapPoint): Boolean {
+  private fun isSquareFree(point: EntityOnMapInfo): Boolean {
     val x = point.x
     val y = point.y
     var isFree = true
@@ -25,7 +25,7 @@ class GameMap(val width: Int, val height: Int) {
     return isFree
   }
 
-  fun movePoint(point: MapPoint, newX: Int, newY: Int) {
+  fun movePoint(point: EntityOnMapInfo, newX: Int, newY: Int) {
     objects.remove(point)
     point.x = newX
     point.y = newY
@@ -33,8 +33,8 @@ class GameMap(val width: Int, val height: Int) {
     objects.add(point)
   }
 
-  fun findFreeSquare(): MapPoint? {
-    val center = MapPoint(0, 0)
+  fun findFreeSquare(): EntityOnMapInfo? {
+    val center = EntityOnMapInfo(0, 0)
     for (x in 0 until width) {
       center.x = x;
       for (y in 0 until height) {
@@ -55,11 +55,11 @@ class GameMap(val width: Int, val height: Int) {
     entity.getHitBox().forEach(objects::remove)
   }
 
-  private fun isOccupied(point: MapPoint): Boolean {
+  private fun isOccupied(point: EntityOnMapInfo): Boolean {
     return objects.contains(point)
   }
 
-  private fun fixPoint(point: MapPoint) {
+  private fun fixPoint(point: EntityOnMapInfo) {
     point.x %= width
     point.y %= height
   }

@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.game.map
 
 import d.zhdanov.ccfit.nsu.core.game.entity.GameType
 
-class MapPoint(
+class EntityOnMapInfo(
   var x: Int,
   var y: Int,
   var gameType: GameType = GameType.Entity
@@ -13,7 +13,7 @@ class MapPoint(
     if (this === other) return true
     if (javaClass != other?.javaClass) return false
 
-    other as MapPoint
+    other as EntityOnMapInfo
 
     if (x != other.x) return false
     if (y != other.y) return false

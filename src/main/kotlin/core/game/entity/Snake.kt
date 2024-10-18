@@ -1,25 +1,25 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
 import d.zhdanov.ccfit.nsu.core.game.Context
-import d.zhdanov.ccfit.nsu.core.game.map.MapPoint
-import d.zhdanov.ccfit.nsu.core.messages.Direction
+import d.zhdanov.ccfit.nsu.core.game.map.EntityOnMapInfo
+import d.zhdanov.ccfit.nsu.core.interaction.messages.Direction
 
 class Snake(
-  mapPoint: MapPoint,
+  entityOnMapInfo: EntityOnMapInfo,
   val id: Int,
   var direction: Direction,
   context: Context
 ) : Entity {
   private var isDead: Boolean = false;
   private var score: Int = 0
-  private val body: MutableList<MapPoint> = mutableListOf(
-    mapPoint.apply {
+  private val body: MutableList<EntityOnMapInfo> = mutableListOf(
+    entityOnMapInfo.apply {
       gameType = GameType.Snake;
       ownerId = id
     },
-    MapPoint(
-      mapPoint.x - direction.dx,
-      mapPoint.y - direction.dy,
+    EntityOnMapInfo(
+      entityOnMapInfo.x - direction.dx,
+      entityOnMapInfo.y - direction.dy,
       GameType.Snake
     ).apply { ownerId = id },
   )
@@ -40,7 +40,7 @@ class Snake(
     return id
   }
 
-  override fun getHitBox(): Iterable<MapPoint> {
+  override fun getHitBox(): Iterable<EntityOnMapInfo> {
     return body
   }
 
@@ -50,6 +50,8 @@ class Snake(
 
   override fun update(context: Context) {
     val tail = body.removeLast()
+//  todo мб нужно сделать так чтобы здесь выделялась новая точка и не было
+//   проблем с снятием снапшота
     context.map.movePoint(
       tail,
       body[0].x + direction.dx,
@@ -77,7 +79,7 @@ class Snake(
     }
   }
 
-  private fun getHead(): MapPoint = body.first()
+  private fun getHead(): EntityOnMapInfo = body.first()
 
   private fun isOpposite(newDirection: Direction): Boolean {
     return direction.opposite() == newDirection

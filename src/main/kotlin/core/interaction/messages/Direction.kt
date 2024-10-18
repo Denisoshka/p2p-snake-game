@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.messages
+package d.zhdanov.ccfit.nsu.core.interaction.messages
 
 enum class Direction(val dx: Int, val dy: Int) {
   UP(0, -1),
