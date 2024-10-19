@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network
 
 import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
 import java.util.*
@@ -19,20 +20,22 @@ import kotlin.coroutines.CoroutineContext
  * @param messageComparator Comparator for comparing messages of type [MessageT]. This comparator must compare messages based on the sequence number msg_seq, which is unique to the node within the context and monotonically increasing.
  * @param nodeStateCheckerContext Coroutine context for checking the node state. Default is [Dispatchers.IO].
  */
-class ContextNode<
+class Node<
     MessageT,
     InboundMessageTranslator : AbstractMessageTranslator<MessageT>
     >(
   private val nodeId: InetSocketAddress,
-  var nodeRole: NodeRole,
+  initMsgSeqNum: Long,
+  private var nodeRole: NodeRole,
   private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>,
   messageComparator: Comparator<MessageT>,
-  nodeStateCheckerContext: CoroutineContext = Dispatchers.IO
+  nodeStateCheckerContext: CoroutineContext
 ) : AutoCloseable {
-  private enum class NodeState {
+  enum class NodeState {
+    JoiningCluster,
     Alive,
     Dead,
   }
@@ -41,6 +44,7 @@ class ContextNode<
   private var nodeState: NodeState = NodeState.Alive
   private val messagesForApprove: TreeMap<MessageT, Long> =
     TreeMap(messageComparator)
+  private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
   private val observationJob: Job
 
   /**

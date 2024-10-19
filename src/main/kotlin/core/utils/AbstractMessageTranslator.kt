@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
 import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.AbstractMessageTranslator
+import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
 import dzhdanov.ccfit.nsu.ru.SnakesProto
 
 object AbstractMessageTranslator :

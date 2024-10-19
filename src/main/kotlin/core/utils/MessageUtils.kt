@@ -1,9 +1,9 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
-import d.zhdanov.ccfit.nsu.core.network.AbstractMessageUtils
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 import dzhdanov.ccfit.nsu.ru.SnakesProto
 
-object MessageUtils : AbstractMessageUtils<SnakesProto.GameMessage,
+object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
     SnakesProto.GameMessage.TypeCase> {
   override fun needToApprove(msgDescriptor: SnakesProto.GameMessage.TypeCase):
       Boolean {

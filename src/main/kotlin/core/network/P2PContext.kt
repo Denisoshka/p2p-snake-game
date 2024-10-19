@@ -5,32 +5,45 @@ import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.messages.types.AckMsg
-import d.zhdanov.ccfit.nsu.core.interaction.messages.types.ErrorMsg
 import d.zhdanov.ccfit.nsu.core.interaction.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.MulticastNetHandler
+import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
+import d.zhdanov.ccfit.nsu.core.network.utils.ContextNodeFabricT
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import kotlinx.coroutines.Dispatchers
 import java.net.InetSocketAddress
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 
+
 class P2PContext<
-    MessageT,
-    InboundMessageTranslator : AbstractMessageTranslator<MessageT>
-    > {
+    MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>
+    >(
+  contextJoinBacklog: Int,
+  private val pingDelay: Long,
+  private val resendDelay: Long,
+  private val thresholdDelay: Long,
+  private val messageTranslator: InboundMessageTranslator,
+  private val contextNodeFabric: ContextNodeFabricT<MessageT, InboundMessageTranslator>,
+  messageUtils: MessageUtilsT<MessageT, MessageType>
+) {
   private val joinQueueIsFull =
     "The join queue is full. Please try again later."
   private val joinNotForMaster = "Join request allowed for master node."
 
-  private val messageTranslator: InboundMessageTranslator = TODO()
+  private val contextNodeDispatcher = Dispatchers.IO
+  private val messageComparator = messageUtils.getComparator()
   private val unicastNetHandler: UnicastNetHandler = TODO()
   private val multicastNetHandler: MulticastNetHandler = TODO()
 
   //  в обычном режиме храним только мастера, в режиме сервера храним уже всех
   private val connectionsInfo: ConcurrentHashMap<
-      InetSocketAddress,
-      ContextNode<MessageT, InboundMessageTranslator>
+      InetSocketAddress, Node<MessageT, InboundMessageTranslator>
       > = TODO("нужно добавить время последнего действия в мапку ?")
-  private val joinQueue: ArrayBlockingQueue<InetSocketAddress>
+  private val joinQueue: ArrayBlockingQueue<
+      Node<MessageT, InboundMessageTranslator>
+      > = ArrayBlockingQueue(contextJoinBacklog)
 
   @Volatile
   private var state: NodeRole = NodeRole.NORMAL
@@ -54,42 +67,61 @@ class P2PContext<
   private fun sendMessage(
     message: GameMessage, inetSocketAddress: InetSocketAddress
   ) {
-    TODO()
+
     if (MessageUtils.needToApprove(message)) {
 
     }
   }
 
   private fun masterHandle(
-    message: MessageT, inetSocketAddress: InetSocketAddress
+    message: MessageT, address: InetSocketAddress
   ) {
     val msgT = messageTranslator.getMessageType(message)
     if (msgT == MessageType.JoinMsg) {
-      if (!joinQueue.offer(inetSocketAddress)) {
-        sendMessage(ErrorMsg(joinQueueIsFull), inetSocketAddress)
-      }
+      val msg = (messageTranslator.fromMessageT(message, msgT)) as JoinMsg
+      joinNode(address, msg)
       return
     }
 
     if (MessageUtils.needToApprove(message)) {
-      approveMessage(message, inetSocketAddress)
+      approveMessage(message, address)
     }
     applyMessage(message)
   }
 
   private fun joinNode(ipAddress: InetSocketAddress, message: JoinMsg) {
-    if (state != NodeRole.MASTER) {
-      sendMessage(ErrorMsg(), ipAddress);
-      TODO(
-        "что делать с теми кто не присоединился, " +
-            "мы же им кидаем ошибку, но они не могут зайти в игру"
-      )
-      return;
+    if (message.nodeRole != NodeRole.NORMAL
+      && message.nodeRole != NodeRole.VIEWER
+    ) {
+      return
     }
+
+    val contextNode = connectionsInfo[ipAddress]
+    if (contextNode != null) {
+      return
+    }
+
+    val newNode = contextNodeFabric.create(
+      ipAddress, message.msgSeq, message.nodeRole, pingDelay,
+      resendDelay, thresholdDelay, this@P2PContext,
+      messageComparator, contextNodeDispatcher
+    )
+    connectionsInfo[ipAddress] = newNode;
+    val ret = joinQueue.offer(newNode)
+    if (!ret) {
+      nodeOffered(newNode)
+    } else {
+      retryJoinLater(newNode)
+    }
+  }
+
+  private fun nodeOffered(node: Node<MessageT, InboundMessageTranslator>) {
 
   }
 
-  private fun deleteNode()
+  private fun retryJoinLater(node: Node<MessageT, InboundMessageTranslator>) {
+
+  }
 
   private fun applyMessage(message: GameMessage) {
     TODO("Not yet implemented")
@@ -104,7 +136,7 @@ class P2PContext<
     unicastNetHandler.sendMessage(ackMsg, address)
   }
 
-  fun onNodeDead(node: ContextNode) {
+  fun onNodeDead(node: Node) {
     TODO("implement me please bitch")
   }
 }
