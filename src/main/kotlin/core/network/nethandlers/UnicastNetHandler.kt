@@ -2,7 +2,7 @@ package core.network.nethandlers
 
 import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.inboundhandlers.UnicastHandler
-import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
+import d.zhdanov.ccfit.nsu.core.utils.AbstractMessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.Unpooled
@@ -15,7 +15,7 @@ import io.netty.channel.socket.nio.NioDatagramChannel
 import java.net.InetSocketAddress
 
 
-class UnicastNetHandler(private val messageTranslator: MessageTranslator) {
+class UnicastNetHandler(private val messageTranslator: AbstractMessageTranslator) {
   private val group = NioEventLoopGroup()
   private lateinit var bootstrap: Bootstrap
   private lateinit var channel: DatagramChannel

@@ -9,5 +9,6 @@ enum class MessageType {
     JoinMsg,
     ErrorMsg,
     RoleChangeMsg,
-    DiscoverMsg;
+    DiscoverMsg,
+    UnrecognisedMsg;
 }

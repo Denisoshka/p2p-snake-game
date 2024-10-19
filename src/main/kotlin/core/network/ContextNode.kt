@@ -1,86 +1,124 @@
 package d.zhdanov.ccfit.nsu.core.network
 
-import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
 import kotlinx.coroutines.*
+import java.net.InetSocketAddress
 import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 
-class ContextNode(
-  val id: Int,
+/**
+ * ContextNode class represents a node in a peer-to-peer context.
+ *
+ * @param nodeId The unique identifier for the node, represented as an InetSocketAddress.
+ * @param nodeRole The role of the node within the network topology.
+ * @param pingDelay Delay in milliseconds for pinging the node.
+ * @param resendDelay Delay in milliseconds before resending a message.
+ * @param thresholdDelay Threshold delay in milliseconds to determine node state.
+ * @param context The P2P context which manages the node's interactions.
+ * @param messageComparator Comparator for comparing messages of type [MessageT]. This comparator must compare messages based on the sequence number msg_seq, which is unique to the node within the context and monotonically increasing.
+ * @param nodeStateCheckerContext Coroutine context for checking the node state. Default is [Dispatchers.IO].
+ */
+class ContextNode<
+    MessageT,
+    InboundMessageTranslator : AbstractMessageTranslator<MessageT>
+    >(
+  private val nodeId: InetSocketAddress,
+  var nodeRole: NodeRole,
   private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
-  private val context: P2PContext,
+  private val context: P2PContext<MessageT, InboundMessageTranslator>,
+  messageComparator: Comparator<MessageT>,
   nodeStateCheckerContext: CoroutineContext = Dispatchers.IO
-//  private val checkNodeManager: ((() -> Unit) -> Unit)? = null
 ) : AutoCloseable {
-  enum class NodeState {
+  private enum class NodeState {
     Alive,
     Dead,
   }
 
-  private val messagesForApprove: TreeMap<GameMessage, Long> = TreeMap()
-
   @Volatile
   private var nodeState: NodeState = NodeState.Alive
+  private val messagesForApprove: TreeMap<MessageT, Long> =
+    TreeMap(messageComparator)
   private val observationJob: Job
-
-  init {
-    observationJob = CoroutineScope(nodeStateCheckerContext).launch {
-      val interval = (resendDelay * 0.75).toLong();
-      while (nodeState == NodeState.Alive) {
-        checkNodeState()
-        delay(interval)
-      }
-    }
-  }
 
   /**
    * Change this value within the scope of `synchronized(messagesForApprove)`.
    */
   private val lastAction = AtomicLong(System.currentTimeMillis())
-  fun approveMessage(message: GameMessage) {
+
+  init {
+    val delayCoef = 0.8
+    observationJob = CoroutineScope(nodeStateCheckerContext).launch {
+      try {
+        while (nodeState == NodeState.Alive) {
+          val delay = checkNodeState()
+          delay((delay * delayCoef).toLong())
+        }
+      } catch (_: CancellationException) {
+      }
+//      TODO("посмотреть что написал Лёха по корутинам")
+    }
+  }
+
+  fun approveMessage(message: MessageT) {
     synchronized(messagesForApprove) {
       messagesForApprove.remove(message)
       lastAction.set(System.currentTimeMillis())
     }
   }
 
-  fun addMessageForApproval(message: GameMessage) {
+  fun addMessageForApproval(message: MessageT) {
     synchronized(messagesForApprove) {
-      messagesForApprove.put(message, System.currentTimeMillis())
+      messagesForApprove[message] = System.currentTimeMillis()
+      TODO("что то я сомневаюсь что здесь не нужно учитывать lastAction")
     }
   }
 
-  private fun checkNodeState() {
+  private fun checkNodeState(): Long {
     synchronized(messagesForApprove) {
       val curTime = System.currentTimeMillis()
-      val entry = messagesForApprove.firstEntry()
-      if (entry == null) {
+      if (messagesForApprove.isEmpty()) {
         if (curTime - lastAction.get() > pingDelay) {
           TODO("нужно сделать пинг")
         }
-        return
+        return lastAction.get() + pingDelay - curTime
       }
-      if (curTime.compareTo(entry.value) < resendDelay) {
-        return
-      } else if (curTime.compareTo(entry.value) < thresholdDelay) {
-        TODO("нужно переслать сообщение")
-      } else {
-        if (nodeState != NodeState.Dead) {
-          nodeState = NodeState.Dead
-          context.onNodeDead(this)
+
+      val entry = messagesForApprove.firstEntry()
+      if (curTime - entry.value < resendDelay) {
+        return entry.value + resendDelay - curTime
+      }
+
+      for ((msg, actionTime) in messagesForApprove) {
+        if (curTime - actionTime < resendDelay) {
+          break
+        } else if (curTime - actionTime < thresholdDelay) {
+          TODO("нужно переслать сообщение")
+        } else {
+          onNodeDead()
+          return 0
         }
       }
+      return entry.value + thresholdDelay - curTime
     }
+    TODO("что то я сомневаюсь в корректности выбора времени для возвращения ")
+    TODO(
+      "что если пришло какое то сообщение от ноды но мы ведь смотрим " +
+          "по подтвержденным сообщениям и не смотрим по времени последней " +
+          "активности ноды, мб нужно удалять это сообщение из множества " +
+          "для подтверждения и при переотправке по новой добавлять?"
+    )
   }
 
-  fun startObserving() {
-
+  private fun onNodeDead() {
+    nodeState = NodeState.Dead
+    observationJob.cancel()
+    context.onNodeDead(this)
   }
 
   override fun close() {
-    TODO("Not yet implemented")
+    onNodeDead()
   }
 }

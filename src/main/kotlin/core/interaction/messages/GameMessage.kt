@@ -10,9 +10,14 @@ package d.zhdanov.ccfit.nsu.core.interaction.messages
  *
  * This contract ensures consistent comparison behavior and correct message ordering in the system.
  */
-open class GameMessage(val msgSeq: Long, val messageType: MessageType) {
+open class GameMessage(val msgSeq: Long, val messageType: MessageType) :
+  Comparable<GameMessage> {
   val senderId = 0
   val receiverId = 0
+
+  final override fun compareTo(other: GameMessage): Int {
+    return this.msgSeq.compareTo(other.msgSeq)
+  }
 
   final override fun equals(other: Any?): Boolean {
     if (this === other) return true
