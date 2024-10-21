@@ -11,7 +11,7 @@ import kotlin.coroutines.CoroutineContext
 /**
  * ContextNode class represents a node in a peer-to-peer context.
  *
- * @param nodeId The unique identifier for the node, represented as an InetSocketAddress.
+ * @param address The unique identifier for the node, represented as an InetSocketAddress.
  * @param nodeRole The role of the node within the network topology.
  * @param pingDelay Delay in milliseconds for pinging the node.
  * @param resendDelay Delay in milliseconds before resending a message.
@@ -24,16 +24,17 @@ class Node<
     MessageT,
     InboundMessageTranslator : AbstractMessageTranslator<MessageT>
     >(
-  private val nodeId: InetSocketAddress,
   initMsgSeqNum: Long,
-  private var nodeRole: NodeRole,
+  val address: InetSocketAddress,
+  val nodeId: Int,
+  var nodeRole: NodeRole,
   private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>,
   messageComparator: Comparator<MessageT>,
   nodeStateCheckerContext: CoroutineContext
-) : AutoCloseable {
+) {
   enum class NodeState {
     JoiningCluster,
     Alive,
@@ -73,7 +74,7 @@ class Node<
     }
   }
 
-  fun addMessageForApproval(message: MessageT) {
+  fun addMessageForAcknowledge(message: MessageT) {
     synchronized(messagesForApprove) {
       messagesForApprove[message] = System.currentTimeMillis()
       TODO("что то я сомневаюсь что здесь не нужно учитывать lastAction")
@@ -120,9 +121,5 @@ class Node<
     nodeState = NodeState.Dead
     observationJob.cancel()
     context.onNodeDead(this)
-  }
-
-  override fun close() {
-    onNodeDead()
   }
 }
