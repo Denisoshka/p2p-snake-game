@@ -18,12 +18,12 @@ class P2PContext<
     MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>
     >(
   contextJoinBacklog: Int,
+  val messageUtils: MessageUtilsT<MessageT, MessageType>,
   private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val messageTranslator: InboundMessageTranslator,
-  private val contextNodeFabric: ContextNodeFabricT<MessageT, InboundMessageTranslator>,
-  private val messageUtils: MessageUtilsT<MessageT, MessageType>
+  private val contextNodeFabric: ContextNodeFabricT<MessageT, InboundMessageTranslator>
 ) {
   private val joinQueueIsFull =
     "The join queue is full. Please try again later."
@@ -33,9 +33,9 @@ class P2PContext<
   private val messageComparator = messageUtils.getComparator()
   private val unicastNetHandler: UnicastNetHandler<MessageT> = TODO()
   private val multicastNetHandler: MulticastNetHandler<MessageT> = TODO()
-  private var localNode: Node<MessageT, InboundMessageTranslator> = TODO()
-  private var masterNode: Node<MessageT, InboundMessageTranslator> = TODO()
-  private var deputyNode: Node<MessageT, InboundMessageTranslator> = TODO()
+  private var localNode: Node<MessageT, InboundMessageTranslator>
+  var masterNode: Node<MessageT, InboundMessageTranslator> private set
+  var deputyNode: Node<MessageT, InboundMessageTranslator> private set
 
   //  в обычном режиме храним только мастера, в режиме сервера храним уже всех
   private val nodes: ConcurrentHashMap<
@@ -88,16 +88,29 @@ class P2PContext<
 
   private fun sendMessage(
     message: GameMessage,
-    address: InetSocketAddress
+    node: Node<MessageT, InboundMessageTranslator>
   ) {
-    val node = nodes[address] ?: return
-
     val msgT = message.messageType
     val msg = messageTranslator.toMessageT(message, msgT)
-    if (messageUtils.needToAcknowledge(msgT)) {
-      node.addMessageForAcknowledge(msg)
+    sendMessage(msg, node.address)
+  }
+
+  fun sendMessage(
+    message: MessageT,
+    address: InetSocketAddress
+  ) {
+    if (localNode.address == masterNode.address) {
+      val msg = messageTranslator.fromMessageT(message)
+      applyMessage(msg)
+    } else {
+      val msgT = messageTranslator.getMessageType(message)
+      if (messageUtils.needToAcknowledge(msgT)) {
+//        TODO что началось то блин
+        node.addMessageForAcknowledge(msg)
+      }
+      unicastNetHandler.sendMessage(message, address)
     }
-    unicastNetHandler.sendMessage(msg, address)
+    TODO("TODO как обрабатывать сообщение которое мы отправили сами себе")
   }
 
   private fun masterHandleMessage(
@@ -171,25 +184,19 @@ class P2PContext<
   }
 
   fun onNodeDead(node: Node<MessageT, InboundMessageTranslator>) {
-    val role = node.nodeRole
-    if (role == NodeRole.NORMAL || role == NodeRole.VIEWER) {
-      return
-    }
-
     if ((state == NodeRole.MASTER || state == NodeRole.DEPUTY)) {
-      if (role == NodeRole.DEPUTY) chooseNewDeputy(node)
+      if (node.nodeRole == NodeRole.DEPUTY) onDeputyDead(node)
     } else {
-      if (role == NodeRole.MASTER) onMasterDead(node)
+      if (node.nodeRole == NodeRole.MASTER) onMasterDead(node)
     }
-
     TODO("что будет если наша нода умрет?")
   }
 
-  private fun onMasterDead(node: Node<MessageT, InboundMessageTranslator>) {
+  private fun onMasterDead(oldMaster: Node<MessageT, InboundMessageTranslator>) {
 
   }
 
-  private fun chooseNewDeputy(node: Node<MessageT, InboundMessageTranslator>) {
+  private fun onDeputyDead(oldDeputy: Node<MessageT, InboundMessageTranslator>) {
 
   }
 }

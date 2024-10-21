@@ -6,7 +6,9 @@ import dzhdanov.ccfit.nsu.ru.SnakesProto
 object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
     SnakesProto.GameMessage.TypeCase> {
   private val ackMsg: SnakesProto.GameMessage.AckMsg =
-    SnakesProto.GameMessage.AckMsg.newBuilder().build();
+    SnakesProto.GameMessage.AckMsg.newBuilder().build()
+  private val pingMsg: SnakesProto.GameMessage.PingMsg =
+    SnakesProto.GameMessage.PingMsg.newBuilder().build()
 
   override fun needToAcknowledge(
     msgDescriptor: SnakesProto.GameMessage
@@ -25,28 +27,33 @@ object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
     message: SnakesProto.GameMessage,
     senderId: Int, receiverId: Int
   ): SnakesProto.GameMessage {
-    val ret = SnakesProto.GameMessage.newBuilder()
+    return SnakesProto.GameMessage.newBuilder()
       .setMsgSeq(message.msgSeq)
       .setSenderId(senderId)
       .setReceiverId(receiverId)
       .setAck(
         ackMsg
       ).build()
-    return ret
   }
 
   override fun getErrorMsg(
     message: SnakesProto.GameMessage,
     errorMsg: String?
   ): SnakesProto.GameMessage {
-    val ret = SnakesProto.GameMessage.newBuilder()
+    return SnakesProto.GameMessage.newBuilder()
       .setMsgSeq(message.msgSeq)
       .setError(
         SnakesProto.GameMessage.ErrorMsg.newBuilder()
           .setErrorMessage(errorMsg)
           .build()
       ).build()
-    return ret
+  }
+
+  override fun getPingMsg(seq: Long): SnakesProto.GameMessage {
+    return SnakesProto.GameMessage.newBuilder()
+      .setMsgSeq(seq)
+      .setPing(pingMsg)
+      .build()
   }
 
   override fun getSenderId(message: SnakesProto.GameMessage): Int {
