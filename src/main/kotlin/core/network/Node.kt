@@ -11,6 +11,10 @@ import kotlin.coroutines.CoroutineContext
 /**
  * ContextNode class represents a node in a peer-to-peer context.
  *
+ * Each node is responsible for monitoring the delivery of sent messages.
+ * A message is resent if the [resendDelay] is exceeded.
+ * A node is considered dead if the message delay exceeds [thresholdDelay].
+ *
  * @param address The unique identifier for the node, represented as an InetSocketAddress.
  * @param nodeRole The role of the node within the network topology.
  * @param pingDelay Delay in milliseconds for pinging the node.
@@ -26,25 +30,32 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   nodeStateCheckerContext: CoroutineContext,
   val address: InetSocketAddress,
   val nodeId: Int,
-  var nodeRole: NodeRole,
+  @Volatile var nodeRole: NodeRole,
   private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>
-) {
+) : AutoCloseable {
   enum class NodeState {
     JoiningCluster, Alive, Dead,
   }
 
   @Volatile
-  private var nodeState: NodeState = NodeState.Alive
-  private val messagesForApprove: TreeMap<MessageT, Pair<Long, InetSocketAddress>> =
+  var nodeState: NodeState = NodeState.Alive
+    private set
+
+  //  todo может сделать так что когда мы становимся мастером то все сообщения
+  //  которые отправили мастеру трем и начинаем собирать все новые?
+  /**
+   * Change this value within the scope of synchronized([msgForAcknowledge]).
+   */
+  private val msgForAcknowledge: TreeMap<MessageT, Long> =
     TreeMap(messageComparator)
   private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
   private val observationJob: Job
 
   /**
-   * Change this value within the scope of `synchronized(messagesForApprove)`.
+   * Change this value within the scope of synchronized([msgForAcknowledge]).
    */
   private val lastAction = AtomicLong(System.currentTimeMillis())
 
@@ -63,53 +74,64 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   }
 
   fun approveMessage(message: MessageT) {
-    synchronized(messagesForApprove) {
-      messagesForApprove.remove(message)
+    synchronized(msgForAcknowledge) {
+      msgForAcknowledge.remove(message)
       lastAction.set(System.currentTimeMillis())
     }
   }
 
-  fun addMessageForAcknowledge(message: MessageT, address: InetSocketAddress) {
-    synchronized(messagesForApprove) {
-      messagesForApprove[message] = Pair(System.currentTimeMillis(), address)
+  fun addMessageForAcknowledge(message: MessageT) {
+    synchronized(msgForAcknowledge) {
+      msgForAcknowledge[message] = System.currentTimeMillis()
       TODO("что то я сомневаюсь что здесь не нужно учитывать lastAction")
     }
   }
 
+  fun getUnacknowledgedMessages(): List<MessageT> {
+    if (nodeState != NodeState.Dead) {
+      return listOf()
+    }
+    synchronized(msgForAcknowledge) {
+      return msgForAcknowledge.keys.toList();
+    }
+  }
+
   private fun checkNodeState(): Long {
-    synchronized(messagesForApprove) {
+    synchronized(msgForAcknowledge) {
       val curTime = System.currentTimeMillis()
-      if (messagesForApprove.isEmpty()) {
+      if (msgForAcknowledge.isEmpty()) {
         if (curTime - lastAction.get() > pingDelay) {
           pingMaster()
         }
         return lastAction.get() + pingDelay - curTime
+      }/*
+      TODO нужно что то сделать когда есть те сообщения которые дошли и
+      нода подает признаки жизни, а есть старые которые не дошли
+      */
+      val entry = msgForAcknowledge.firstEntry()
+      if (curTime - entry.value < resendDelay) {
+        return entry.value + resendDelay - curTime
       }
 
-      val entry = messagesForApprove.firstEntry()
-      if (curTime - entry.value.first < resendDelay) {
-        return entry.value.first + resendDelay - curTime
+      /**
+       * Как обрабатывать то когда нода стала главной, но все еще ждет
+       * подтверждения от мастера - мастер отвечает за отправленные сообщения,
+       * локальная нода не взаимодействует с другими
+       * Что делать с теми сообщениями которые пошли до мастера, но
+       * мастер умер - [getUnacknowledgedMessages]
+       */
+      if (curTime - lastAction.get() > thresholdDelay) {
+        onNodeDead()
+        return 0
       }
-      //    TODO Как обрабатывать то когда нода стала главной но все еще ждет
-      //    подтверждения от мастера
-      //    TODO Что делать с теми сообщениями которые пошли до мастера, но
-      //    мастер умер и мы теперь мастер
-      for ((msg, info) in messagesForApprove) {
-        if (info.second == address) {
-
-        }
-        if (curTime - info < resendDelay) {
+      for (msgInfo in msgForAcknowledge) {
+        if (curTime - msgInfo.value < resendDelay) {
           break
-        } else if (curTime - info < thresholdDelay) {
-          TODO("нужно переслать сообщение")
         } else {
-          onNodeDead()
-          return 0
+          msgInfo.setValue(curTime)
+          TODO("нужно переслать сообщение")
         }
       }
-      TODO(
-        " Что делать если мы уже мастер, нам же не нужно дожидаться " + "подтверждения сообщений от старого мастера)))))" + "  Что то я сомневаюсь в корректности выбора времени для " + "возвращения" + "  Что если пришло какое то сообщение от ноды но мы ведь смотрим " + "по подтвержденным сообщениям и не смотрим по времени последней " + "активности ноды, мб нужно удалять это сообщение из множества " + "для подтверждения и при переотправке по новой добавлять?"
-      )
       return entry.value + thresholdDelay - curTime
     }
   }
@@ -119,12 +141,16 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
     val ping = context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
     val masterAddress = context.masterNode.address
     addMessageForAcknowledge(ping, masterAddress)
-    context.sendMessage(ping, masterAddress)
+    context.sendMessage(ping, this)
   }
 
   private fun onNodeDead() {
+    close()
+    context.onNodeDead(this)
+  }
+
+  override fun close() {
     nodeState = NodeState.Dead
     observationJob.cancel()
-    context.onNodeDead(this)
   }
 }

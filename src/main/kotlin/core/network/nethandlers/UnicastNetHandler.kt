@@ -1,8 +1,7 @@
 package core.network.nethandlers
 
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.inboundhandlers.UnicastHandler
-import d.zhdanov.ccfit.nsu.core.utils.AbstractMessageTranslator
-import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.Unpooled
 import io.netty.channel.ChannelInitializer
@@ -14,9 +13,8 @@ import io.netty.channel.socket.nio.NioDatagramChannel
 import java.net.InetSocketAddress
 
 
-class UnicastNetHandler<MessageT>(
-  private val messageTranslator:
-  AbstractMessageTranslator
+class UnicastNetHandler<MessageT, MessageDescriptor>(
+  private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>
 ) {
   private val group = NioEventLoopGroup()
   private lateinit var bootstrap: Bootstrap
@@ -45,10 +43,9 @@ class UnicastNetHandler<MessageT>(
   }
 
   fun sendMessage(message: MessageT, address: InetSocketAddress) {
-//    val data = MessageUtils.getData(message)
-//    val packet = DatagramPacket(Unpooled.wrappedBuffer(data), address)
-    channel.write(packet)
-    channel.flush()
+    val data = Unpooled.wrappedBuffer(msgUtils.toBytes(message))
+    val packet = DatagramPacket(data, address)
+    channel.writeAndFlush(packet)
     TODO()
   }
 }

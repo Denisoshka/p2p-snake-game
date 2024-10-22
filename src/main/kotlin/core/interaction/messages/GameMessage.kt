@@ -1,5 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.interaction.messages
 
+import d.zhdanov.ccfit.nsu.core.interaction.messages.types.Msg
+
 /**
  * GameMessage class represents a message in the game system.
  *
@@ -10,10 +12,10 @@ package d.zhdanov.ccfit.nsu.core.interaction.messages
  *
  * This contract ensures consistent comparison behavior and correct message ordering in the system.
  */
-open class GameMessage(val msgSeq: Long, val messageType: MessageType) :
+open class GameMessage(val msgSeq: Long, val msg : Msg) :
   Comparable<GameMessage> {
-  val senderId = 0
-  val receiverId = 0
+  var senderId = 0
+  var receiverId = 0
 
   final override fun compareTo(other: GameMessage): Int {
     return this.msgSeq.compareTo(other.msgSeq)
