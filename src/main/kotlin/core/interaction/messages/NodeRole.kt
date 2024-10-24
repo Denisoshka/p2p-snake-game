@@ -23,7 +23,8 @@ enum class NodeRole {
   DEPUTY,
 
   /**
-   * A spectator node, similar to NORMAL, but without an ALIVE snake; only receives status updates.
+   * A spectator node, similar to NORMAL, but without an ALIVE snake;
+   * only receives status updates.
    */
   VIEWER;
 

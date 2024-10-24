@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network
 
-import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
@@ -16,8 +15,6 @@ import kotlin.coroutines.CoroutineContext
  * A node is considered dead if the message delay exceeds [thresholdDelay].
  *
  * @param address The unique identifier for the node, represented as an InetSocketAddress.
- * @param nodeRole The role of the node within the network topology.
- * @param pingDelay Delay in milliseconds for pinging the node.
  * @param resendDelay Delay in milliseconds before resending a message.
  * @param thresholdDelay Threshold delay in milliseconds to determine node state.
  * @param context The P2P context which manages the node's interactions.
@@ -30,14 +27,12 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   nodeStateCheckerContext: CoroutineContext,
   val address: InetSocketAddress,
   val nodeId: Int,
-  @Volatile var nodeRole: NodeRole,
-  private val pingDelay: Long,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>
 ) : AutoCloseable {
   enum class NodeState {
-    JoiningCluster, Alive, Dead,
+    Alive, Dead,
   }
 
   @Volatile
@@ -57,17 +52,20 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   /**
    * Change this value within the scope of synchronized([msgForAcknowledge]).
    */
-  private val lastAction = AtomicLong(System.currentTimeMillis())
+  private val lastReceive = AtomicLong(System.currentTimeMillis())
+  private val lastSend = AtomicLong(System.currentTimeMillis())
 
   init {
     val delayCoef = 0.8
     observationJob = CoroutineScope(nodeStateCheckerContext).launch {
       try {
         while (nodeState == NodeState.Alive) {
-          val delay = checkNodeState()
+          val delay = checkActivity()
           delay((delay * delayCoef).toLong())
         }
       } catch (_: CancellationException) {
+      } finally {
+        context.onNodeDead(this)
       }
     }
     //    TODO Нужно ли делать equals для нод
@@ -76,35 +74,43 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   fun approveMessage(message: MessageT) {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge.remove(message)
-      lastAction.set(System.currentTimeMillis())
+      lastReceive.set(System.currentTimeMillis())
     }
   }
 
   fun addMessageForAcknowledge(message: MessageT) {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
+      lastSend.set(System.currentTimeMillis())
       TODO("что то я сомневаюсь что здесь не нужно учитывать lastAction")
     }
   }
 
   fun getUnacknowledgedMessages(): List<MessageT> {
-    if (nodeState != NodeState.Dead) {
-      return listOf()
-    }
     synchronized(msgForAcknowledge) {
+      if (nodeState != NodeState.Dead) {
+        return listOf()
+//      todo может сделать эксепшн
+      }
       return msgForAcknowledge.keys.toList();
     }
   }
 
-  private fun checkNodeState(): Long {
+  private fun checkActivity(): Long {
     synchronized(msgForAcknowledge) {
       val curTime = System.currentTimeMillis()
+      if (curTime - lastReceive.get() > thresholdDelay) {
+        nodeState = NodeState.Dead
+        return 0;
+      }
       if (msgForAcknowledge.isEmpty()) {
-        if (curTime - lastAction.get() > pingDelay) {
-          pingMaster()
+        if (curTime - lastReceive.get() >= resendDelay) {
+          ping()
+          return resendDelay
         }
-        return lastAction.get() + pingDelay - curTime
-      }/*
+        return lastReceive.get() + resendDelay - curTime
+      }
+      /*
       TODO нужно что то сделать когда есть те сообщения которые дошли и
       нода подает признаки жизни, а есть старые которые не дошли
       */
@@ -120,37 +126,30 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
        * Что делать с теми сообщениями которые пошли до мастера, но
        * мастер умер - [getUnacknowledgedMessages]
        */
-      if (curTime - lastAction.get() > thresholdDelay) {
-        onNodeDead()
-        return 0
-      }
-      for (msgInfo in msgForAcknowledge) {
+      val it = msgForAcknowledge.entries.iterator()
+      while (it.hasNext()) {
+        val msgInfo = it.next()
+
         if (curTime - msgInfo.value < resendDelay) {
           break
-        } else {
+        } else if (curTime - msgInfo.value < thresholdDelay) {
           msgInfo.setValue(curTime)
           TODO("нужно переслать сообщение")
+        } else {
+          it.remove()
         }
       }
       return entry.value + thresholdDelay - curTime
     }
   }
 
-  private fun pingMaster() {
-    if (nodeRole == NodeRole.MASTER) return
+  private fun ping() {
     val ping = context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
-    val masterAddress = context.masterNode.address
-    addMessageForAcknowledge(ping, masterAddress)
+    addMessageForAcknowledge(ping)
     context.sendMessage(ping, this)
-  }
-
-  private fun onNodeDead() {
-    close()
-    context.onNodeDead(this)
   }
 
   override fun close() {
     nodeState = NodeState.Dead
-    observationJob.cancel()
   }
 }

@@ -5,15 +5,21 @@ import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.messages.types.JoinMsg
+import d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.MulticastNetHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
 import d.zhdanov.ccfit.nsu.core.network.utils.ContextNodeFabricT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.BlockingQueue
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 
 class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>>(
   contextJoinBacklog: Int,
@@ -34,19 +40,32 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     TODO()
   private val multicastNetHandler: MulticastNetHandler<MessageT> = TODO()
   private val localNode: Node<MessageT, InboundMessageTranslator>
-  private val masterNode: AtomicReference<Node<MessageT, InboundMessageTranslator>>
-  private val deputyNode: AtomicReference<Node<MessageT, InboundMessageTranslator>>
+
+  @Volatile
+  private var masterNode: Node<MessageT, InboundMessageTranslator>
+
+  @Volatile
+  private var deputyNode: Node<MessageT, InboundMessageTranslator>?
+
+  @Volatile
+  private var nodeState: NodeRole = NodeRole.NORMAL
+
+  private val joinQueue: BlockingQueue<Node<MessageT, InboundMessageTranslator>> =
+    ArrayBlockingQueue(contextJoinBacklog)
+  private val deadNodeQueue: Channel<Node<MessageT, InboundMessageTranslator>> =
+    Channel(contextJoinBacklog)
+  private val newNodeRegister: Channel<Node<MessageT, InboundMessageTranslator>> =
+    Channel(contextJoinBacklog)
+  private var p2pContextWatcher: Job
+
+  init {
+    p2pContextWatcher = getP2PContextWatcher();
+  }
+
 
   //  в обычном режиме храним только мастера, в режиме сервера храним уже всех
   //  в обычном режиме мы тут храним только мастера и себя, когда заметили
   private val nodes: ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator>> =
-    TODO("нужно добавить время последнего действия в мапку ?")
-
-  private val joinQueue: ArrayBlockingQueue<Node<MessageT, InboundMessageTranslator>> =
-    ArrayBlockingQueue(contextJoinBacklog)
-
-  @Volatile
-  private var state: NodeRole = NodeRole.NORMAL
 
   fun handleUnicastMessage(
     message: MessageT, inetSocketAddress: InetSocketAddress
@@ -54,34 +73,29 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     val msgT = messageTranslator.getMessageType(message)
     if (msgT == MessageType.UnrecognisedMsg) {
       return
-    }
-
-    if (msgT == MessageType.AckMsg) {
+    } else if (msgT == MessageType.AckMsg) {
       nodes[inetSocketAddress]?.approveMessage(message)
       return
     }
 
-    if (state == NodeRole.MASTER) {
-      masterHandleMessage(message, inetSocketAddress);
-    } else {
-      handleMessage(message, inetSocketAddress)
+    when (nodeState) {
+      NodeRole.MASTER -> masterHandleMessage(message, inetSocketAddress);
+      NodeRole.DEPUTY -> TODO()
+      else -> handleMessage(message, inetSocketAddress)
     }
     TODO(
       "в роли обычного просматривающего " + "нужно дождаться первого state " + "и только после этого играть?"
     )
   }
 
+
   private fun handleMessage(
     message: MessageT, inetSocketAddress: InetSocketAddress
   ) {
-    if (state == NodeRole.DEPUTY) {
 
-    } else {
-
-    }
   }
 
-  private fun sendMessage(
+  fun sendMessage(
     message: GameMessage, node: Node<MessageT, InboundMessageTranslator>
   ) {
     val msgT = message.msg.type
@@ -93,7 +107,11 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     message: MessageT, node: Node<MessageT, InboundMessageTranslator>
   ) {
     val msgT = messageTranslator.getMessageType(message)
-//    todo fix this
+    if (messageUtils.needToAcknowledge(msgT)) {
+      node.addMessageForAcknowledge(message)
+    }
+
+    TODO("что за пиздец здесь происходит,")
     if (localNode.address == masterNode.address) {
 //      todo как обрабатывать сообщения которые мы отправили сами себе?
       val msg = messageTranslator.fromMessageT(message, msgT)
@@ -169,10 +187,6 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     TODO("Not yet implemented")
   }
 
-  private fun onRoleChanged(role: NodeRole) {
-    this.state = role
-  }
-
   private fun acknowledgeMessage(
     message: MessageT, node: Node<MessageT, InboundMessageTranslator>
   ) {
@@ -182,35 +196,114 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
 
   private fun sendMulticast() {}
 
-  //  todo сделать что написано у ипполитова
-  fun onNodeDead(node: Node<MessageT, InboundMessageTranslator>) {
-//      TODO а других нод и быть не может в состоянии когда мы viewer?
-    if (state == NodeRole.MASTER) {
-      if (node.nodeRole == NodeRole.DEPUTY) masterOnDeputyDead(node)
 
-    } else if (state == NodeRole.DEPUTY) {
-      if (node.nodeRole == NodeRole.MASTER) deputyOnMasterDead(node)
+  // todo нужно проследить за очередностью назначения должностей иначе может
+  //  выйти пиздец
+  // todo сделать что написано у Ипполитова
+  /**
+   * Меняем состояние кластера в одном потоке, так что если какая то
+   * другая нода подохнет во время смены состояния, то мы это учтем
+   */
+
+  /**
+   * Changes the state of the cluster in a single thread, so that if any
+   * other node fails during the state change, it will be taken into account.
+   *
+   * This ensures that the system remains consistent and can handle
+   * failures gracefully. The following scenarios illustrate how nodes
+   * manage role transitions based on their current state:
+   * Describes the role management and transitions in a distributed game system.
+   *
+   * The following scenarios outline how nodes handle the failure
+   * of their peers based on their roles:
+   *
+   * a) **Node [NodeRole.NORMAL] notices that [NodeRole.MASTER] has dropped.**
+   * The node replaces the information about the central node with the
+   * [NodeRole.DEPUTY]. It starts sending all unicast messages toward the
+   * [NodeRole.DEPUTY].
+   *
+   * b) **Node [NodeRole.MASTER] notices that [NodeRole.DEPUTY] has dropped.**
+   * The [NodeRole.MASTER] node selects a new [NodeRole.DEPUTY] from among
+   * the [NodeRole.NORMAL] nodes. It informs the current DEPUTY about this
+   * change using a
+   * [d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg].
+   * Other nodes learn about the new [NodeRole.DEPUTY] from a scheduled
+   * [d.zhdanov.ccfit.nsu.core.interaction.messages.types.StateMsg],
+   * as it is not urgent for them to know immediately.
+   *
+   * c) **Node with [NodeRole.DEPUTY] role notices that [NodeRole.MASTER] has
+   * dropped.** The DEPUTY node becomes the [NodeRole.MASTER] (takes
+   * over control of the game). It selects a new [NodeRole.DEPUTY]
+   * and informs all players about this change using a
+   * [d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg].
+   *
+   * ***Message regarding role changes in the game.***
+   *
+   * **This message can take different forms depending on the roles of the
+   * participants and their actions:**
+   *
+   * 1. **From a Deputy** to other players indicating that they should start
+   * considering him as the Master. ( *senderRole* = [NodeRole.MASTER])
+   *
+   * 2. **From an intentionally exiting player**.
+   * (*senderRole* = [NodeRole.VIEWER])
+   *
+   * 3. **From the Master** to a deceased player.
+   * (*receiverRole* = [NodeRole.VIEWER])
+   *
+   * 4. **Appointment of someone as Deputy**.
+   * In combination with 1, 2, or separately
+   * (*receiverRole* = [NodeRole.DEPUTY])
+   *
+   * 5. In combination with 2, from the Master to the Deputy indicating
+   * that he is becoming the Master.
+   * (*receiverRole* = [NodeRole.MASTER])
+   */
+  private suspend fun onNodeDead(node: Node<MessageT, InboundMessageTranslator>) {
+    /**
+     * [NodeRole] :
+     * -> [NodeRole.NORMAL],
+     * -> [NodeRole.MASTER],
+     * -> [NodeRole.DEPUTY],
+     * -> [NodeRole.VIEWER]
+     */
+    if (nodeState == NodeRole.MASTER) {
+      if (node.address == deputyNode?.address) masterOnDeputyDead()
+      //  TODO сделать взаимодействие с другими
+    } else if (nodeState == NodeRole.DEPUTY) {
+      if (node.address == masterNode.address) deputyOnMasterDead()
+    } else if (nodeState == NodeRole.NORMAL) {
+      if (node.address == masterNode.address) normalOnMasterDead()
     } else {
-      if (node.nodeRole == NodeRole.MASTER) normalOnMasterDead(node)
+//      todo нужно сделать просто выход из изры ибо мы вивер
     }
   }
 
-  private fun deputyOnMasterDead(master: Node<MessageT, InboundMessageTranslator>) {
-    nodes.remove(master.address)
-    master.close()
+  private suspend fun newNodeRegister(node: Node<MessageT, InboundMessageTranslator>) {}
 
-    chooseNewDeputy()
-    val unacknowledgedMessages = master.getUnacknowledgedMessages()
-    for (msg in unacknowledgedMessages) {
+  private fun deputyOnMasterDead() {
+    deputyNode = chooseAndsetNewDeputy()
+    masterNode = localNode
+    val messages = masterNode.getUnacknowledgedMessages()
+    for (msg in messages) {
       val gMsg = messageTranslator.fromMessageT(msg)
       applyMessage(gMsg)
     }
+    nodeState = NodeRole.MASTER
+//    todo a y нас здесь не может быть конкурентной ситуации когда добавилась
+//     вот только только добавилась нода?
+    val msg = GameMessage(RoleChangeMsg()) //todo fix this
+    for ((_, node) in nodes) {
+      sendMessage(msg, node)
+    }
   }
 
-  private fun normalOnMasterDead(oldMaster: Node<MessageT, InboundMessageTranslator>) {
-    nodes.remove(oldMaster.address)
-    oldMaster.close()
-    val unacknowledgedMessages = oldMaster.getUnacknowledgedMessages()
+  private suspend fun normalOnMasterDead() {
+    nodes.remove(masterNode.address)
+    if (deputyNode == null) {
+      nodeState = NodeRole.MASTER
+    }
+    val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
 
     for (message in unacknowledgedMessages) {
       val address = deputyNode.address
@@ -219,53 +312,44 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     }
   }
 
-  //  todo как обрабатывать ситуацию когда у нас умерли все ноды и нет больше
-//   кандидатов
-  private fun masterOnDeputyDead(
-    oldDeputy: Node<MessageT, InboundMessageTranslator>
-  ) {
-    val newDeputy = chooseNewDeputy(oldDeputy);
-    newDeputy ?: return
-  }
-
-  //todo нужно обработать ситуацию когда мы начинаем игру
-  private fun nodeFitToDeputy(
-    node: Node<MessageT, InboundMessageTranslator>
-  ): Boolean {
-    return node.nodeState != Node.NodeState.Dead && node.nodeRole == NodeRole.NORMAL
-  }
-
-  private fun chooseNewDeputy(
-    oldDeputy: Node<MessageT, InboundMessageTranslator>
-  ): Node<MessageT, InboundMessageTranslator>? {
-    nodes.remove(oldDeputy.address)
-    oldDeputy.close()
-
-    for ((_, node) in nodes) {
-      if (nodeFitToDeputy(node)) {
-        val ret = synchronized(node) {
-          if (nodeFitToDeputy(node)) {
-            if (deputyNode.compareAndSet(oldDeputy, node)) {
-              node.nodeRole = NodeRole.DEPUTY
-              return@synchronized node
-            } else {
-              return@synchronized oldDeputy
-            }
-          }
-          return@synchronized null
-        }
-        if (ret == oldDeputy) return null
-        else if (ret != null) return ret
-      }
-    }
-    return null
+  //  todo как обрабатывать ситуацию когда у нас умерли все ноды и нет больше кандидатов
+  private suspend fun masterOnDeputyDead() {
+    val newDeputy = chooseAndsetNewDeputy() ?: return
+    val msg = GameMessage(RoleChangeMsg()) //todo fix this
+    sendMessage(msg, newDeputy)
   }
 
   /**
-   * Attempts to set the given node as the new deputy node.
+   * Selects a new deputy, assigns it to [deputyNode], and returns it. If no
+   * suitable candidate for deputy is found, assigns and returns `null`.
    *
-   * @param newDeputy The node to attempt to set as the new deputy. The node must not be in the "Dead" state
-   * and must currently have the `NORMAL` role for the operation to succeed.
-   * @return `true` if the node was successfully set as the deputy; `false` otherwise.
+   * @return [deputyNode] if a deputy was chosen, otherwise `null`.
    */
+  private fun chooseAndsetNewDeputy(): Node<MessageT, InboundMessageTranslator>? {
+    deputyNode?.let { nodes.remove(it.address) }
+    deputyNode = null
+    for ((_, node) in nodes) {
+      if (node.nodeState != Node.NodeState.Dead
+        && node.address != masterNode.address
+      ) {
+        deputyNode = node
+        break
+      }
+    }
+    return deputyNode
+  }
+
+
+  private fun getP2PContextWatcher(): Job {
+    return CoroutineScope(contextNodeDispatcher).launch {
+      //todo можно сделать select который будет принимать сообщение от
+      // запустившейся ноды
+      while (true) {
+        select {
+          deadNodeQueue.onReceive { node -> onNodeDead(node) }
+          newNodeRegister.onReceive { node -> newNodeRegister(node) }
+        }
+      }
+    }
+  }
 }
