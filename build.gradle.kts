@@ -5,8 +5,7 @@ plugins {
 
 java {
   toolchain {
-    languageVersion.set(JavaLanguageVersion.of(22)) // Или 22, если вы
-    // используете Java 22
+    languageVersion.set(JavaLanguageVersion.of(22))
   }
 }
 
