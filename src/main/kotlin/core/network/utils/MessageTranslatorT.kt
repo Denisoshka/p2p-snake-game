@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.utils
 import d.zhdanov.ccfit.nsu.core.interaction.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
 
-interface AbstractMessageTranslator<MessageT> {
+interface MessageTranslatorT<MessageT> {
   fun getMessageType(message: MessageT): MessageType
 
   fun fromMessageT(message: MessageT): GameMessage

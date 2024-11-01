@@ -7,7 +7,7 @@ import java.net.InetSocketAddress
 import kotlin.coroutines.CoroutineContext
 
 interface ContextNodeFabricT<
-    MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>
+    MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>
     > {
   fun create(
     nodeId: InetSocketAddress,

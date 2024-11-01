@@ -7,8 +7,8 @@ import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.MulticastNetHandler
-import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
 import d.zhdanov.ccfit.nsu.core.network.utils.ContextNodeFabricT
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +21,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 
-class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>>(
+class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   contextJoinBacklog: Int,
   val messageUtils: MessageUtilsT<MessageT, MessageType>,
   private val pingDelay: Long,
@@ -54,7 +54,7 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     ArrayBlockingQueue(contextJoinBacklog)
   private val deadNodeQueue: Channel<Node<MessageT, InboundMessageTranslator>> =
     Channel(contextJoinBacklog)
-  private val newNodeRegister: Channel<Node<MessageT, InboundMessageTranslator>> =
+  val newNodeRegister: Channel<Node<MessageT, InboundMessageTranslator>> =
     Channel(contextJoinBacklog)
   private var p2pContextWatcher: Job
 
@@ -84,7 +84,7 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
       else -> handleMessage(message, inetSocketAddress)
     }
     TODO(
-      "в роли обычного просматривающего " + "нужно дождаться первого state " + "и только после этого играть?"
+      "в роли обычного просматривающего нужно дождаться первого state " + "и только после этого играть?"
     )
   }
 
@@ -100,7 +100,9 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
   ) {
     val msgT = message.msg.type
     val msg = messageTranslator.toMessageT(message, msgT)
+
     sendMessage(msg, node)
+    TODO("где добавить сообщение на подтверждение?")
   }
 
   fun sendMessage(
@@ -122,9 +124,10 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     TODO("TODO как обрабатывать сообщение которое мы отправили сами себе")
   }
 
-  fun sendUnicast(
+  fun retrySendMessage(
     msg: MessageT, node: Node<MessageT, InboundMessageTranslator>
   ) {
+    unicastNetHandler.sendMessage(msg, node.address)
   }
 
   private fun masterHandleMessage(
@@ -152,7 +155,7 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
 
     val newNode = contextNodeFabric.create(
       ipAddress,
-      message.msgSeq,
+      message.,
       message.nodeRole,
       pingDelay,
       resendDelay,
@@ -259,7 +262,13 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
    * that he is becoming the Master.
    * (*receiverRole* = [NodeRole.MASTER])
    */
-  private suspend fun onNodeDead(node: Node<MessageT, InboundMessageTranslator>) {
+  suspend fun onNodeDead(node: Node<MessageT, InboundMessageTranslator>) {
+    /*
+    * ну вообщем этот контекст будет выполняться в отдельной корутине поэтому
+    *  не нужно беспокоиться о линейном порядке исполнения
+    *
+    *
+    * */
     /**
      * [NodeRole] :
      * -> [NodeRole.NORMAL],
@@ -268,7 +277,9 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
      * -> [NodeRole.VIEWER]
      */
     if (nodeState == NodeRole.MASTER) {
-      if (node.address == deputyNode?.address) masterOnDeputyDead()
+      if (node.address == deputyNode?.address) {
+        masterOnDeputyDead()
+      }
       //  TODO сделать взаимодействие с другими
     } else if (nodeState == NodeRole.DEPUTY) {
       if (node.address == masterNode.address) deputyOnMasterDead()
@@ -279,10 +290,18 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
     }
   }
 
-  private suspend fun newNodeRegister(node: Node<MessageT, InboundMessageTranslator>) {}
+  private fun newNodeRegister(node: Node<MessageT, InboundMessageTranslator>) {
 
-  private fun deputyOnMasterDead() {
-    deputyNode = chooseAndsetNewDeputy()
+  }
+
+  //  ну вроде функция закончена
+  private suspend fun deputyOnMasterDead() {
+    /*todo a y нас здесь не может быть конкурентной ситуации когда добавилась
+        вот только только добавилась нода? а вот здесь мы не нашликандидата на
+        deputy, вообще можно просто при коннекте ноды чекать стейт кластера и
+        смотреть есть ли депутя
+        */
+    deputyNode = chooseAndSetNewDeputy()
     masterNode = localNode
     val messages = masterNode.getUnacknowledgedMessages()
     for (msg in messages) {
@@ -290,21 +309,43 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
       applyMessage(gMsg)
     }
     nodeState = NodeRole.MASTER
-//    todo a y нас здесь не может быть конкурентной ситуации когда добавилась
-//     вот только только добавилась нода?
-    val msg = GameMessage(RoleChangeMsg()) //todo fix this
+    /**
+     * selects a new [NodeRole.DEPUTY] and informs all players about this
+     * change using a
+     * [d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg].
+     */
     for ((_, node) in nodes) {
-      sendMessage(msg, node)
+      val msg = if (deputyNode?.let { it.address == node.address } == true) {
+        RoleChangeMsg(NodeRole.MASTER)
+      } else {
+        RoleChangeMsg(NodeRole.MASTER, NodeRole.DEPUTY)
+      }
+      val seq = node.getNextMSGSeqNum();
+      val gameMessage = GameMessage(seq, msg)
+      //todo сделать receiverID  и в RoleChangeMsg
+      //todo что делать если мы так и не доставили RoleChangeMsg?
+      sendMessage(gameMessage, node)
     }
   }
 
-  private suspend fun normalOnMasterDead() {
+  private fun normalOnMasterDead() {
+//    мы же не можем вот это использовать в suspend функциях и + как
     nodes.remove(masterNode.address)
+    /**
+     * Processes the current state received from the cluster.
+     *
+     * If we are aware of other nodes in the cluster but do not receive notification
+     * of a new leader election, we assume that we have been disconnected from the cluster.
+     *
+     * However, if we appear to be the only remaining node, we designate ourselves as the master.
+     *//*
+    * сука мы храним же ноды в
+    * */
     if (deputyNode == null) {
       nodeState = NodeRole.MASTER
     }
+    val ret = chooseAndSetNewDeputy()
     val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
-
     for (message in unacknowledgedMessages) {
       val address = deputyNode.address
       deputyNode.addMessageForAcknowledge(message)
@@ -314,7 +355,7 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
 
   //  todo как обрабатывать ситуацию когда у нас умерли все ноды и нет больше кандидатов
   private suspend fun masterOnDeputyDead() {
-    val newDeputy = chooseAndsetNewDeputy() ?: return
+    val newDeputy = chooseAndSetNewDeputy() ?: return
     val msg = GameMessage(RoleChangeMsg()) //todo fix this
     sendMessage(msg, newDeputy)
   }
@@ -325,13 +366,11 @@ class P2PContext<MessageT, InboundMessageTranslator : AbstractMessageTranslator<
    *
    * @return [deputyNode] if a deputy was chosen, otherwise `null`.
    */
-  private fun chooseAndsetNewDeputy(): Node<MessageT, InboundMessageTranslator>? {
+  private fun chooseAndSetNewDeputy(): Node<MessageT, InboundMessageTranslator>? {
     deputyNode?.let { nodes.remove(it.address) }
     deputyNode = null
     for ((_, node) in nodes) {
-      if (node.nodeState != Node.NodeState.Dead
-        && node.address != masterNode.address
-      ) {
+      if (node.nodeState != Node.NodeState.Dead && node.address != masterNode.address) {
         deputyNode = node
         break
       }

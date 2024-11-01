@@ -1,11 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
-import dzhdanov.ccfit.nsu.ru.SnakesProto
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
-object AbstractMessageTranslator :
-  AbstractMessageTranslator<SnakesProto.GameMessage> {
+object MessageTranslator :
+  MessageTranslatorT<SnakesProto.GameMessage> {
   override fun getMessageType(message: SnakesProto.GameMessage): MessageType {
     return when (message.typeCase) {
       SnakesProto.GameMessage.TypeCase.PING -> MessageType.PingMsg

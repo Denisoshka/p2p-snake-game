@@ -24,6 +24,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.messages.NodeRole
  * @param receiverRole The role that the receiver node will take on after the role change.
  */
 class RoleChangeMsg(
-  val senderRole: NodeRole,
-  val receiverRole: NodeRole
+  val senderRole: NodeRole? = null,
+  val receiverRole: NodeRole? = null
 ) : Msg(MessageType.RoleChangeMsg)

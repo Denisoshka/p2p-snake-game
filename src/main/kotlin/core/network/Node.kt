@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network
 
-import d.zhdanov.ccfit.nsu.core.network.utils.AbstractMessageTranslator
+import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalUnacknowledgedMessagesGetAttempt
+import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
 import java.util.*
@@ -21,7 +22,7 @@ import kotlin.coroutines.CoroutineContext
  * @param messageComparator Comparator for comparing messages of type [MessageT]. This comparator must compare messages based on the sequence number msg_seq, which is unique to the node within the context and monotonically increasing.
  * @param nodeStateCheckerContext Coroutine context for checking the node state. Default is [Dispatchers.IO].
  */
-class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<MessageT>>(
+class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   initMsgSeqNum: Long,
   messageComparator: Comparator<MessageT>,
   nodeStateCheckerContext: CoroutineContext,
@@ -32,11 +33,11 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   private val context: P2PContext<MessageT, InboundMessageTranslator>
 ) : AutoCloseable {
   enum class NodeState {
-    Alive, Dead,
+    Runnable, Running, Terminated,
   }
 
   @Volatile
-  var nodeState: NodeState = NodeState.Alive
+  var nodeState: NodeState = NodeState.Runnable
     private set
 
   //  todo может сделать так что когда мы становимся мастером то все сообщения
@@ -52,23 +53,24 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   /**
    * Change this value within the scope of synchronized([msgForAcknowledge]).
    */
-  private val lastReceive = AtomicLong(System.currentTimeMillis())
-  private val lastSend = AtomicLong(System.currentTimeMillis())
+  private val lastReceive = AtomicLong()
+  private val lastSend = AtomicLong()
 
   init {
     val delayCoef = 0.8
     observationJob = CoroutineScope(nodeStateCheckerContext).launch {
       try {
-        while (nodeState == NodeState.Alive) {
+        context.newNodeRegister.send(this@Node)
+        nodeState = NodeState.Running
+        while (nodeState == NodeState.Running) {
           val delay = checkActivity()
           delay((delay * delayCoef).toLong())
         }
       } catch (_: CancellationException) {
       } finally {
-        context.onNodeDead(this)
+        context.onNodeDead(this@Node)
       }
     }
-    //    TODO Нужно ли делать equals для нод
   }
 
   fun approveMessage(message: MessageT) {
@@ -82,15 +84,17 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
       lastSend.set(System.currentTimeMillis())
-      TODO("что то я сомневаюсь что здесь не нужно учитывать lastAction")
     }
+  }
+
+  fun getNextMSGSeqNum(): Long {
+    return msgSeqNum.incrementAndGet()
   }
 
   fun getUnacknowledgedMessages(): List<MessageT> {
     synchronized(msgForAcknowledge) {
-      if (nodeState != NodeState.Dead) {
-        return listOf()
-//      todo может сделать эксепшн
+      if (nodeState != NodeState.Terminated) {
+        throw IllegalUnacknowledgedMessagesGetAttempt(nodeState)
       }
       return msgForAcknowledge.keys.toList();
     }
@@ -99,57 +103,59 @@ class Node<MessageT, InboundMessageTranslator : AbstractMessageTranslator<Messag
   private fun checkActivity(): Long {
     synchronized(msgForAcknowledge) {
       val curTime = System.currentTimeMillis()
+      /**
+       * Если мы не получали абсолютно никаких
+       * unicast-сообщений от узла в течение
+       * 0.8 * state_delay_ms миллисекунд,
+       * то мы считаем что узел выпал из игры
+       * */
       if (curTime - lastReceive.get() > thresholdDelay) {
-        nodeState = NodeState.Dead
-        return 0;
+        nodeState = NodeState.Terminated
+        return 0
       }
+
       if (msgForAcknowledge.isEmpty()) {
-        if (curTime - lastReceive.get() >= resendDelay) {
-          ping()
+        if (curTime - lastSend.get() >= resendDelay) {
+          val ping =
+            context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
+          context.sendMessage(ping, this)
           return resendDelay
+        } else {
+          return lastReceive.get() + resendDelay - curTime
         }
-        return lastReceive.get() + resendDelay - curTime
-      }
-      /*
-      TODO нужно что то сделать когда есть те сообщения которые дошли и
-      нода подает признаки жизни, а есть старые которые не дошли
-      */
-      val entry = msgForAcknowledge.firstEntry()
-      if (curTime - entry.value < resendDelay) {
-        return entry.value + resendDelay - curTime
       }
 
       /**
        * Как обрабатывать то когда нода стала главной, но все еще ждет
        * подтверждения от мастера - мастер отвечает за отправленные сообщения,
        * локальная нода не взаимодействует с другими
+       *
        * Что делать с теми сообщениями которые пошли до мастера, но
        * мастер умер - [getUnacknowledgedMessages]
+       *
+       * вообщем те сообщения которые не получили подтверждение
+       * в течении [thresholdDelay] - удаляются, нас в целом не волнует какой
+       * последний стейт получил игрок ибо в случае его смерти мы просто
+       * переведем его в зрителя и похуй
        */
       val it = msgForAcknowledge.entries.iterator()
+      var recheckDelay = Long.MAX_VALUE
       while (it.hasNext()) {
         val msgInfo = it.next()
-
-        if (curTime - msgInfo.value < resendDelay) {
-          break
-        } else if (curTime - msgInfo.value < thresholdDelay) {
+        val diff = curTime - msgInfo.value
+        recheckDelay = recheckDelay.coerceAtLeast(diff)
+        if (curTime - msgInfo.value < thresholdDelay) {
           msgInfo.setValue(curTime)
-          TODO("нужно переслать сообщение")
+          context.retrySendMessage(msgInfo.key, this)
         } else {
           it.remove()
         }
       }
-      return entry.value + thresholdDelay - curTime
+      return recheckDelay
     }
   }
 
-  private fun ping() {
-    val ping = context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
-    addMessageForAcknowledge(ping)
-    context.sendMessage(ping, this)
-  }
-
   override fun close() {
-    nodeState = NodeState.Dead
+    nodeState = NodeState.Terminated
   }
 }
