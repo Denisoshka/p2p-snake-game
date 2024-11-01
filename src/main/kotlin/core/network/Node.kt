@@ -32,9 +32,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>
 ) : AutoCloseable {
-  enum class NodeState {
-    Runnable, Running, Terminated,
-  }
+
 
   @Volatile
   var nodeState: NodeState = NodeState.Runnable

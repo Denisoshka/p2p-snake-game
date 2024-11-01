@@ -102,26 +102,16 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
     val msg = messageTranslator.toMessageT(message, msgT)
 
     sendMessage(msg, node)
-    TODO("где добавить сообщение на подтверждение?")
+    TODO(
+      "с этой функцией нужно что то делать " +
+          "ибо здесь твоиться какое то не потребсво"
+    )
   }
 
   fun sendMessage(
     message: MessageT, node: Node<MessageT, InboundMessageTranslator>
   ) {
-    val msgT = messageTranslator.getMessageType(message)
-    if (messageUtils.needToAcknowledge(msgT)) {
-      node.addMessageForAcknowledge(message)
-    }
 
-    TODO("что за пиздец здесь происходит,")
-    if (localNode.address == masterNode.address) {
-//      todo как обрабатывать сообщения которые мы отправили сами себе?
-      val msg = messageTranslator.fromMessageT(message, msgT)
-      applyMessage(msg)
-    } else {
-
-    }
-    TODO("TODO как обрабатывать сообщение которое мы отправили сами себе")
   }
 
   fun retrySendMessage(
@@ -199,10 +189,6 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
 
   private fun sendMulticast() {}
 
-
-  // todo нужно проследить за очередностью назначения должностей иначе может
-  //  выйти пиздец
-  // todo сделать что написано у Ипполитова
   /**
    * Меняем состояние кластера в одном потоке, так что если какая то
    * другая нода подохнет во время смены состояния, то мы это учтем
@@ -266,8 +252,6 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
     /*
     * ну вообщем этот контекст будет выполняться в отдельной корутине поэтому
     *  не нужно беспокоиться о линейном порядке исполнения
-    *
-    *
     * */
     /**
      * [NodeRole] :
@@ -277,10 +261,7 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
      * -> [NodeRole.VIEWER]
      */
     if (nodeState == NodeRole.MASTER) {
-      if (node.address == deputyNode?.address) {
-        masterOnDeputyDead()
-      }
-      //  TODO сделать взаимодействие с другими
+      if (node.address == deputyNode?.address) masterOnDeputyDead()
     } else if (nodeState == NodeRole.DEPUTY) {
       if (node.address == masterNode.address) deputyOnMasterDead()
     } else if (nodeState == NodeRole.NORMAL) {
@@ -314,6 +295,9 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
      * change using a
      * [d.zhdanov.ccfit.nsu.core.interaction.messages.types.RoleChangeMsg].
      */
+//    что то я переживаю о ноде которая может присоединиться во время сего
+//    действия, хотя ведь она присоединяется в этом же контексте так что
+//    должна узнать по свойсту линейным порядка исполнения кто депутя
     for ((_, node) in nodes) {
       val msg = if (deputyNode?.let { it.address == node.address } == true) {
         RoleChangeMsg(NodeRole.MASTER)
@@ -370,14 +354,15 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
     deputyNode?.let { nodes.remove(it.address) }
     deputyNode = null
     for ((_, node) in nodes) {
-      if (node.nodeState != Node.NodeState.Dead && node.address != masterNode.address) {
+      if (node.nodeState != Node.NodeState.Terminated
+        && node.address != masterNode.address
+      ) {
         deputyNode = node
         break
       }
     }
     return deputyNode
   }
-
 
   private fun getP2PContextWatcher(): Job {
     return CoroutineScope(contextNodeDispatcher).launch {

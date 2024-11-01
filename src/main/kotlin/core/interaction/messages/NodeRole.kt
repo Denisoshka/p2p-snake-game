@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.interaction.messages
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalNodeRoleException
-import dzhdanov.ccfit.nsu.ru.SnakesProto
 
 /**
  * Role of a node in the topology of connections within the game.

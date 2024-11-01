@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
-import dzhdanov.ccfit.nsu.ru.SnakesProto
 
 object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
     SnakesProto.GameMessage.TypeCase> {
