@@ -26,6 +26,9 @@ dependencies {
   implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
   implementation("io.netty:netty-all:4.1.114.Final")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+//  runtimeOnly("io.github.oshai:kotlin-logging-jvm:7.0.0")
+  implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+
 }
 
 protobuf {

@@ -1,5 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network
 
+import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import kotlinx.coroutines.*
@@ -26,31 +28,24 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   initMsgSeqNum: Long,
   messageComparator: Comparator<MessageT>,
   nodeStateCheckerContext: CoroutineContext,
+  var nodeRole: NodeRole,
   val address: InetSocketAddress,
   val nodeId: Int,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
   private val context: P2PContext<MessageT, InboundMessageTranslator>
 ) : AutoCloseable {
-
-
   @Volatile
-  var nodeState: NodeState = NodeState.Runnable
+  var nodeCondition: NodeState = NodeState.Runnable
     private set
-
-  //  todo может сделать так что когда мы становимся мастером то все сообщения
-  //  которые отправили мастеру трем и начинаем собирать все новые?
-  /**
-   * Change this value within the scope of synchronized([msgForAcknowledge]).
-   */
-  private val msgForAcknowledge: TreeMap<MessageT, Long> =
-    TreeMap(messageComparator)
   private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
   private val observationJob: Job
 
   /**
-   * Change this value within the scope of synchronized([msgForAcknowledge]).
+   * Change this values within the scope of synchronized([msgForAcknowledge]).
    */
+  private val msgForAcknowledge: TreeMap<MessageT, Long> =
+    TreeMap(messageComparator)
   private val lastReceive = AtomicLong()
   private val lastSend = AtomicLong()
 
@@ -58,15 +53,18 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
     val delayCoef = 0.8
     observationJob = CoroutineScope(nodeStateCheckerContext).launch {
       try {
-        context.newNodeRegister.send(this@Node)
-        nodeState = NodeState.Running
-        while (nodeState == NodeState.Running) {
-          val delay = checkActivity()
-          delay((delay * delayCoef).toLong())
+        while (true) {
+          when (nodeCondition) {
+            NodeState.Runnable -> joinState()
+            NodeState.Running -> checkConditionState(delayCoef)
+            NodeState.Terminated -> {
+
+            }
+          }
         }
       } catch (_: CancellationException) {
       } finally {
-        context.onNodeDead(this@Node)
+        context.nodeNotResponding(this@Node)
       }
     }
   }
@@ -91,14 +89,14 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 
   fun getUnacknowledgedMessages(): List<MessageT> {
     synchronized(msgForAcknowledge) {
-      if (nodeState != NodeState.Terminated) {
-        throw IllegalUnacknowledgedMessagesGetAttempt(nodeState)
+      if (nodeCondition != NodeState.Terminated) {
+        throw IllegalUnacknowledgedMessagesGetAttempt(nodeCondition)
       }
       return msgForAcknowledge.keys.toList();
     }
   }
 
-  private fun checkActivity(): Long {
+  private fun checkCondition(): Long {
     synchronized(msgForAcknowledge) {
       val curTime = System.currentTimeMillis()
       /**
@@ -108,16 +106,19 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
        * то мы считаем что узел выпал из игры
        * */
       if (curTime - lastReceive.get() > thresholdDelay) {
-        nodeState = NodeState.Terminated
+        nodeCondition = NodeState.Terminated
         return 0
       }
 
       if (msgForAcknowledge.isEmpty()) {
         if (curTime - lastSend.get() >= resendDelay) {
-          val ping =
-            context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
+          val ping = context.messageUtils.getPingMsg(
+            msgSeqNum.incrementAndGet()
+          )
+          addMessageForAcknowledge(ping)
           context.sendMessage(ping, this)
           return resendDelay
+          TODO("fix this")
         } else {
           return lastReceive.get() + resendDelay - curTime
         }
@@ -153,7 +154,27 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
     }
   }
 
+  private suspend fun joinState() {
+    while (nodeCondition == NodeState.Runnable) {
+      val toDelay = checkJoin()
+      delay(toDelay)
+    }
+  }
+
+  private fun checkJoin(): Long {
+
+  }
+
+  private suspend fun checkConditionState(delayCoef: Double) {
+    context.newNodeRegister.send(this@Node)
+    nodeCondition = NodeState.Running
+    while (nodeCondition == NodeState.Running) {
+      val delay = checkCondition()
+      delay((delay * delayCoef).toLong())
+    }
+  }
+
   override fun close() {
-    nodeState = NodeState.Terminated
+    nodeCondition = NodeState.Terminated
   }
 }

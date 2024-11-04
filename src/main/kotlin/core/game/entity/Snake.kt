@@ -1,14 +1,15 @@
 package d.zhdanov.ccfit.nsu.core.game.entity
 
-import d.zhdanov.ccfit.nsu.core.game.Context
+import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
 import d.zhdanov.ccfit.nsu.core.game.map.EntityOnMapInfo
-import d.zhdanov.ccfit.nsu.core.interaction.messages.Direction
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameState
 
 class Snake(
   entityOnMapInfo: EntityOnMapInfo,
   val id: Int,
   var direction: Direction,
-  context: Context
+  context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
 ) : Entity {
   private var isDead: Boolean = false;
   private var score: Int = 0
@@ -36,31 +37,36 @@ class Snake(
     return isDead
   }
 
-  override fun getId(): Int {
+  fun getId(): Int {
     return id
+  }
+
+  override fun shootState(state: GameState) {
+    TODO("implement me please")
   }
 
   override fun getHitBox(): Iterable<EntityOnMapInfo> {
     return body
   }
 
-  override fun getScore(): Int {
+  fun getScore(): Int {
     return score
   }
 
-  override fun update(context: Context) {
-    val tail = body.removeLast()
+  override fun update(context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState) {
+    body.removeLast()
+    val point = EntityOnMapInfo(
+      body[0].x + direction.dx, body[0].y + direction.dy
+    )
 //  todo мб нужно сделать так чтобы здесь выделялась новая точка и не было
 //   проблем с снятием снапшота
     context.map.movePoint(
-      tail,
-      body[0].x + direction.dx,
-      body[0].y + direction.dy
+      point, body[0].x + direction.dx, body[0].y + direction.dy
     )
-    body.add(0, tail)
+    body.add(0, point)
   }
 
-  override fun checkCollisions(entity: Entity, context: Context) {
+  override fun checkCollisions(entity: Entity, context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState) {
     val head = getHead()
     if (entity.getHitBox()
         .any { point -> point.x == head.x && point.y == head.y }

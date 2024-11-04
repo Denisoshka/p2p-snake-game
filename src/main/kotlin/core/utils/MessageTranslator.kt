@@ -1,11 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
-object MessageTranslator :
-  MessageTranslatorT<SnakesProto.GameMessage> {
+object MessageTranslator : MessageTranslatorT<SnakesProto.GameMessage> {
   override fun getMessageType(message: SnakesProto.GameMessage): MessageType {
     return when (message.typeCase) {
       SnakesProto.GameMessage.TypeCase.PING -> MessageType.PingMsg
@@ -21,11 +21,23 @@ object MessageTranslator :
     }
   }
 
-  override fun fromMessageT(message: SnakesProto.GameMessage): MessageType {
+  override fun fromMessageT(msg: SnakesProto.GameMessage): GameMessage {
     TODO("Not yet implemented")
   }
 
-  override fun toMessageT(message: MessageType): SnakesProto.GameMessage {
+  override fun fromMessageT(
+    message: SnakesProto.GameMessage, msgT: MessageType
+  ): GameMessage {
+    TODO("Not yet implemented")
+  }
+
+  override fun toMessageT(msg: GameMessage): SnakesProto.GameMessage {
+    TODO("Not yet implemented")
+  }
+
+  override fun toMessageT(
+    msg: GameMessage, msgT: MessageType
+  ): SnakesProto.GameMessage {
     TODO("Not yet implemented")
   }
 }

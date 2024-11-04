@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.interaction.messages
+package d.zhdanov.ccfit.nsu.core.interaction.v1.messages
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalNodeRoleException
