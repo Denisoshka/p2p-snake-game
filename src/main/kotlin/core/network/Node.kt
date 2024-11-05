@@ -59,7 +59,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
         while (true) {
           when (nodeState) {
             NodeState.Runnable -> waitRegistration()
-            NodeState.Running -> checkMessages(delayCoef)
+            NodeState.Running -> checkRunningCondition(delayCoef)
             NodeState.WaitTermination -> waitTermination(delayCoef)
             NodeState.Terminated -> { /*xyi =)*/
             }
@@ -107,11 +107,19 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   private suspend fun waitRegistration() {
     while (nodeState == NodeState.Runnable) {
       val ret = synchronized(msgForAcknowledge) {
-        if (initMsg != null && !msgForAcknowledge.containsKey(initMsg)) {
-          nodeState = NodeState.Running
-          return@synchronized initMsg
+        if (nodeState != NodeState.Runnable) return
+        if (initMsg != null) {
+          if (msgForAcknowledge[initMsg] == null) {
+            nodeState = NodeState.Running
+            /**
+             * Получили Ack на это сообщение и теперь мы зарегистрировались
+             * в кластере
+             * */
+            return
+          }
+          initMsg
         } else {
-          return@synchronized null
+          null
         }
       }
       if (ret == null) {
@@ -124,72 +132,58 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
     }
   }
 
-  private fun checkRunningCondition(): Long {
-    synchronized(msgForAcknowledge) {
-      if (nodeState != NodeState.Running) return resendDelay
-
-      val curTime = System.currentTimeMillis()
-      /**
-       * Если мы не получали абсолютно никаких
-       * unicast-сообщений от узла в течение
-       * 0.8 * state_delay_ms миллисекунд,
-       * то мы считаем что узел выпал из игры
-       * */
-      if (curTime - lastReceive.get() > thresholdDelay) {
-        nodeState = NodeState.Terminated
-        return 0
-      }
-
-      if (msgForAcknowledge.isEmpty()) {
-        val ret = if (curTime - lastSend.get() >= resendDelay) {
-          val ping = context.messageUtils.getPingMsg(
-            msgSeqNum.incrementAndGet()
-          )
-          addMessageForAcknowledge(ping)
-          context.retrySendMessage(ping, this)
-          resendDelay
-        } else {
-          lastReceive.get() + resendDelay - curTime
-        }
-        return ret
-      }
-
-
-      val recheckDelay = resendIfNecessary(curTime)
-      lastSend.set(curTime)
-      return recheckDelay
-    }
-  }
-
-  private suspend fun checkMessages(delayCoef: Double) {
-    context.newNodeRegister.send(this@Node)
+  private suspend fun checkRunningCondition(delayCoef: Double) {
     while (nodeState == NodeState.Running) {
-      val delay = checkRunningCondition()
+      context.newNodeRegister.send(this@Node)
+      val delay = synchronized(msgForAcknowledge) {
+        if (nodeState != NodeState.Running) return
+
+        val curTime = System.currentTimeMillis()
+        if (curTime - lastReceive.get() > thresholdDelay) {
+          nodeState = NodeState.Terminated
+          return
+        }
+
+        if (msgForAcknowledge.isEmpty()) {
+          val ret = if (curTime - lastSend.get() >= resendDelay) {
+            val ping = context.messageUtils.getPingMsg(
+              msgSeqNum.incrementAndGet()
+            )
+            addMessageForAcknowledge(ping)
+            context.retrySendMessage(ping, this)
+            resendDelay
+          } else {
+            lastReceive.get() + resendDelay - curTime
+          }
+          return@synchronized ret
+        }
+
+        val recheckDelay = resendIfNecessary(curTime)
+        lastSend.set(curTime)
+        return@synchronized recheckDelay
+      }
       delay((delay * delayCoef).toLong())
     }
   }
 
   private suspend fun waitTermination(delayCoef: Double) {
-    while (nodeState == NodeState.Terminated) {
-      val delay = checkTerminationCondition()
-      delay((delayCoef * delay).toLong())
-    }
-  }
+    while (nodeState == NodeState.WaitTermination) {
+      val delay = synchronized(msgForAcknowledge) {
+        if (nodeState != NodeState.WaitTermination) return
 
-  private fun checkTerminationCondition(): Long {
-    synchronized(msgForAcknowledge) {
-      if (nodeState != NodeState.Terminated) return resendDelay
-      val curTime = System.currentTimeMillis()
-      if (curTime - lastReceive.get() > thresholdDelay
-        || msgForAcknowledge.isEmpty()
-      ) {
-        nodeState = NodeState.Terminated
-        return 0;
+        val curTime = System.currentTimeMillis()
+        if (curTime - lastReceive.get() > thresholdDelay
+          || msgForAcknowledge.isEmpty()
+        ) {
+          nodeState = NodeState.Terminated
+          return@synchronized 0;
+        }
+
+        val recheckDelay = resendIfNecessary(curTime)
+        lastSend.set(curTime)
+        return@synchronized recheckDelay
       }
-
-      val recheckDelay = resendIfNecessary(curTime)
-      lastSend.set(curTime)
-      return recheckDelay
+      delay((delayCoef * delay).toLong())
     }
   }
 
