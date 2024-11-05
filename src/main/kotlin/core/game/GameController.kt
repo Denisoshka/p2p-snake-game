@@ -1,13 +1,13 @@
 package d.zhdanov.ccfit.nsu.core.game
 
-import d.zhdanov.ccfit.nsu.core.game.states.GameStateBridge
-import d.zhdanov.ccfit.nsu.core.game.states.LobbyStateBridge
+import d.zhdanov.ccfit.nsu.core.game.states.GameStateBridgeT
+import d.zhdanov.ccfit.nsu.core.game.states.LobbyStateBridgeT
 import d.zhdanov.ccfit.nsu.core.game.states.State
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameState
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
 class GameController(
   baseState: State
-) : GameStateBridge, LobbyStateBridge {
+) : GameStateBridgeT, LobbyStateBridgeT {
   private var state = baseState
   fun updateState(newState: State) {
     state.terminate()
@@ -23,7 +23,7 @@ class GameController(
     TODO("Not yet implemented")
   }
 
-  override fun submitGameState(gameState: GameState) {
+  override fun submitGameState(state: StateMsg) {
     TODO("Not yet implemented")
   }
 

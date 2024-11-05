@@ -1,7 +1,7 @@
-package d.zhdanov.ccfit.nsu.core.game.entity
+package d.zhdanov.ccfit.nsu.core.game.engine.core.entity
 
 import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
-import d.zhdanov.ccfit.nsu.core.game.map.EntityOnMapInfo
+import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map.EntityOnMapInfo
 
 class Apple(x: Int, y: Int, context: GameState) : Entity {
   private var isDead: Boolean = false

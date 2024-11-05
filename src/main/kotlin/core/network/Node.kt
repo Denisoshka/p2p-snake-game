@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network
 
-import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
@@ -30,16 +29,20 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
   nodeStateCheckerContext: CoroutineContext,
   var nodeRole: NodeRole,
   val address: InetSocketAddress,
-  val nodeId: Int,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
-  private val context: P2PContext<MessageT, InboundMessageTranslator>
-) : AutoCloseable {
+  private val context: NodesHolder<MessageT, InboundMessageTranslator>
+) {
+  enum class NodeState {
+    Runnable, Running, WaitTermination, Terminated,
+  }
+
   @Volatile
-  var nodeCondition: NodeState = NodeState.Runnable
+  var nodeState: NodeState = NodeState.Running
     private set
   private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
   private val observationJob: Job
+  private var initMsg: MessageT? = null
 
   /**
    * Change this values within the scope of synchronized([msgForAcknowledge]).
@@ -54,17 +57,17 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
     observationJob = CoroutineScope(nodeStateCheckerContext).launch {
       try {
         while (true) {
-          when (nodeCondition) {
-            NodeState.Runnable -> joinState()
-            NodeState.Running -> checkConditionState(delayCoef)
-            NodeState.Terminated -> {
-
+          when (nodeState) {
+            NodeState.Runnable -> waitRegistration()
+            NodeState.Running -> checkMessages(delayCoef)
+            NodeState.WaitTermination -> waitTermination(delayCoef)
+            NodeState.Terminated -> { /*xyi =)*/
             }
           }
         }
       } catch (_: CancellationException) {
       } finally {
-        context.nodeNotResponding(this@Node)
+        context.removeNode(this@Node)
       }
     }
   }
@@ -76,11 +79,16 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
     }
   }
 
-  fun addMessageForAcknowledge(message: MessageT) {
+  /**
+   * @return `false` if node node state!=[NodeState.Running]
+   */
+  fun addMessageForAcknowledge(message: MessageT): Boolean {
+    if (nodeState != NodeState.Running) return false
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
       lastSend.set(System.currentTimeMillis())
     }
+    return true
   }
 
   fun getNextMSGSeqNum(): Long {
@@ -89,15 +97,37 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 
   fun getUnacknowledgedMessages(): List<MessageT> {
     synchronized(msgForAcknowledge) {
-      if (nodeCondition != NodeState.Terminated) {
-        throw IllegalUnacknowledgedMessagesGetAttempt(nodeCondition)
+      if (nodeState != NodeState.Terminated) {
+        throw IllegalUnacknowledgedMessagesGetAttempt(nodeState)
       }
       return msgForAcknowledge.keys.toList();
     }
   }
 
-  private fun checkCondition(): Long {
+  private suspend fun waitRegistration() {
+    while (nodeState == NodeState.Runnable) {
+      val ret = synchronized(msgForAcknowledge) {
+        if (initMsg != null && !msgForAcknowledge.containsKey(initMsg)) {
+          nodeState = NodeState.Running
+          return@synchronized initMsg
+        } else {
+          return@synchronized null
+        }
+      }
+      if (ret == null) {
+        val ping = context.messageUtils.getPingMsg(msgSeqNum.incrementAndGet())
+        context.retrySendMessage(ping, this)
+      } else {
+        context.retrySendMessage(ret, this)
+      }
+      delay(resendDelay)
+    }
+  }
+
+  private fun checkRunningCondition(): Long {
     synchronized(msgForAcknowledge) {
+      if (nodeState != NodeState.Running) return resendDelay
+
       val curTime = System.currentTimeMillis()
       /**
        * Если мы не получали абсолютно никаких
@@ -106,75 +136,116 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
        * то мы считаем что узел выпал из игры
        * */
       if (curTime - lastReceive.get() > thresholdDelay) {
-        nodeCondition = NodeState.Terminated
+        nodeState = NodeState.Terminated
         return 0
       }
 
       if (msgForAcknowledge.isEmpty()) {
-        if (curTime - lastSend.get() >= resendDelay) {
+        val ret = if (curTime - lastSend.get() >= resendDelay) {
           val ping = context.messageUtils.getPingMsg(
             msgSeqNum.incrementAndGet()
           )
           addMessageForAcknowledge(ping)
-          context.sendMessage(ping, this)
-          return resendDelay
-          TODO("fix this")
+          context.retrySendMessage(ping, this)
+          resendDelay
         } else {
-          return lastReceive.get() + resendDelay - curTime
+          lastReceive.get() + resendDelay - curTime
         }
+        return ret
       }
 
-      /**
-       * Как обрабатывать то когда нода стала главной, но все еще ждет
-       * подтверждения от мастера - мастер отвечает за отправленные сообщения,
-       * локальная нода не взаимодействует с другими
-       *
-       * Что делать с теми сообщениями которые пошли до мастера, но
-       * мастер умер - [getUnacknowledgedMessages]
-       *
-       * вообщем те сообщения которые не получили подтверждение
-       * в течении [thresholdDelay] - удаляются, нас в целом не волнует какой
-       * последний стейт получил игрок ибо в случае его смерти мы просто
-       * переведем его в зрителя и похуй
-       */
-      val it = msgForAcknowledge.entries.iterator()
-      var recheckDelay = Long.MAX_VALUE
-      while (it.hasNext()) {
-        val msgInfo = it.next()
-        val diff = curTime - msgInfo.value
-        recheckDelay = recheckDelay.coerceAtLeast(diff)
-        if (curTime - msgInfo.value < thresholdDelay) {
-          msgInfo.setValue(curTime)
-          context.retrySendMessage(msgInfo.key, this)
-        } else {
-          it.remove()
-        }
-      }
+
+      val recheckDelay = resendIfNecessary(curTime)
+      lastSend.set(curTime)
       return recheckDelay
     }
   }
 
-  private suspend fun joinState() {
-    while (nodeCondition == NodeState.Runnable) {
-      val toDelay = checkJoin()
-      delay(toDelay)
-    }
-  }
-
-  private fun checkJoin(): Long {
-
-  }
-
-  private suspend fun checkConditionState(delayCoef: Double) {
+  private suspend fun checkMessages(delayCoef: Double) {
     context.newNodeRegister.send(this@Node)
-    nodeCondition = NodeState.Running
-    while (nodeCondition == NodeState.Running) {
-      val delay = checkCondition()
+    while (nodeState == NodeState.Running) {
+      val delay = checkRunningCondition()
       delay((delay * delayCoef).toLong())
     }
   }
 
-  override fun close() {
-    nodeCondition = NodeState.Terminated
+  private suspend fun waitTermination(delayCoef: Double) {
+    while (nodeState == NodeState.Terminated) {
+      val delay = checkTerminationCondition()
+      delay((delayCoef * delay).toLong())
+    }
+  }
+
+  private fun checkTerminationCondition(): Long {
+    synchronized(msgForAcknowledge) {
+      if (nodeState != NodeState.Terminated) return resendDelay
+      val curTime = System.currentTimeMillis()
+      if (curTime - lastReceive.get() > thresholdDelay
+        || msgForAcknowledge.isEmpty()
+      ) {
+        nodeState = NodeState.Terminated
+        return 0;
+      }
+
+      val recheckDelay = resendIfNecessary(curTime)
+      lastSend.set(curTime)
+      return recheckDelay
+    }
+  }
+
+  private fun resendIfNecessary(curTime: Long): Long {
+    /**
+     * Как обрабатывать то когда нода стала главной, но все еще ждет
+     * подтверждения от мастера - мастер отвечает за отправленные сообщения,
+     * локальная нода не взаимодействует с другими
+     *
+     * Что делать с теми сообщениями которые пошли до мастера, но
+     * мастер умер - [getUnacknowledgedMessages]
+     *
+     * вообщем те сообщения которые не получили подтверждение
+     * в течении [thresholdDelay] - удаляются, нас в целом не волнует какой
+     * последний стейт получил игрок ибо в случае его смерти мы просто
+     * переведем его в зрителя и похуй
+     */
+    val it = msgForAcknowledge.entries.iterator()
+    var recheckDelay = resendDelay
+    while (it.hasNext()) {
+      val msgInfo = it.next()
+      val diff = curTime - msgInfo.value
+      recheckDelay = recheckDelay.coerceAtLeast(diff)
+      if (curTime - msgInfo.value < thresholdDelay) {
+        msgInfo.setValue(curTime)
+        context.retrySendMessage(msgInfo.key, this)
+      } else {
+        it.remove()
+      }
+    }
+    return recheckDelay
+  }
+
+  fun nodeRegistered(initMsg: MessageT) {
+    synchronized(msgForAcknowledge) {
+      if (nodeState == NodeState.Runnable) {
+        this.initMsg = initMsg
+        msgForAcknowledge[initMsg] = System.currentTimeMillis()
+        lastSend.set(System.currentTimeMillis())
+      } else {
+        throw RuntimeException("Node is already initialized!")
+      }
+    }
+  }
+
+  fun shutdown() {
+    synchronized(msgForAcknowledge) {
+      if (nodeState < NodeState.WaitTermination) {
+        nodeState = NodeState.WaitTermination
+      }
+    }
+  }
+
+  fun shutdownNow() {
+    synchronized(msgForAcknowledge) {
+      nodeState = NodeState.Terminated
+    }
   }
 }

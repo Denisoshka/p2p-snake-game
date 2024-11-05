@@ -1,6 +1,6 @@
-package d.zhdanov.ccfit.nsu.core.game.map
+package d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map
 
-import d.zhdanov.ccfit.nsu.core.game.entity.GameType
+import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.GameType
 
 class EntityOnMapInfo(
   var x: Int,

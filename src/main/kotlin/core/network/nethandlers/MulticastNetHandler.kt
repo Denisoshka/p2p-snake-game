@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.NodesHolder
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
@@ -22,23 +22,25 @@ class MulticastNetHandler<
     InboundMessageTranslator : MessageTranslatorT<MessageT>
     >(
   private val config: NetConfig,
-  private val context: P2PContext<MessageT, InboundMessageTranslator>,
   private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-) : NetworkHandler {
-  private val group = NioEventLoopGroup()
-  private val bootstrap: Bootstrap = Bootstrap()
+) : NetworkHandler<MessageT, InboundMessageTranslator> {
+  private var group: NioEventLoopGroup? = null
+  private var bootstrap: Bootstrap = Bootstrap()
 
-  init {
-    bootstrap.group(group)
-      .channel(NioDatagramChannel::class.java)
-      .handler(object : ChannelInitializer<NioDatagramChannel>() {
+  override fun configure(context: NodesHolder<MessageT, InboundMessageTranslator>) {
+    bootstrap.apply {
+      channel(NioDatagramChannel::class.java)
+      handler(object : ChannelInitializer<NioDatagramChannel>() {
         override fun initChannel(ch: NioDatagramChannel) {
           ch.pipeline().addLast(MulticastHandler(msgUtils, context))
         }
       })
+    }
   }
 
   override fun launch() {
+    group = NioEventLoopGroup()
+    bootstrap.group(group)
     val channel = bootstrap.bind(config.localAddr).sync().channel()
     (channel as NioDatagramChannel).joinGroup(
       config.destAddr, config.netInterface
@@ -46,7 +48,7 @@ class MulticastNetHandler<
   }
 
   override fun close() {
-    group.shutdownGracefully()
+    group?.shutdownGracefully()
   }
 
   class MulticastHandler<
@@ -55,7 +57,7 @@ class MulticastNetHandler<
       InboundMessageTranslator : MessageTranslatorT<MessageT>
       >(
     private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-    private val context: P2PContext<MessageT, InboundMessageTranslator>
+    private val context: NodesHolder<MessageT, InboundMessageTranslator>
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket

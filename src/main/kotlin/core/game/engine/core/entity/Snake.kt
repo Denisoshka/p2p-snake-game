@@ -1,15 +1,14 @@
-package d.zhdanov.ccfit.nsu.core.game.entity
+package d.zhdanov.ccfit.nsu.core.game.engine.core.entity
 
+import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
-import d.zhdanov.ccfit.nsu.core.game.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameState
 
 class Snake(
   entityOnMapInfo: EntityOnMapInfo,
   val id: Int,
   var direction: Direction,
-  context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
+  context: GameState
 ) : Entity {
   private var isDead: Boolean = false;
   private var score: Int = 0
@@ -53,7 +52,7 @@ class Snake(
     return score
   }
 
-  override fun update(context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState) {
+  override fun update(context: GameState) {
     body.removeLast()
     val point = EntityOnMapInfo(
       body[0].x + direction.dx, body[0].y + direction.dy
@@ -66,7 +65,10 @@ class Snake(
     body.add(0, point)
   }
 
-  override fun checkCollisions(entity: Entity, context: d.zhdanov.ccfit.nsu.core.game.states.impl.GameState) {
+  override fun checkCollisions(
+    entity: Entity,
+    context: GameState
+  ) {
     val head = getHead()
     if (entity.getHitBox()
         .any { point -> point.x == head.x && point.y == head.y }
