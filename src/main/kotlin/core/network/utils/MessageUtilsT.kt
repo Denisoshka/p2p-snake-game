@@ -2,10 +2,11 @@ package d.zhdanov.ccfit.nsu.core.network.utils
 
 interface MessageUtilsT<MessageT, MessageDescriptor> {
   fun needToAcknowledge(msgDescriptor: MessageDescriptor): Boolean
+  fun checkJoinPreconditions(message: MessageT) : Boolean
   fun getMSGSeq(message: MessageT): Long
 
   fun getAckMsg(message: MessageT, senderId: Int, receiverId: Int): MessageT
-  fun getErrorMsg(message: MessageT, errorMsg: String?): MessageT
+  fun newErrorMsg(message: MessageT, errorMsg: String?): MessageT
   fun getPingMsg(seq: Long): MessageT
 
   fun getSenderId(message: MessageT): Int

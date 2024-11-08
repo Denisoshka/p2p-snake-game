@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
@@ -21,22 +21,22 @@ object MessageTranslator : MessageTranslatorT<SnakesProto.GameMessage> {
     }
   }
 
-  override fun fromMessageT(msg: SnakesProto.GameMessage): GameMessage {
+  override fun fromMessageT(msg: SnakesProto.GameMessage): P2PMessage {
     TODO("Not yet implemented")
   }
 
   override fun fromMessageT(
     message: SnakesProto.GameMessage, msgT: MessageType
-  ): GameMessage {
+  ): P2PMessage {
     TODO("Not yet implemented")
   }
 
-  override fun toMessageT(msg: GameMessage): SnakesProto.GameMessage {
+  override fun toMessageT(msg: P2PMessage): SnakesProto.GameMessage {
     TODO("Not yet implemented")
   }
 
   override fun toMessageT(
-    msg: GameMessage, msgT: MessageType
+    msg: P2PMessage, msgT: MessageType
   ): SnakesProto.GameMessage {
     TODO("Not yet implemented")
   }

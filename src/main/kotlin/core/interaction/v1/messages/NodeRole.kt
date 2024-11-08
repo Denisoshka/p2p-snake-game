@@ -8,14 +8,15 @@ import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalNodeRoleException
  */
 enum class NodeRole {
   /**
+   * A spectator node, similar to NORMAL, but without an ALIVE snake;
+   * only receives status updates.
+   */
+  VIEWER,
+
+  /**
    * A regular node, a leaf in a star topology.
    */
   NORMAL,
-
-  /**
-   * The main node, the center of a star topology.
-   */
-  MASTER,
 
   /**
    * The deputy node, a backup for the main node.
@@ -23,10 +24,9 @@ enum class NodeRole {
   DEPUTY,
 
   /**
-   * A spectator node, similar to NORMAL, but without an ALIVE snake;
-   * only receives status updates.
+   * The main node, the center of a star topology.
    */
-  VIEWER;
+  MASTER;
 
   @Throws(IllegalNodeRoleException::class)
   fun fromProto(role: SnakesProto.NodeRole): NodeRole {

@@ -3,20 +3,17 @@ package d.zhdanov.ccfit.nsu.core.utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 
-object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
-    SnakesProto.GameMessage.TypeCase> {
+object MessageUtils :
+  MessageUtilsT<SnakesProto.GameMessage, SnakesProto.GameMessage.TypeCase> {
   private val ackMsg: SnakesProto.GameMessage.AckMsg =
     SnakesProto.GameMessage.AckMsg.newBuilder().build()
   private val pingMsg: SnakesProto.GameMessage.PingMsg =
     SnakesProto.GameMessage.PingMsg.newBuilder().build()
 
   override fun needToAcknowledge(
-    msgDescriptor: SnakesProto.GameMessage
-    .TypeCase
+    msgDescriptor: SnakesProto.GameMessage.TypeCase
   ): Boolean {
-    return msgDescriptor == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT
-        || msgDescriptor == SnakesProto.GameMessage.TypeCase.ACK
-        || msgDescriptor == SnakesProto.GameMessage.TypeCase.DISCOVER
+    return msgDescriptor == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT || msgDescriptor == SnakesProto.GameMessage.TypeCase.ACK || msgDescriptor == SnakesProto.GameMessage.TypeCase.DISCOVER
   }
 
   override fun getMSGSeq(message: SnakesProto.GameMessage): Long {
@@ -24,35 +21,34 @@ object MessageUtils : MessageUtilsT<SnakesProto.GameMessage,
   }
 
   override fun getAckMsg(
-    message: SnakesProto.GameMessage,
-    senderId: Int, receiverId: Int
+    message: SnakesProto.GameMessage, senderId: Int, receiverId: Int
   ): SnakesProto.GameMessage {
-    return SnakesProto.GameMessage.newBuilder()
-      .setMsgSeq(message.msgSeq)
-      .setSenderId(senderId)
-      .setReceiverId(receiverId)
-      .setAck(
+    return SnakesProto.GameMessage.newBuilder().setMsgSeq(message.msgSeq)
+      .setSenderId(senderId).setReceiverId(receiverId).setAck(
         ackMsg
       ).build()
   }
 
-  override fun getErrorMsg(
-    message: SnakesProto.GameMessage,
-    errorMsg: String?
+  override fun newErrorMsg(
+    message: SnakesProto.GameMessage, errorMsg: String?
   ): SnakesProto.GameMessage {
-    return SnakesProto.GameMessage.newBuilder()
-      .setMsgSeq(message.msgSeq)
+    return SnakesProto.GameMessage.newBuilder().setMsgSeq(message.msgSeq)
       .setError(
-        SnakesProto.GameMessage.ErrorMsg.newBuilder()
-          .setErrorMessage(errorMsg)
+        SnakesProto.GameMessage.ErrorMsg.newBuilder().setErrorMessage(errorMsg)
           .build()
       ).build()
   }
 
+  override fun checkJoinPreconditions(message: SnakesProto.GameMessage): Boolean {
+    return message.run {
+      hasJoin() && join.run {
+        playerName.isNotBlank() && playerType == SnakesProto.PlayerType.HUMAN && (requestedRole == SnakesProto.NodeRole.VIEWER || requestedRole == SnakesProto.NodeRole.NORMAL)
+      }
+    }
+  }
+
   override fun getPingMsg(seq: Long): SnakesProto.GameMessage {
-    return SnakesProto.GameMessage.newBuilder()
-      .setMsgSeq(seq)
-      .setPing(pingMsg)
+    return SnakesProto.GameMessage.newBuilder().setMsgSeq(seq).setPing(pingMsg)
       .build()
   }
 

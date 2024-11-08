@@ -1,6 +1,6 @@
 package core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.NodesHolder
+import d.zhdanov.ccfit.nsu.core.network.P2PContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.UnicastNetworkHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
@@ -30,7 +30,7 @@ class UnicastNetHandler<
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()
 
-  override fun configure(context: NodesHolder<MessageT, InboundMessageTranslator>) {
+  override fun configure(context: P2PContext<MessageT, InboundMessageTranslator>) {
     bootstrap.apply {
       group(group)
       channel(NioDatagramChannel::class.java)
@@ -48,7 +48,7 @@ class UnicastNetHandler<
     channel = bootstrap.bind().sync().channel() as DatagramChannel
   }
 
-  override fun sendMessage(message: MessageT, address: InetSocketAddress) {
+  override fun sendUnicastMessage(message: MessageT, address: InetSocketAddress) {
     val data = Unpooled.wrappedBuffer(msgUtils.toBytes(message))
     val packet = DatagramPacket(data, address)
     channel.writeAndFlush(packet)
@@ -64,7 +64,7 @@ class UnicastNetHandler<
       InboundMessageTranslator : MessageTranslatorT<MessageT>
       >(
     private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-    private val context: NodesHolder<MessageT, InboundMessageTranslator>
+    private val context: P2PContext<MessageT, InboundMessageTranslator>
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket

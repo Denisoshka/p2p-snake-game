@@ -6,5 +6,5 @@ import java.net.InetSocketAddress
 interface UnicastNetworkHandler<
     MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>
     > : NetworkHandler<MessageT, InboundMessageTranslator> {
-  fun sendMessage(message: MessageT, address: InetSocketAddress)
+  fun sendUnicastMessage(message: MessageT, address: InetSocketAddress)
 }

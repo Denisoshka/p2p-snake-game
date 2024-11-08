@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import d.zhdanov.ccfit.nsu.core.network.NodesHolder
+import d.zhdanov.ccfit.nsu.core.network.P2PContext
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
 interface NetworkHandler<
@@ -9,6 +9,6 @@ interface NetworkHandler<
   /**
    * require to call [configure] before using [launch]
    * */
-  fun configure(context: NodesHolder<MessageT, InboundMessageTranslator>)
+  fun configure(context: P2PContext<MessageT, InboundMessageTranslator>)
   fun launch()
 }
