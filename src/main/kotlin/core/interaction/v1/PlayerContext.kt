@@ -1,22 +1,26 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1
 
-import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.Snake
-import d.zhdanov.ccfit.nsu.core.game.PlayerT
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.PlayerT
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.stardart.Snake
+import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.Node
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodePayloadT
+import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicLong
 
-class PlayerContext<ContextId>(
-   override val snake: Snake,
-   private val node: Node<ContextId>,
-   private val lastUpdateSeq: AtomicLong = AtomicLong(0L),
-) : PlayerT(snake), NodePayloadT {
+class PlayerContext(
+  snake: Snake,
+  private val node: Node<InetSocketAddress>,
+  private val lastUpdateSeq: AtomicLong = AtomicLong(0L), name: String,
+) : PlayerT(name, snake), NodePayloadT {
   override fun update(steer: SteerMsg, seq: Long) {
-    synchronized(this) {
-      val prev = lastUpdateSeq.get()
-      if(seq <= prev) return
+    synchronized(lastUpdateSeq) {
+      if(seq <= lastUpdateSeq.get()) return
 
       lastUpdateSeq.set(seq)
       snake.changeState(steer.direction)
@@ -29,5 +33,15 @@ class PlayerContext<ContextId>(
 
   override fun onObserverTerminated() {
     snake.snakeState = SnakeState.ZOMBIE
+  }
+
+  override fun shootState(context: GameState, state: StateMsg) {
+    snake.shootState(context, state)
+    val sockAddr = node.address;
+    val pl = GamePlayer(
+      name, snake.id, sockAddr.address.hostAddress, sockAddr.port,
+      node.nodeRole, PlayerType.HUMAN, snake.score
+    )
+    state.players.add(pl)
   }
 }

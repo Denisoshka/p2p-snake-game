@@ -2,20 +2,20 @@ package d.zhdanov.ccfit.nsu.core.game.states.impl
 
 import d.zhdanov.ccfit.nsu.core.game.GameConfig
 import d.zhdanov.ccfit.nsu.core.game.GameController
-import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.Entity
-import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.Snake
-import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map.GameMap
-import d.zhdanov.ccfit.nsu.core.game.PlayerT
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.PlayerT
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.stardart.Snake
+import d.zhdanov.ccfit.nsu.core.game.engine.map.GameMap
 import d.zhdanov.ccfit.nsu.core.game.states.State
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
 class GameState(
-   private val gameConfig: GameConfig,
-   private val gameController: GameController,
+  private val gameConfig: GameConfig,
+  private val gameController: GameController,
 
-   ) : State {
+  ) : State {
   private val gameObjects: MutableList<Entity> = mutableListOf()
   private val players: MutableMap<Long, PlayerT> = HashMap()
   private val contextId: AtomicLong = AtomicLong(0)
@@ -65,11 +65,12 @@ class GameState(
         }
       }
     }
-    gameObjects.removeIf { ent -> ent.isDead() }
+
+    gameObjects.removeIf { !it.alive }
     val it = players.iterator()
     while(it.hasNext()) {
       val (_, player) = it.next()
-      if(player.snake.isDead()) {
+      if(!player.alive) {
         it.remove()
         player.onObservedExpired()
       }

@@ -1,6 +1,6 @@
-package d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map
+package d.zhdanov.ccfit.nsu.core.game.engine.map
 
-import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.Entity
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 
 class GameMap(val width: Int, val height: Int) {
   private val mapContainer = mutableSetOf<EntityOnMapInfo>()
@@ -9,12 +9,12 @@ class GameMap(val width: Int, val height: Int) {
     val x = point.x
     val y = point.y
     var isFree = true
-    outer@ for (i in -2..2) {
+    outer@ for(i in -2..2) {
       point.x = x + i
-      for (j in -2..2) {
+      for(j in -2..2) {
         point.y = y + j
         fixPoint(point)
-        if (isOccupied(point)) {
+        if(isOccupied(point)) {
           isFree = false
           break@outer
         }
@@ -35,11 +35,11 @@ class GameMap(val width: Int, val height: Int) {
 
   fun findFreeSquare(): EntityOnMapInfo? {
     val center = EntityOnMapInfo(0, 0)
-    for (x in 0 until width) {
+    for(x in 0 until width) {
       center.x = x;
-      for (y in 0 until height) {
+      for(y in 0 until height) {
         center.y = y
-        if (isSquareFree(center)) {
+        if(isSquareFree(center)) {
           return center
         }
       }
@@ -48,11 +48,11 @@ class GameMap(val width: Int, val height: Int) {
   }
 
   fun addEntity(entity: Entity) {
-    entity.getHitBox().forEach { point -> fixPoint(point); mapContainer.add(point) }
+    entity.hitBox.forEach { point -> fixPoint(point); mapContainer.add(point) }
   }
 
   fun removeEntity(entity: Entity) {
-    entity.getHitBox().forEach(mapContainer::remove)
+    entity.hitBox.forEach(mapContainer::remove)
   }
 
   private fun isOccupied(point: EntityOnMapInfo): Boolean {

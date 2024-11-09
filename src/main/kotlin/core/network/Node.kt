@@ -27,16 +27,16 @@ private val logger = KotlinLogging.logger {}
  * A node is considered dead if the message delay exceeds [thresholdDelay].
  */
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
-   initialState: InitialState = InitialState.Registration,
-   initMsgSeqNum: Long,
-   messageComparator: Comparator<MessageT>,
-   nodeCoroutineContext: CoroutineScope,
-   @Volatile var nodeRole: NodeRole,
-   override val id: Int,
-   override val address: InetSocketAddress,
-   private val resendDelay: Long,
-   private val thresholdDelay: Long,
-   private val nodesContext: NodesContext<MessageT, InboundMessageTranslator>
+  initialState: InitialState = InitialState.Registration,
+  initMsgSeqNum: Long,
+  messageComparator: Comparator<MessageT>,
+  nodeCoroutineContext: CoroutineScope,
+  @Volatile override var nodeRole: NodeRole,
+  override val id: Int,
+  override val address: InetSocketAddress,
+  private val resendDelay: Long,
+  private val thresholdDelay: Long,
+  private val nodesContext: NodesContext<MessageT, InboundMessageTranslator>
 ) : Node<InetSocketAddress> {
   /**
    * Represents the various states of a node in the system.
