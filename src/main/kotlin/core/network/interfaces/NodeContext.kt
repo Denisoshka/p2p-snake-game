@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.network.Node
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
 interface NodeContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>> {
-	fun handleNodeRegistration(node: Node<MessageT, InboundMessageTranslator>)
+	suspend fun handleNodeRegistration(node: Node<MessageT, InboundMessageTranslator>)
 	suspend fun handleNodeTermination(node: Node<MessageT, InboundMessageTranslator>)
 	suspend fun handleNodeRoleChange(
 		node: Node<MessageT, InboundMessageTranslator>, p2pRoleChange: P2PMessage

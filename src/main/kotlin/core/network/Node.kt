@@ -25,221 +25,278 @@ private val logger = KotlinLogging.logger {}
  * Each node is responsible for monitoring the delivery of sent messages.
  * A message is resent if the [resendDelay] is exceeded.
  * A node is considered dead if the message delay exceeds [thresholdDelay].
- *
- * @param address The unique identifier for the node, represented as an InetSocketAddress.
- * @param resendDelay Delay in milliseconds before resending a message.
- * @param thresholdDelay Threshold delay in milliseconds to determine node state.
- * @param context The P2P context which manages the node's interactions.
- * @param messageComparator Comparator for comparing messages of type [MessageT]. This comparator must compare messages based on the sequence number msg_seq, which is unique to the node within the context and monotonically increasing.
- * @param nodeCoroutineScope Coroutine context for checking the node state. Default is [Dispatchers.IO].
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
-	initMsgSeqNum: Long,
-	messageComparator: Comparator<MessageT>,
-	nodeCoroutineContext: CoroutineScope,
-	@Volatile var nodeRole: NodeRole,
-	override val id: Int,
-	override val address: InetSocketAddress,
-	private val resendDelay: Long,
-	private val thresholdDelay: Long,
-	private val nodesContext: NodesContext<MessageT, InboundMessageTranslator>
+   initialState: InitialState = InitialState.Registration,
+   initMsgSeqNum: Long,
+   messageComparator: Comparator<MessageT>,
+   nodeCoroutineContext: CoroutineScope,
+   @Volatile var nodeRole: NodeRole,
+   override val id: Int,
+   override val address: InetSocketAddress,
+   private val resendDelay: Long,
+   private val thresholdDelay: Long,
+   private val nodesContext: NodesContext<MessageT, InboundMessageTranslator>
 ) : Node<InetSocketAddress> {
-	enum class NodeState {
-		WaitRegistration,
-		Active,
-		WaitTermination,
-		Terminated,
-	}
+  /**
+   * Represents the various states of a node in the system.
+   */
+  enum class InitialState {
+    /**
+     * Indicates that the node is pending registration.
+     * In this state, the node needs to be registered within the system's context
+     * before it can transition to an active state.
+     */
+    Registration,
 
-	@Volatile var nodeState: NodeState = NodeState.Active
-		private set
+    /**
+     * Indicates that the node is fully operational.
+     * The node is registered, active, and does not require further actions to maintain its state.
+     */
+    Operational,
 
-	private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
-	private val roleChangeChannel = Channel<P2PMessage>()
-	private var observationJob: Job? = null
-	private var selectJob: Job? = null
+    /**
+     * Indicates that the node is in the finalizing stage.
+     * The node needs to acknowledge and confirm all pending messages before it can terminate or transition
+     * to another state.
+     */
+    Finalizing
+  }
 
-	/**
-	 * Change this values within the scope of synchronized([msgForAcknowledge]).
-	 */
-	private val msgForAcknowledge: TreeMap<MessageT, Long> =
-		TreeMap(messageComparator)
-	@Volatile private var lastReceive = 0L
-	@Volatile private var lastSend = 0L
+  enum class NodeState {
+    NeedRegistration,
+    Active,
+    WaitTermination,
+    Terminated,
+  }
 
-	init {
-		val delayCoef = 0.8
-		observationJob = nodeCoroutineContext.launch {
-			try {
-				while (true) {
-					when (nodeState) {
-						NodeState.WaitRegistration -> {}
-						NodeState.Active -> onActive()
-						NodeState.WaitTermination -> onWaitTermination()
-						NodeState.Terminated -> {
-							nodesContext.handleNodeTermination(this@Node)
-							break
-						}
-					}
-				}
-			} catch (_: CancellationException) {
-				this.cancel()
-			}
-		}
-		selectJob = nodeCoroutineContext.launch {
-			while (true) {
-				select {
-					roleChangeChannel.onReceive {
-						nodesContext.handleNodeRoleChange(this@Node, it)
-					}
-				}
-			}
-		}
-	}
+  @Volatile var nodeState: NodeState
+    private set
 
-	private suspend fun onActive() {
-		while (nodeState == NodeState.Active) {
-			val nextDelay = synchronized(msgForAcknowledge) {
-				if (nodeState != NodeState.Active) return
+  private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
+  private val roleChangeChannel = Channel<P2PMessage>()
+  private val observationJob: Job
+  private val selectJob: Job
 
-				val now = System.currentTimeMillis()
-				if (now - lastReceive > thresholdDelay) {
-					nodeState = NodeState.Terminated
-					return
-				}
+  /**
+   * Change this values within the scope of synchronized([msgForAcknowledge]).
+   */
+  private val msgForAcknowledge: TreeMap<MessageT, Long> =
+    TreeMap(messageComparator)
+  @Volatile private var lastReceive = 0L
+  @Volatile private var lastSend = 0L
 
-				val nextDelay = checkMessages()
-				if (nextDelay == resendDelay && now - lastSend >= resendDelay) {
-					val seq = getNextMSGSeqNum()
-					val ping = nodesContext.msgUtils.getPingMsg(seq)
-					nodesContext.sendUnicast(ping, this)
-					lastSend = System.currentTimeMillis()
-				}
+  init {
+    if(initialState != InitialState.Operational) {
+      Preconditions.checkArgument(
+        nodeRole == NodeRole.VIEWER || nodeRole == NodeRole.NORMAL,
+        "on initialState==InitialState.Registration/InitialState.Finalizing " + "nodeRole must be NodeRole.VIEWER/NodeRole.NORMAL"
+      )
+    }
 
-				return@synchronized nextDelay
-			}
+    nodeState = when(initialState) {
+      InitialState.Registration -> NodeState.NeedRegistration
+      InitialState.Operational  -> NodeState.Active
+      InitialState.Finalizing   -> NodeState.WaitTermination
+    }
+    observationJob = nodeCoroutineContext.launch {
+      try {
+        while(this.isActive) {
+          when(nodeState) {
+            NodeState.NeedRegistration -> onRegistration()
+            NodeState.Active           -> onActive()
+            NodeState.WaitTermination  -> onWaitTermination()
+            NodeState.Terminated       -> {
+              nodesContext.handleNodeTermination(this@Node)
+              break
+            }
+          }
+        }
+      } catch(_: CancellationException) {
+        this.cancel()
+      }
+    }
+    selectJob = nodeCoroutineContext.launch {
+      try {
+        while(true) {
+          select {
+            roleChangeChannel.onReceive {
+              nodesContext.handleNodeRoleChange(this@Node, it)
+            }
+          }
+        }
+      } catch(_: CancellationException) {
+        this.cancel()
+      }
+    }
+  }
 
-			delay(nextDelay)
-		}
-	}
+  private suspend fun onRegistration() {
+    while(nodeState == NodeState.NeedRegistration) {
+      val nextDelay = synchronized(msgForAcknowledge) {
+        if(nodeState != NodeState.NeedRegistration) return
+        val now = System.currentTimeMillis()
+        if(now - lastReceive < thresholdDelay) {
+          nodeState = NodeState.Terminated
+          return
+        }
 
-	private suspend fun onWaitTermination() {
-		while (nodeState == NodeState.WaitTermination) {
-			val nextDelay = synchronized(msgForAcknowledge) {
-				if (nodeState != NodeState.WaitTermination) return
-				if (msgForAcknowledge.isEmpty()) return
-				return@synchronized checkMessages()
-			}
-			delay(nextDelay)
-		}
-	}
+        val nextDelay = checkMessages()
+        sendPingIfNecessary(nextDelay, now)
 
-	private fun checkMessages(): Long {
-		var ret = resendDelay
-		val now = System.currentTimeMillis()
-		val it = msgForAcknowledge.iterator()
-		while (it.hasNext()) {
-			val entry = it.next()
-			val (msg, time) = entry
-			if (now - time < thresholdDelay) {
-				ret = ret.coerceAtMost(thresholdDelay + time - now)
-				entry.setValue(now)
-				nodesContext.sendUnicast(msg, this)
-			} else {
-				it.remove()
-			}
-		}
-		return ret
-	}
+        return@synchronized nextDelay
+      }
+      delay(nextDelay)
+    }
+  }
 
-	fun approveMessage(message: MessageT) {
-		synchronized(msgForAcknowledge) {
-			msgForAcknowledge.remove(message)
-			lastReceive = System.currentTimeMillis()
-		}
-	}
+  private suspend fun onActive() {
+    while(nodeState == NodeState.Active) {
+      val nextDelay = synchronized(msgForAcknowledge) {
+        if(nodeState != NodeState.Active) return
 
-	/**
-	 * @return `false` if node [NodeState] != [NodeState.Active] else `true`
-	 */
-	fun addMessageForAcknowledge(message: MessageT): Boolean {
-		if (nodeState != NodeState.Active) return false
-		synchronized(msgForAcknowledge) {
-			msgForAcknowledge[message] = System.currentTimeMillis()
-			lastSend = System.currentTimeMillis()
-		}
-		return true
-	}
+        val now = System.currentTimeMillis()
+        if(now - lastReceive > thresholdDelay) {
+          nodeState = NodeState.Terminated
+          return
+        }
 
-	fun addAllMessageForAcknowledge(messages: List<MessageT>): Boolean {
-		if (nodeState != NodeState.Active) return false
-		synchronized(msgForAcknowledge) {
-			for (msg in messages) {
-				msgForAcknowledge[msg] = System.currentTimeMillis()
-			}
-			lastSend = System.currentTimeMillis()
-		}
-		return true
-	}
+        val nextDelay = checkMessages()
+        sendPingIfNecessary(nextDelay, now)
 
-	fun getNextMSGSeqNum(): Long {
-		return msgSeqNum.incrementAndGet()
-	}
+        return@synchronized nextDelay
+      }
 
-	/**
-	 * @return [List]`<MessageT>` node [NodeState] == [NodeState.Terminated]
-	 * @throws IllegalUnacknowledgedMessagesGetAttempt if [NodeState] !=
-	 * [NodeState.Terminated]
-	 * */
-	fun getUnacknowledgedMessages(): List<MessageT> {
-		synchronized(msgForAcknowledge) {
-			if (nodeState != NodeState.Terminated) {
-				throw IllegalUnacknowledgedMessagesGetAttempt(nodeState)
-			}
-			return msgForAcknowledge.keys.toList();
-		}
-	}
+      delay(nextDelay)
+    }
+  }
 
-	fun shutdownNow() {
-		observationJob.cancel()
-		selectJob.cancel()
-	}
+  private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
+    if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
-	fun shutdown(status: MessageT? = null) {
-		synchronized(msgForAcknowledge) {
-			status?.also {
-				msgForAcknowledge[it] = System.currentTimeMillis()
-				lastSend = System.currentTimeMillis()
-			}
-			if (nodeState != NodeState.Terminated) {
-				nodeState = NodeState.WaitTermination
-			}
-		}
-	}
+    val seq = getNextMSGSeqNum()
+    val ping = nodesContext.msgUtils.getPingMsg(seq)
+    nodesContext.sendUnicast(ping, this)
+    lastSend = System.currentTimeMillis()
+  }
+
+  private suspend fun onWaitTermination() {
+    while(nodeState == NodeState.WaitTermination) {
+      val nextDelay = synchronized(msgForAcknowledge) {
+        if(nodeState != NodeState.WaitTermination) return
+        if(msgForAcknowledge.isEmpty()) return
+        return@synchronized checkMessages()
+      }
+      delay(nextDelay)
+    }
+  }
+
+  private fun checkMessages(): Long {
+    var ret = resendDelay
+    val now = System.currentTimeMillis()
+    val it = msgForAcknowledge.iterator()
+    while(it.hasNext()) {
+      val entry = it.next()
+      val (msg, time) = entry
+      if(now - time < thresholdDelay) {
+        ret = ret.coerceAtMost(thresholdDelay + time - now)
+        entry.setValue(now)
+        nodesContext.sendUnicast(msg, this)
+      } else {
+        it.remove()
+      }
+    }
+    return ret
+  }
+
+  fun approveMessage(message: MessageT) {
+    synchronized(msgForAcknowledge) {
+      msgForAcknowledge.remove(message)
+      lastReceive = System.currentTimeMillis()
+    }
+  }
+
+  /**
+   * @return `false` if node [NodeState] != [NodeState.Active] else `true`
+   */
+  fun addMessageForAcknowledge(message: MessageT): Boolean {
+    if(nodeState != NodeState.Active) return false
+    synchronized(msgForAcknowledge) {
+      msgForAcknowledge[message] = System.currentTimeMillis()
+      lastSend = System.currentTimeMillis()
+    }
+    return true
+  }
+
+  fun addAllMessageForAcknowledge(messages: List<MessageT>): Boolean {
+    if(nodeState != NodeState.Active) return false
+    synchronized(msgForAcknowledge) {
+      for(msg in messages) {
+        msgForAcknowledge[msg] = System.currentTimeMillis()
+      }
+      lastSend = System.currentTimeMillis()
+    }
+    return true
+  }
+
+  fun getNextMSGSeqNum(): Long {
+    return msgSeqNum.incrementAndGet()
+  }
+
+  /**
+   * @return [List]`<MessageT>` node [NodeState] == [NodeState.Terminated]
+   * @throws IllegalUnacknowledgedMessagesGetAttempt if [NodeState] !=
+   * [NodeState.Terminated]
+   * */
+  fun getUnacknowledgedMessages(): List<MessageT> {
+    synchronized(msgForAcknowledge) {
+      if(nodeState != NodeState.Terminated) {
+        throw IllegalUnacknowledgedMessagesGetAttempt(nodeState)
+      }
+      return msgForAcknowledge.keys.toList();
+    }
+  }
+
+  fun shutdownNow() {
+    synchronized(msgForAcknowledge) {
+      nodeState = NodeState.Terminated
+    }
+  }
+
+  fun shutdown(status: MessageT? = null) {
+    synchronized(msgForAcknowledge) {
+      status?.also {
+        msgForAcknowledge[it] = System.currentTimeMillis()
+        lastSend = System.currentTimeMillis()
+      }
+      if(nodeState != NodeState.Terminated) {
+        nodeState = NodeState.WaitTermination
+      }
+    }
+  }
 
 
-	/**
-	 * in cur version perform logic only with [NodeRole.VIEWER] request
-	 * @throws IllegalArgumentException if [p2pRoleChangeMsg]!=[NodeRole.VIEWER]
-	 * @throws IllegalArgumentException if [p2pRoleChangeMsg] not perform logout
-	 * @param p2pRoleChangeMsg new role of node
-	 * @return `true` if new role was submitted successfully, else `false`
-	 * */
-	fun submitNewNodeRole(p2pRoleChangeMsg: P2PMessage): Boolean {
-		Preconditions.checkArgument(
-			p2pRoleChangeMsg.msg.type == MessageType.RoleChangeMsg,
-			"perform logic only with MessageType.RoleChangeMsg"
-		)
-		val roleChange = p2pRoleChangeMsg.msg as RoleChangeMsg
-		Preconditions.checkArgument(
-			roleChange.senderRole != NodeRole.VIEWER && roleChange.receiverRole == null,
-			"perform logic only with logout msg"
-		)
-		return roleChangeChannel.trySend(p2pRoleChangeMsg).isSuccess
-	}
+  /**
+   * in cur version perform logic only with [NodeRole.VIEWER] request
+   * @throws IllegalArgumentException if [p2pRoleChangeMsg]!=[NodeRole.VIEWER]
+   * @throws IllegalArgumentException if [p2pRoleChangeMsg] not perform logout
+   * @param p2pRoleChangeMsg new role of node
+   * @return `true` if new role was submitted successfully, else `false`
+   * */
+  fun submitNewNodeRole(p2pRoleChangeMsg: P2PMessage): Boolean {
+    Preconditions.checkArgument(
+      p2pRoleChangeMsg.msg.type == MessageType.RoleChangeMsg,
+      "perform logic only with MessageType.RoleChangeMsg"
+    )
+    val roleChange = p2pRoleChangeMsg.msg as RoleChangeMsg
+    Preconditions.checkArgument(
+      roleChange.senderRole != NodeRole.VIEWER && roleChange.receiverRole == null,
+      "perform logic only with logout msg"
+    )
+    return roleChangeChannel.trySend(p2pRoleChangeMsg).isSuccess
+  }
 
-	override fun toString(): String {
-		return "Node(id=$id, address=$address, nodeState=$nodeState, nodeRole=$nodeRole)"
-	}
+  override fun toString(): String {
+    return "Node(id=$id, address=$address, nodeState=$nodeState, nodeRole=$nodeRole)"
+  }
 }

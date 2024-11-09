@@ -3,13 +3,15 @@ package d.zhdanov.ccfit.nsu.core.game.engine.core.entity
 import d.zhdanov.ccfit.nsu.core.game.engine.core.entity.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 
 class Snake(
-  entityOnMapInfo: EntityOnMapInfo,
-  val id: Int,
-  var direction: Direction,
-  context: GameState
+   entityOnMapInfo: EntityOnMapInfo,
+   val id: Int,
+   var direction: Direction,
+   context: GameState,
 ) : Entity {
+  var snakeState =  SnakeState.ALIVE
   private var isDead: Boolean = false;
   private var score: Int = 0
   private val body: MutableList<EntityOnMapInfo> = mutableListOf(
@@ -66,23 +68,23 @@ class Snake(
   }
 
   override fun checkCollisions(
-    entity: Entity,
-    context: GameState
+     entity: Entity,
+     context: GameState
   ) {
     val head = getHead()
-    if (entity.getHitBox()
-        .any { point -> point.x == head.x && point.y == head.y }
+    if(entity.getHitBox()
+          .any { point -> point.x == head.x && point.y == head.y }
     ) {
-      when (entity.getType()) {
+      when(entity.getType()) {
         GameType.Snake -> isDead = true
-        GameType.Apple -> if (!entity.isDead()) ++score
-        else -> {}
+        GameType.Apple -> if(!entity.isDead()) ++score
+        else           -> {}
       }
     }
   }
 
   fun changeState(newDirection: Direction) {
-    if (!isOpposite(newDirection)) {
+    if(!isOpposite(newDirection)) {
       direction = newDirection
     }
   }

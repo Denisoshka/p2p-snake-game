@@ -14,7 +14,6 @@ class Apple(x: Int, y: Int, context: GameState) : Entity {
   }
 
   override fun checkCollisions(entity: Entity, context: GameState) {
-    if (isDead) return
     if (entity.getHitBox()
         .any { box -> box.x == point.x && box.y == point.y }
     ) {

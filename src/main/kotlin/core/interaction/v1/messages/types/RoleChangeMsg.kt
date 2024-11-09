@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types
 
-import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.MessageType
-import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 
 /**
  * Represents a message about a role change in the network.
@@ -24,6 +24,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
  * @param receiverRole The role that the receiver node will take on after the role change.
  */
 class RoleChangeMsg(
-  val senderRole: NodeRole? = null,
-  val receiverRole: NodeRole? = null
+   val senderRole: NodeRole? = null,
+   val receiverRole: NodeRole? = null
 ) : d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.Msg(MessageType.RoleChangeMsg)
