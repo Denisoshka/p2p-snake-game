@@ -79,6 +79,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 	@Volatile private var nodeRole: NodeRole/*todo ну или это значение используется только в контексте когда мы смотрим
       ноды или его нужно хранить вместе с мастером и депутей*/
 ) : NodeContext<MessageT, InboundMessageTranslator> {
+	val msgUtils = p2p.messageUtils
 	private val localNodeId: Int
 	private val nodesScope = CoroutineScope(Dispatchers.Default)
 	private val nodesByIp: ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator>> =
@@ -145,15 +146,23 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 				select {
 					deadNodeChannel.onReceive { node ->
 						onNodeTermination(node)
-					}          /*registerNewNode.onReceive { node ->
+					}
+					registerNewNode.onReceive { node ->
 						handleNodeRegistration(node)
-					}*/
+					}
 					reconfigureContext.onReceive { (node, msg) ->
 						onNodeGoOut(node, msg)
 					}
 				}
 			}
 		}
+	}
+
+	public fun sendUnicast(
+		msg: MessageT,
+		node: Node<MessageT, InboundMessageTranslator>
+	) {
+		p2p.sendUnicast(msg, node)
 	}
 
 	override fun handleNodeRegistration(node: Node<MessageT, InboundMessageTranslator>) {
@@ -244,7 +253,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 		} else {
 			nodesById[deputyId]?.also {
 				val nonAckMsgs = master.getUnacknowledgedMessages()
-				for (msg in nonAckMsgs) p2p.sendUnicast(msg, it)
+				for (msg in nonAckMsgs) sendUnicast(msg, it)
 				it.addAllMessageForAcknowledge(nonAckMsgs)
 				return
 			}
@@ -329,7 +338,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 	private fun sendWithAck(
 		msg: MessageT, node: Node<MessageT, InboundMessageTranslator>
 	) {
-		p2p.sendUnicast(msg, node)
+		sendUnicast(msg, node)
 		node.addMessageForAcknowledge(msg)
 	}
 

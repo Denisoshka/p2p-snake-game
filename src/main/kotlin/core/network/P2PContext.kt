@@ -177,7 +177,6 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
 				val pair = nodes[ipAddress]
 				if (pair == null) {
 					val node = contextNodeFabric.create()
-
 				} else {
 					val errMsg = messageUtils.newErrorMsg(message, "node already joined")
 					unicastNetHandler.sendUnicastMessage(errMsg, ipAddress)

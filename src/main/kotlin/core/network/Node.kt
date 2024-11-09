@@ -57,16 +57,16 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 
 	private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
 	private val roleChangeChannel = Channel<P2PMessage>()
-	private val observationJob: Job
-	private val selectJob: Job
+	private var observationJob: Job? = null
+	private var selectJob: Job? = null
 
 	/**
 	 * Change this values within the scope of synchronized([msgForAcknowledge]).
 	 */
 	private val msgForAcknowledge: TreeMap<MessageT, Long> =
 		TreeMap(messageComparator)
-	private val lastReceive = AtomicLong()
-	private val lastSend = AtomicLong()
+	@Volatile private var lastReceive = 0L
+	@Volatile private var lastSend = 0L
 
 	init {
 		val delayCoef = 0.8
@@ -74,16 +74,9 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 			try {
 				while (true) {
 					when (nodeState) {
-						NodeState.WaitRegistration -> {
-						}
-
-						NodeState.Active -> {
-						}
-
-						NodeState.WaitTermination -> {
-							onWaitTermination()
-						}
-
+						NodeState.WaitRegistration -> {}
+						NodeState.Active -> onActive()
+						NodeState.WaitTermination -> onWaitTermination()
 						NodeState.Terminated -> {
 							nodesContext.handleNodeTermination(this@Node)
 							break
@@ -98,30 +91,72 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 			while (true) {
 				select {
 					roleChangeChannel.onReceive {
-						nodesContext.handleNodeRoleChange(
-							this@Node, it
-						)
+						nodesContext.handleNodeRoleChange(this@Node, it)
 					}
 				}
 			}
 		}
 	}
 
-	private fun onWaitTermination() {
+	private suspend fun onActive() {
+		while (nodeState == NodeState.Active) {
+			val nextDelay = synchronized(msgForAcknowledge) {
+				if (nodeState != NodeState.Active) return
+
+				val now = System.currentTimeMillis()
+				if (now - lastReceive > thresholdDelay) {
+					nodeState = NodeState.Terminated
+					return
+				}
+
+				val nextDelay = checkMessages()
+				if (nextDelay == resendDelay && now - lastSend >= resendDelay) {
+					val seq = getNextMSGSeqNum()
+					val ping = nodesContext.msgUtils.getPingMsg(seq)
+					nodesContext.sendUnicast(ping, this)
+					lastSend = System.currentTimeMillis()
+				}
+
+				return@synchronized nextDelay
+			}
+
+			delay(nextDelay)
+		}
+	}
+
+	private suspend fun onWaitTermination() {
 		while (nodeState == NodeState.WaitTermination) {
-			synchronized(msgForAcknowledge) {
+			val nextDelay = synchronized(msgForAcknowledge) {
 				if (nodeState != NodeState.WaitTermination) return
 				if (msgForAcknowledge.isEmpty()) return
-				val now = System.currentTimeMillis()
-				if (now - lastSend.get())
+				return@synchronized checkMessages()
+			}
+			delay(nextDelay)
+		}
+	}
+
+	private fun checkMessages(): Long {
+		var ret = resendDelay
+		val now = System.currentTimeMillis()
+		val it = msgForAcknowledge.iterator()
+		while (it.hasNext()) {
+			val entry = it.next()
+			val (msg, time) = entry
+			if (now - time < thresholdDelay) {
+				ret = ret.coerceAtMost(thresholdDelay + time - now)
+				entry.setValue(now)
+				nodesContext.sendUnicast(msg, this)
+			} else {
+				it.remove()
 			}
 		}
+		return ret
 	}
 
 	fun approveMessage(message: MessageT) {
 		synchronized(msgForAcknowledge) {
 			msgForAcknowledge.remove(message)
-			lastReceive.set(System.currentTimeMillis())
+			lastReceive = System.currentTimeMillis()
 		}
 	}
 
@@ -132,7 +167,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 		if (nodeState != NodeState.Active) return false
 		synchronized(msgForAcknowledge) {
 			msgForAcknowledge[message] = System.currentTimeMillis()
-			lastSend.set(System.currentTimeMillis())
+			lastSend = System.currentTimeMillis()
 		}
 		return true
 	}
@@ -143,7 +178,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 			for (msg in messages) {
 				msgForAcknowledge[msg] = System.currentTimeMillis()
 			}
-			lastSend.set(System.currentTimeMillis())
+			lastSend = System.currentTimeMillis()
 		}
 		return true
 	}
@@ -175,7 +210,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
 		synchronized(msgForAcknowledge) {
 			status?.also {
 				msgForAcknowledge[it] = System.currentTimeMillis()
-				lastSend.set(System.currentTimeMillis())
+				lastSend = System.currentTimeMillis()
 			}
 			if (nodeState != NodeState.Terminated) {
 				nodeState = NodeState.WaitTermination
