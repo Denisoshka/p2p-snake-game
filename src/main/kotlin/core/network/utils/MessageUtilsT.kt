@@ -1,19 +1,20 @@
 package d.zhdanov.ccfit.nsu.core.network.utils
 
 interface MessageUtilsT<MessageT, MessageDescriptor> {
-  fun needToAcknowledge(msgDescriptor: MessageDescriptor): Boolean
-  fun checkJoinPreconditions(message: MessageT) : Boolean
-  fun getMSGSeq(message: MessageT): Long
+	fun needToAcknowledge(msgDescriptor: MessageDescriptor): Boolean
+	fun checkJoinPreconditions(message: MessageT): Boolean
+	fun getMSGSeq(message: MessageT): Long
 
-  fun getAckMsg(message: MessageT, senderId: Int, receiverId: Int): MessageT
-  fun newErrorMsg(message: MessageT, errorMsg: String?): MessageT
-  fun getPingMsg(seq: Long): MessageT
+	fun getAckMsg(msgSeq: MessageT, senderId: Int, receiverId: Int): MessageT
+	fun getAckMsg(msgSeq: Long, senderId: Int, receiverId: Int): MessageT
+	fun newErrorMsg(message: MessageT, errorMsg: String?): MessageT
+	fun getPingMsg(seq: Long): MessageT
 
-  fun getSenderId(message: MessageT): Int
-  fun getReceiverId(message: MessageT): Int
+	fun getSenderId(message: MessageT): Int
+	fun getReceiverId(message: MessageT): Int
 
-  fun fromBytes(bytes: ByteArray): MessageT
-  fun toBytes(message: MessageT): ByteArray
+	fun fromBytes(bytes: ByteArray): MessageT
+	fun toBytes(message: MessageT): ByteArray
 
-  fun getComparator(): Comparator<MessageT>
+	fun getComparator(): Comparator<MessageT>
 }
