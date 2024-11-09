@@ -64,10 +64,17 @@ class Snake(
   override fun checkCollisions(
     entity: Entity, context: GameState
   ) {
-    val head = getHead()
+    if(!alive) return
+    val head = hitBox.first()
+
     if(entity.hitBox.any { point -> point.x == head.x && point.y == head.y }) {
       when(entity.type) {
-        GameType.Snake -> alive = false
+        GameType.Snake -> {
+          if(this === entity) {
+          }
+          alive = false
+        }
+
         GameType.Apple -> if(entity.alive) ++score
         else           -> {}
       }
@@ -77,8 +84,6 @@ class Snake(
   fun changeState(newDirection: Direction) {
     if(!isOpposite(newDirection)) direction = newDirection
   }
-
-  private fun getHead() = hitBox.first()
 
   private fun isOpposite(newDirection: Direction): Boolean {
     return direction.opposite() == newDirection
