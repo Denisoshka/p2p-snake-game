@@ -1,8 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.network.utils
 
 import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.Node
-import d.zhdanov.ccfit.nsu.core.network.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.states.Node
+import d.zhdanov.ccfit.nsu.core.network.states.P2PContext
 import java.net.InetSocketAddress
 import kotlin.coroutines.CoroutineContext
 

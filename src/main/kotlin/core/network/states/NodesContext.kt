@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network
+package d.zhdanov.ccfit.nsu.core.network.states
 
 import com.google.common.base.Preconditions
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
@@ -7,16 +7,14 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.network.logger
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
-
-private val logger = KotlinLogging.logger {}
 
 /**
  * Changes the state of the cluster in a single thread, so that if any
@@ -75,13 +73,13 @@ private val logger = KotlinLogging.logger {}
 class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   joinBacklog: Int,
   addrAndMsg: Pair<InetSocketAddress, P2PMessage>?,
-  var payload: NodePayloadT?,
   private val p2p: P2PContext<MessageT, InboundMessageTranslator>,
   private val messageTranslator: InboundMessageTranslator,
-  @Volatile private var nodeRole: NodeRole/*todo ну или это значение используется только в контексте когда мы смотрим
-      ноды или его нужно хранить вместе с мастером и депутей*/
+  /**
+   * Наша роль в p2p контексте
+   * */
+  @Volatile private var nodeRole: NodeRole
 ) : NodeContext<MessageT, InboundMessageTranslator> {
-  val msgUtils = p2p.messageUtils
   private val localNodeId: Int
   private val nodesScope = CoroutineScope(Dispatchers.Default)
   private val nodesByIp: ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator>> =
@@ -94,8 +92,10 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
     Channel(joinBacklog)
   private val reconfigureContext: Channel<Pair<Node<MessageT, InboundMessageTranslator>, P2PMessage>> =
     Channel(joinBacklog)
-  private val masterAndDeputy: AtomicReference<Pair<Int, Int?>> =
-    AtomicReference()
+  private val masterAndDeputy: AtomicReference<Pair<
+    Node<MessageT, InboundMessageTranslator>,
+    Node<MessageT, InboundMessageTranslator>?
+    >> = AtomicReference()
 
   init {
     if(addrAndMsg != null) {
@@ -111,16 +111,9 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
         msg.receiverId, "require receiverId not null"
       )
       val masterNode = Node(
-        Node.InitialState.Operational,
-        msg.msgSeq, 
-        p2p.messageUtils.getComparator(),
-        nodesScope,
-        NodeRole.MASTER,
-        masterId,
-        addr,
-        p2p.resendDelay,
-        p2p.thresholdDelay,
-        this
+        Node.InitialState.Operational, msg.msgSeq,
+        p2p.messageUtils.getComparator(), nodesScope, NodeRole.MASTER, masterId,
+        addr, p2p.resendDelay, p2p.thresholdDelay, this
       )
       masterAndDeputy.set(Pair(masterId, null))
       addNode(masterNode)
@@ -193,14 +186,13 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
      */
     val (masterId, deputyId) = masterAndDeputy.get()
     deleteNode(node)
-    if(localNodeId == masterId) {
-      if(node.id == deputyId) masterOnDeputyDead(node)
-    } else if(localNodeId == deputyId) {
-      if(node.id == masterId) deputyOnMasterDead(node)
+    if(localNodeId == masterId.id) {
+      if(node.id == deputyId?.id) masterOnDeputyExit(node)
+    } else if(localNodeId == deputyId?.id) {
+      if(node.id == masterId.id) deputyOnMasterExit(node)
     } else if(nodeRole == NodeRole.NORMAL) {
-      if(node.id == masterId) normalOnMasterDead(
-        node
-      )/* ну а другие ноды мы и не трекаем*/
+      if(node.id == masterId.id) normalOnMasterExit(node)
+      /* ну а другие ноды мы и не трекаем*/
     } else {      /*а ну мы же просто выкидываем вивера и похуй)*/
       logger.debug { node.toString() }/*todo нужно сделать просто выход из изры ибо мы вивер*/
     }
@@ -265,7 +257,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
     node.shutdown(ack);
   }
 
-  private fun normalOnMasterDead(master: Node<MessageT, InboundMessageTranslator>) {
+  private fun normalOnMasterExit(master: Node<MessageT, InboundMessageTranslator>) {
     /**
      * Processes the current state received from the cluster.
      *
@@ -288,7 +280,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
     }
   }
 
-  private fun deputyOnMasterDead(master: Node<MessageT, InboundMessageTranslator>) {
+  private fun deputyOnMasterExit(master: Node<MessageT, InboundMessageTranslator>) {
     nodeRole = NodeRole.MASTER
     val newDeputy = masterSetNewDeputy(master) ?: return
     for((_, node) in nodesByIp) {
@@ -353,7 +345,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
     node.addMessageForAcknowledge(msg)
   }
 
-  private fun masterOnDeputyDead(deputy: Node<MessageT, InboundMessageTranslator>) {
+  private fun masterOnDeputyExit(deputy: Node<MessageT, InboundMessageTranslator>) {
     val newDeputy = masterSetNewDeputy(deputy) ?: return
     sendRoleChange(newDeputy, NodeRole.MASTER, NodeRole.DEPUTY)
   }

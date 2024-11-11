@@ -1,6 +1,6 @@
 package core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.states.P2PContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.UnicastNetworkHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT

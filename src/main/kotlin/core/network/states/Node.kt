@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network
+package d.zhdanov.ccfit.nsu.core.network.states
 
 import com.google.common.base.Preconditions
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
@@ -8,15 +8,12 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.Node
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.*
 import java.util.concurrent.atomic.AtomicLong
-
-private val logger = KotlinLogging.logger {}
 
 /**
  * todo fix doc

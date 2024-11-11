@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import d.zhdanov.ccfit.nsu.core.network.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.states.P2PContext
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 
 interface NetworkHandler<
