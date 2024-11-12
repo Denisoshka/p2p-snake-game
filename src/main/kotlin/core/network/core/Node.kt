@@ -17,7 +17,10 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
-private val
+private const val NodeAlreadyRegisteredMsg =
+  "node already registered in cluster"
+private const val IncorrectRegisterEvent =
+  "registration channel receive wrong event: "
 
 /**
  * todo fix doc
@@ -34,21 +37,23 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
   @Volatile override var nodeRole: NodeRole,
   override val id: Int,
   override val address: InetSocketAddress,
-  private val resendDelay: Long,
-  private val thresholdDelay: Long,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>
 ) : NodeT<InetSocketAddress> {
-  private val state =
-    StateHolder<MessageT, InboundMessageTranslator, Payload>(TODO())
+  val resendDelay: Long = nodesHandler.resendDelay
+  val thresholdDelay: Long = nodesHandler.thresholdDelay
+  @Volatile private var lastReceive: Long = System.currentTimeMillis()
+  @Volatile private var lastSend: Long = System.currentTimeMillis()
   private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
+  private val state = StateHolder<MessageT, InboundMessageTranslator, Payload>(
+    TODO()
+  )
 
   /**
    * Change this values within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<MessageT, Long> =
-    TreeMap(messageComparator)
-  @Volatile private var lastReceive = 0L
-  @Volatile private var lastSend = 0L
+  private val msgForAcknowledge: TreeMap<MessageT, Long> = TreeMap(
+    messageComparator
+  )
 
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
@@ -116,7 +121,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
   private class StateHolder<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
     state: InternalNodeState
   ) {
-    private val statemachineState = AtomicReference(state)
+    private val currState = AtomicReference(state)
     private var bootChannel: Channel<NodeEvent> = Channel()
 
     /**
@@ -128,15 +133,30 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       FinalizationStart,
       FinalizingProcess,
       FinalizedState,
-      Terminated
+      Terminated;
     }
 
     fun CoroutineScope.startObservation(
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Job {
       return launch {
+        if(currState.get() == InternalNodeState.Booting) {
+          launch {
+            val ret = withTimeoutOrNull(10) {
+              bootChannel.receive()
+            }
+            if(ret != null && ret != NodeEvent.NodeRegistered) {
+              changeState(InternalNodeState.Processing)
+            } else if(ret == null) {
+//              todo make error send here
+              changeState(InternalNodeState.FinalizationStart)
+            } else {
+              throw IllegalNodeRegisterAttempt(IncorrectRegisterEvent)
+            }
+          }
+        }
         while(true) {
-          when(statemachineState.get()) {
+          when(currState.get()) {
             InternalNodeState.Booting           -> {
               val ret = onBooting(node)
               delay(ret)
@@ -159,7 +179,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
             }
 
             InternalNodeState.FinalizedState    -> {
-              statemachineState.set(InternalNodeState.Terminated)
+              currState.set(InternalNodeState.Terminated)
             }
 
             InternalNodeState.Terminated        -> {
@@ -190,19 +210,21 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
      */
     private fun changeState(newState: InternalNodeState): Boolean {
       do {
-        val prevState = statemachineState.get()
+        val prevState = currState.get()
         if(newState <= prevState) return false;
-      } while(statemachineState.compareAndSet(prevState, newState))
+      } while(currState.compareAndSet(prevState, newState))
       return true
     }
 
     fun onEvent(event: NodeEvent) {
       when(event) {
         NodeEvent.NodeRegistered              -> {
-          if(statemachineState.get() != InternalNodeState.Booting) throw IllegalNodeRegisterAttempt()
+          if(currState.get() != InternalNodeState.Booting) throw IllegalNodeRegisterAttempt()
           bootChannel.run {
             val ret = trySend(event)
-            if(ret.isFailure || ret.isClosed) throw IllegalNodeRegisterAttempt()
+            if(ret.isFailure || ret.isClosed) {
+              throw IllegalNodeRegisterAttempt(NodeAlreadyRegisteredMsg)
+            }
           }
         }
 
@@ -228,7 +250,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     fun getUnacknowledgedMessages(
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): List<MessageT> {
-      if(statemachineState.get() != InternalNodeState.Terminated) {
+      if(currState.get() != InternalNodeState.Terminated) {
         throw IllegalUnacknowledgedMessagesGetAttempt()
       }
       return synchronized(node.msgForAcknowledge) {
@@ -240,11 +262,11 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Long {
       synchronized(node.msgForAcknowledge) {
-        if(statemachineState.get() != InternalNodeState.Booting) return 0
+        if(currState.get() != InternalNodeState.Booting) return 0
 
         val now = System.currentTimeMillis()
         if(now - node.lastReceive < node.thresholdDelay) {
-          statemachineState.set(InternalNodeState.Terminated)
+          currState.set(InternalNodeState.Terminated)
           return 0
         }
         node.sendPingIfNecessary(node.resendDelay, now)
@@ -257,11 +279,11 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Long {
       synchronized(node.msgForAcknowledge) {
-        if(statemachineState.get() != InternalNodeState.Processing) return 0
+        if(currState.get() != InternalNodeState.Processing) return 0
 
         val now = System.currentTimeMillis()
         if(now - node.lastReceive > node.thresholdDelay) {
-          statemachineState.set(InternalNodeState.Terminated)
+          currState.set(InternalNodeState.Terminated)
           return 0
         }
 
@@ -276,7 +298,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Long {
       synchronized(node.msgForAcknowledge) {
-        if(statemachineState.get() != InternalNodeState.FinalizingProcess) return 0
+        if(currState.get() != InternalNodeState.FinalizingProcess) return 0
         val now = System.currentTimeMillis()
         val ret = checkNodeConditions(now, node)
         if(node.msgForAcknowledge.isEmpty()) {
@@ -291,7 +313,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       now: Long, node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Long {
       if(now - node.lastReceive > node.thresholdDelay) {
-        statemachineState.set(InternalNodeState.Terminated)
+        currState.set(InternalNodeState.Terminated)
         return 0
       }
       val nextDelay = node.checkMessages()
