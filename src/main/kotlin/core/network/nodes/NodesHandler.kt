@@ -1,20 +1,23 @@
-package d.zhdanov.ccfit.nsu.core.network.core
+package core.network.nodes
 
-import com.google.common.base.Preconditions
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.logger
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Changes the state of the cluster in a single thread, so that if any
@@ -72,64 +75,35 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   joinBacklog: Int,
-  addrAndMsg: Pair<InetSocketAddress, P2PMessage>?,
-  private val p2p: P2PContext<MessageT, InboundMessageTranslator>,
+  masterNode: Node<MessageT, InboundMessageTranslator, Payload>? = null,
+  val resendDelay: Long,
+  val thresholdDelay: Long,
+  private val localNode: NodeT<InetSocketAddress>,
+  private val p2p: NetworkController<MessageT, InboundMessageTranslator, Payload>,
   private val messageTranslator: InboundMessageTranslator,
-  /**
-   * Наша роль в p2p контексте
-   * */
-  @Volatile private var nodeRole: NodeRole
 ) : NodeContext<MessageT, InboundMessageTranslator> {
-  private val localNodeId: Int
   private val nodesScope = CoroutineScope(Dispatchers.Default)
-  private val nodesByIp: ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator>> =
-    ConcurrentHashMap()
-  private val nodesById: ConcurrentHashMap<Int, Node<MessageT, InboundMessageTranslator>> =
-    ConcurrentHashMap()
-  private val deadNodeChannel: Channel<Node<MessageT, InboundMessageTranslator>> =
-    Channel(joinBacklog)
-  private val registerNewNode: Channel<Node<MessageT, InboundMessageTranslator>> =
-    Channel(joinBacklog)
-  private val reconfigureContext: Channel<Pair<Node<MessageT, InboundMessageTranslator>, P2PMessage>> =
-    Channel(joinBacklog)
-  private val masterAndDeputy: AtomicReference<Pair<
-    Node<MessageT, InboundMessageTranslator>,
-    Node<MessageT, InboundMessageTranslator>?
-    >> = AtomicReference()
+  private val nodesByIp =
+    ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator, Payload>>()
+  private val deadNodeChannel =
+    Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
+  private val registerNewNode =
+    Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
+  private val reconfigureContext =
+    Channel<Pair<Node<MessageT, InboundMessageTranslator, Payload>, P2PMessage>>(
+      joinBacklog
+    )
+  private val masterAndDeputy =
+    AtomicReference<Pair<NodeT<InetSocketAddress>, NodeT<InetSocketAddress>?>>()
 
   init {
-    if(addrAndMsg != null) {
-      Preconditions.checkArgument(
-        nodeRole == NodeRole.MASTER || nodeRole == NodeRole.DEPUTY,
-        "$nodeRole not in allowed roles [NodeRole.MASTER, NodeRole.DEPUTY]"
-      )
-      val (addr, msg) = addrAndMsg
-      val masterId = Preconditions.checkNotNull(
-        msg.senderId, "require senderId not null"
-      )
-      localNodeId = Preconditions.checkNotNull(
-        msg.receiverId, "require receiverId not null"
-      )
-      val masterNode = Node(
-        Node.InitialState.Operational, msg.msgSeq,
-        p2p.messageUtils.getComparator(), nodesScope, NodeRole.MASTER, masterId,
-        addr, p2p.resendDelay, p2p.thresholdDelay, this
-      )
-      masterAndDeputy.set(Pair(masterId, null))
-      addNode(masterNode)
-    } else {
-      localNodeId = 0
-      masterAndDeputy.set(Pair(localNodeId, null))
-      nodeRole = NodeRole.MASTER
-    }
+    masterNode?.let { nodesByIp.put(it.address, it) }
     launchNodesWatcher()
   }
-
 
   fun destroy() {
     nodesScope.cancel()
     nodesByIp.clear()
-    nodesById.clear()
   }
 
   /*
@@ -143,70 +117,66 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
             onNodeTermination(node)
           }
           registerNewNode.onReceive { node ->
-            try {
-              onNodeRegistration(node)
-            } catch(e: Exception) {
-              node.shutdownNow()
-            }
+            onNodeRegistration(node)
           }
-          reconfigureContext.onReceive { (node, msg) ->
-            onNodeGoOut(node, msg)
+          reconfigureContext.onReceive { (node, _) ->
+            prepareForDetachNode(node)
           }
         }
       }
     }
   }
 
-  public fun sendUnicast(
-    msg: MessageT, node: Node<MessageT, InboundMessageTranslator>
+  fun sendUnicast(
+    msg: MessageT, nodeAddress: InetSocketAddress
   ) {
-    p2p.sendUnicast(msg, node)
+    p2p.sendUnicast(msg, nodeAddress)
   }
 
   override suspend fun handleNodeRegistration(
-    node: Node<MessageT, InboundMessageTranslator>
+    node: Node<MessageT, InboundMessageTranslator, Payload>
   ) = registerNewNode.send(node)
 
   override suspend fun handleNodeTermination(
-    node: Node<MessageT, InboundMessageTranslator>
+    node: Node<MessageT, InboundMessageTranslator, Payload>
   ) = deadNodeChannel.send(node)
 
   override suspend fun handleNodeRoleChange(
-    node: Node<MessageT, InboundMessageTranslator>, p2pRoleChange: P2PMessage
+    node: Node<MessageT, InboundMessageTranslator, Payload>,
+    p2pRoleChange: P2PMessage
   ) = reconfigureContext.send(Pair(node, p2pRoleChange))
 
-
-  private fun onNodeTermination(node: Node<MessageT, InboundMessageTranslator>) {
-    /**
-     * [NodeRole] :
-     * -> [NodeRole.NORMAL],
-     * -> [NodeRole.MASTER],
-     * -> [NodeRolez.DEPUTY],
-     * -> [NodeRole.VIEWER]
-     */
-    val (masterId, deputyId) = masterAndDeputy.get()
+  private fun onNodeTermination(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
+    /*можем попасть сюда только когда сама нода закончит работать, так что нам
+    нужно проверить нет ли у ноды каких либо привилегий и просто удалить ее*/
+    val (master, deputy) = masterAndDeputy.get()
     deleteNode(node)
-    if(localNodeId == masterId.id) {
-      if(node.id == deputyId?.id) masterOnDeputyExit(node)
-    } else if(localNodeId == deputyId?.id) {
-      if(node.id == masterId.id) deputyOnMasterExit(node)
-    } else if(nodeRole == NodeRole.NORMAL) {
-      if(node.id == masterId.id) normalOnMasterExit(node)
-      /* ну а другие ноды мы и не трекаем*/
-    } else {      /*а ну мы же просто выкидываем вивера и похуй)*/
-      logger.debug { node.toString() }/*todo нужно сделать просто выход из изры ибо мы вивер*/
+    /*сюда мы можем попадаем когда  */
+    if(localNode.id == master.id) {
+      if(node.id == deputy?.id) masterOnDeputyExit(node)
+      else if(node.id == master.id) deputyOnMasterExit(node)
+    } else {
+      if(localNode.id == deputy?.id)
+      /**/
+        if() {
+          deputy?.let {
+
+          } ?: {
+
+          }
+        }
     }
   }
 
   /**
    * @throws IllegalArgumentException if [NodeRole] != [NodeRole.NORMAL]
    * */
-  private fun onNodeRegistration(node: Node<MessageT, InboundMessageTranslator>) {
-    if(node.nodeRole == NodeRole.VIEWER) return
-    Preconditions.checkArgument(
-      node.nodeRole != NodeRole.NORMAL,
-      "only nodes with the NodeRole.NORMAL role can register"
-    )
+  private fun onNodeRegistration(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
+    if(node.nodeState != NodeT.NodeState.Active) return
     val (masterId, deputyId) = masterAndDeputy.get()
     deputyId ?: return
     nodeRole = NodeRole.DEPUTY
@@ -217,47 +187,51 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   }
 
   private fun sendRoleChange(
-    node: Node<MessageT, InboundMessageTranslator>,
-    senderRole: NodeRole?,
-    receiverRole: NodeRole?
+    node: Node<MessageT, InboundMessageTranslator, Payload>,
+    senderRole: NodeRole?, receiverRole: NodeRole?
   ) {
     val p2pMsg = getRoleChangeMsg(
-      senderRole, receiverRole, node.getNextMSGSeqNum(), localNodeId, node.id
+      senderRole, receiverRole, node.getNextMSGSeqNum(), localNode.id, node.id
     )
     val msg = messageTranslator.toMessageT(p2pMsg, MessageType.RoleChangeMsg)
     sendWithAck(msg, node)
   }
 
   /**
-   * Perform logic only when [NodesHandler.nodeRole]==[NodeRole.MASTER]
+   * Perform logic only when [NodeRole]==[NodeRole.MASTER]
    * other msgs handle higher
    */
-  private fun onNodeGoOut(
-    node: Node<MessageT, InboundMessageTranslator>, roleChangeMsg: P2PMessage
+  fun prepareForDetachNode(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
-    Preconditions.checkArgument(
-      nodeRole == NodeRole.MASTER,
-      "only when NodesContext.nodeRole==NodeRole.MASTER"
-    )
-    if(node.nodeRole != NodeRole.VIEWER) {
-      val (masterId, deputyId) = masterAndDeputy.get()
-      if(node.id != deputyId) {
-        masterSetNewDeputy(node)?.also {
-          sendRoleChange(it, NodeRole.MASTER, NodeRole.DEPUTY)
-        } ?: run {
-          masterAndDeputy.set(Pair(masterId, null))
-        }
+    val (masterId, deputyId) = masterAndDeputy.get()
+    assert(
+      localNode === masterId
+    ) { "only when NodesContext.nodeRole==NodeRole.MASTER" }
+
+    /*todo что здесь вообще */
+    node.nodeState = NodeT.NodeState.Listening
+    if(node.id == deputyId?.id) {
+      masterSetNewDeputy(node)?.also {
+        sendRoleChange(it, NodeRole.MASTER, NodeRole.DEPUTY)
+      } ?: run {
+        masterAndDeputy.set(Pair(masterId, null))
       }
     }
-
-    val ack = p2p.messageUtils.getAckMsg(
-      roleChangeMsg.msgSeq, localNodeId, node.id
-    )
-    sendWithAck(ack, node)
-    node.shutdown(ack);
   }
 
-  private fun normalOnMasterExit(master: Node<MessageT, InboundMessageTranslator>) {
+  suspend fun detachNode(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
+    if(node.nodeState == NodeRole.VIEWER) {
+      deleteNode(node)
+      return
+    }
+    deadNodeChannel.send(node)
+  }
+
+  private fun onMasterExit(
+  ) {
     /**
      * Processes the current state received from the cluster.
      *
@@ -266,22 +240,39 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
      *
      * However, if we appear to be the only remaining node, we designate ourselves as the master.
      */
-    val (_, deputyId) = masterAndDeputy.get()
-    if(deputyId == null) {
-      takeOverTheBoard()
-    } else {
-      nodesById[deputyId]?.also {
-        val nonAckMsgs = master.getUnacknowledgedMessages()
-        for(msg in nonAckMsgs) sendUnicast(msg, it)
-        it.addAllMessageForAcknowledge(nonAckMsgs)
-        return
+    val (master, deputy) = masterAndDeputy.get()
+    @Suppress("UNCHECKED_CAST")
+    master as Node<MessageT, InboundMessageTranslator, Payload>
+
+    when(deputy) {
+      null             -> {
+        takeOverTheBoard()
       }
-      throw RuntimeException("какого хуя у нас нет депути")
+
+      localNode        -> {
+
+      }
+
+      is Node<*, *, *> -> {
+        @Suppress("UNCHECKED_CAST")
+        deputy as Node<MessageT, InboundMessageTranslator, Payload>
+        deputy.also {
+          val nonAckMsgs = master.getUnacknowledgedMessages()
+          for(msg in nonAckMsgs) sendUnicast(msg, it.address)
+          it.addAllMessageForAcknowledge(nonAckMsgs)
+          return
+        }
+      }
+
+      else             -> {
+        throw RuntimeException("любопытно сэр, какого хуя у нас нет депути")
+      }
     }
   }
 
-  private fun deputyOnMasterExit(master: Node<MessageT, InboundMessageTranslator>) {
-    nodeRole = NodeRole.MASTER
+  private fun deputyOnMasterExit(
+    master: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
     val newDeputy = masterSetNewDeputy(master) ?: return
     for((_, node) in nodesByIp) {
       if(newDeputy != node) sendRoleChange(node, NodeRole.MASTER, null)
@@ -290,10 +281,7 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   }
 
   private fun getRoleChangeMsg(
-    sendRole: NodeRole?,
-    recvRole: NodeRole?,
-    seqNum: Long,
-    sendId: Int,
+    sendRole: NodeRole?, recvRole: NodeRole?, seqNum: Long, sendId: Int,
     recId: Int
   ): P2PMessage {
     val role = RoleChangeMsg(sendRole, recvRole)
@@ -301,11 +289,10 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   }
 
   private fun masterSetNewDeputy(
-    oldDeputy: Node<MessageT, InboundMessageTranslator>
-  ): Node<MessageT, InboundMessageTranslator>? {
+    oldDeputy: Node<MessageT, InboundMessageTranslator, Payload>
+  ): Node<MessageT, InboundMessageTranslator, Payload>? {
     val newDeputy = chooseNewDeputy(oldDeputy)?.also {
-      it.nodeRole = NodeRole.DEPUTY
-      masterAndDeputy.set(Pair(localNodeId, it.id))
+      masterAndDeputy.set(Pair(localNode, it))
     }
     return newDeputy
   }
@@ -316,9 +303,11 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
    *
    * @return [oldDeputy] if a deputy was chosen, otherwise `null`.
    */
-  private fun chooseNewDeputy(oldDeputy: Node<MessageT, InboundMessageTranslator>): Node<MessageT, InboundMessageTranslator>? {
+  private fun chooseNewDeputy(
+    oldDeputy: Node<MessageT, InboundMessageTranslator, Payload>
+  ): Node<MessageT, InboundMessageTranslator, Payload>? {
     for((_, node) in nodesByIp) {
-      if(node.id == oldDeputy.id || node.nodeRole != NodeRole.NORMAL || node.nodeState != Node.NodeState.Active) continue
+      if(node.nodeState != NodeT.NodeState.Active) continue
       return node
     }
     return null
@@ -328,24 +317,28 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 
   }
 
-  private fun deleteNode(node: Node<MessageT, InboundMessageTranslator>) {
+  private fun deleteNode(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
     nodesByIp.remove(node.address)
-    nodesById.remove(node.id)
   }
 
-  private fun addNode(masterNode: Node<MessageT, InboundMessageTranslator>) {
+  private fun addNode(
+    masterNode: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
     nodesByIp[masterNode.address] = masterNode
-    nodesById[masterNode.id] = masterNode
   }
 
   private fun sendWithAck(
-    msg: MessageT, node: Node<MessageT, InboundMessageTranslator>
+    msg: MessageT, node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
     sendUnicast(msg, node)
     node.addMessageForAcknowledge(msg)
   }
 
-  private fun masterOnDeputyExit(deputy: Node<MessageT, InboundMessageTranslator>) {
+  private fun masterOnDeputyExit(
+    deputy: Node<MessageT, InboundMessageTranslator, Payload>
+  ) {
     val newDeputy = masterSetNewDeputy(deputy) ?: return
     sendRoleChange(newDeputy, NodeRole.MASTER, NodeRole.DEPUTY)
   }

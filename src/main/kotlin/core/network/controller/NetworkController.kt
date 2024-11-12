@@ -1,8 +1,8 @@
-package d.zhdanov.ccfit.nsu.core.network.core
+package d.zhdanov.ccfit.nsu.core.network.controller
 
 import core.network.nethandlers.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.logger
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.MulticastNetHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.ContextNodeFabricT
@@ -10,12 +10,10 @@ import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
 import java.net.InetSocketAddress
 
-class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
+class NetworkController<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   contextJoinBacklog: Int,
-  val messageUtils: MessageUtilsT<MessageT, MessageType>,
-  val pingDelay: Long,
-  val resendDelay: Long,
-  val thresholdDelay: Long,
+  val messageUtils: MessageUtilsT<MessageT, MessageType>, val pingDelay: Long,
+  val resendDelay: Long, val thresholdDelay: Long,
   private val unicastNetHandler: UnicastNetHandler<MessageT, MessageType, InboundMessageTranslator>,
   private val multicastNetHandler: MulticastNetHandler<MessageT, MessageType, InboundMessageTranslator>,
   private val messageTranslator: InboundMessageTranslator,
@@ -26,16 +24,6 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
     multicastNetHandler.configure(this)
   }
 
-  var nodes: NodeContext<MessageT, InboundMessageTranslator>
-  private val commandHandler = CommandHandler(this)
-
-  fun initContext(master: InetSocketAddress?) {
-    nodes = master?.run {
-      return@run NodesHandler<>
-    } ?: run {
-      return@run NodesHandler<>
-    }
-  }
 
   fun destroyContext(
   ) {
@@ -102,11 +90,12 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
    * send message without add for acknowledgement monitoring
    * */
   fun sendUnicast(
-    msg: MessageT, node: Node<MessageT, InboundMessageTranslator>
-  ) = unicastNetHandler.sendUnicastMessage(msg, node.address)
+    msg: MessageT, nodeAddress: InetSocketAddress
+  ) = unicastNetHandler.sendUnicastMessage(msg, nodeAddress)
 
-  class CommandHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
-    private val context: P2PContext<MessageT, InboundMessageTranslator>,
+  private class CommandHandler<MessageT, InboundMessageTranslator :
+  MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+    private val context: NetworkController<MessageT, InboundMessageTranslator, Payload>,
   ) {
     private val translator = context.messageTranslator
 

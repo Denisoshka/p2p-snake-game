@@ -1,8 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.network.utils
 
 import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.core.Node
-import d.zhdanov.ccfit.nsu.core.network.core.P2PContext
+import core.network.nodes.Node
+import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
 import java.net.InetSocketAddress
 import kotlin.coroutines.CoroutineContext
 
@@ -16,7 +16,7 @@ interface ContextNodeFabricT<
     pingDelay: Long,
     resendDelay: Long,
     thresholdDelay: Long,
-    context: P2PContext<MessageT, InboundMessageTranslator>,
+    context: NetworkController<MessageT, InboundMessageTranslator>,
     messageComparator: Comparator<MessageT>,
     nodeStateCheckerContext: CoroutineContext
   ): Node<MessageT, InboundMessageTranslator>

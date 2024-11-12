@@ -1,6 +1,6 @@
 package core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.core.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.interfaces.UnicastNetworkHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
@@ -30,7 +30,7 @@ class UnicastNetHandler<
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()
 
-  override fun configure(context: P2PContext<MessageT, InboundMessageTranslator>) {
+  override fun configure(context: NetworkController<MessageT, InboundMessageTranslator>) {
     bootstrap.apply {
       group(group)
       channel(NioDatagramChannel::class.java)
@@ -64,7 +64,7 @@ class UnicastNetHandler<
       InboundMessageTranslator : MessageTranslatorT<MessageT>
       >(
     private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-    private val context: P2PContext<MessageT, InboundMessageTranslator>
+    private val context: NetworkController<MessageT, InboundMessageTranslator>
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket

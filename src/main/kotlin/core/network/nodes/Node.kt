@@ -1,6 +1,5 @@
-package d.zhdanov.ccfit.nsu.core.network.core
+package core.network.nodes
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalStateMachineStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
@@ -31,11 +30,9 @@ private const val IncorrectRegisterEvent =
  * A node is considered dead if the message delay exceeds [thresholdDelay].
  */
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-  initMsgSeqNum: Long,
-  messageComparator: Comparator<MessageT>,
+  initMsgSeqNum: Long, messageComparator: Comparator<MessageT>,
   observerScope: CoroutineScope,
-  @Volatile override var nodeRole: NodeRole,
-  override val id: Int,
+  @Volatile override var nodeState: NodeT.NodeState, override val id: Int,
   override val address: InetSocketAddress,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>
 ) : NodeT<InetSocketAddress> {
@@ -44,9 +41,16 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
   @Volatile private var lastReceive: Long = System.currentTimeMillis()
   @Volatile private var lastSend: Long = System.currentTimeMillis()
   private val msgSeqNum: AtomicLong = AtomicLong(initMsgSeqNum)
+  private val observeJob : Job
   private val state = StateHolder<MessageT, InboundMessageTranslator, Payload>(
     TODO()
   )
+
+  init{
+    observeJob = observerScope.launch {
+    }
+
+  }
 
   /**
    * Change this values within the scope of synchronized([msgForAcknowledge]).
@@ -61,7 +65,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     val seq = getNextMSGSeqNum()
 
     val ping = nodesHandler.msgUtils.getPingMsg(seq)
-    nodesHandler.sendUnicast(ping, this)
+    nodesHandler.sendUnicast(ping, address)
     lastSend = System.currentTimeMillis()
   }
 
@@ -80,17 +84,16 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     return true
   }
 
-  fun addAllMessageForAcknowledge(messages: List<MessageT>): Boolean {
+  fun addAllMessageForAcknowledge(messages: List<MessageT>) {
     synchronized(msgForAcknowledge) {
       for(msg in messages) {
         msgForAcknowledge[msg] = System.currentTimeMillis()
       }
       lastSend = System.currentTimeMillis()
     }
-    return true
   }
 
-  override fun handleEvent(event: NodeEvent) = state.onEvent(event)
+  fun handleEvent(event: NodeEvent) = state.onEvent(event)
 
   private fun checkMessages(): Long {
     var ret = resendDelay
@@ -102,7 +105,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       if(now - time < thresholdDelay) {
         ret = ret.coerceAtMost(thresholdDelay + time - now)
         entry.setValue(now)
-        nodesHandler.sendUnicast(msg, this)
+        nodesHandler.sendUnicast(msg, address)
       } else {
         it.remove()
       }
@@ -126,6 +129,32 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
     /**
      * Represents the various states of a node in the system.
+     * ## State Diagram:
+     * ```
+     *  ┌───────┐
+     *  │Booting│───────────────────►┐
+     *  └──┬────┘                    │
+     *     ▼                         │
+     *  ┌──────────┐                 ▼
+     *  │Processing│────────────────►┤
+     *  └──┬───────┘                 │
+     *     ▼                         │
+     *  ┌─────────────────┐          │
+     *  │FinalizationStart│          │
+     *  └──┬──────────────┘          │
+     *     ▼                         │
+     *  ┌─────────────────┐          ▼
+     *  │FinalizingProcess│─────────►┤
+     *  └──┬──────────────┘          │
+     *     ▼                         │
+     *  ┌──────────────┐             │
+     *  │FinalizedState│             │
+     *  └──┬───────────┘             │
+     *     ▼                         │
+     *   ┌──────────┐                ▼
+     *   │Terminated│◄───────────────┘
+     *   └──────────┘
+     * ```
      */
     enum class InternalNodeState {
       Booting,
@@ -149,7 +178,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
               changeState(InternalNodeState.Processing)
             } else if(ret == null) {
 //              todo make error send here
-              changeState(InternalNodeState.FinalizationStart)
+              changeState(InternalNodeState.Terminated)
             } else {
               throw IllegalNodeRegisterAttempt(IncorrectRegisterEvent)
             }
@@ -163,12 +192,13 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
             }
 
             InternalNodeState.Processing        -> {
-              val ret = onOperational(node)
+              val ret = onProcessing(node)
               delay(ret)
             }
 
             InternalNodeState.FinalizationStart -> {
               if(changeState(InternalNodeState.FinalizingProcess)) {
+                node.nodeState = NodeT.NodeState.Disabled
                 node.nodesHandler.prepareForDetachNode(node)
               }
             }
@@ -179,6 +209,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
             }
 
             InternalNodeState.FinalizedState    -> {
+              node.nodeState = NodeT.NodeState.Disabled
               currState.set(InternalNodeState.Terminated)
             }
 
@@ -275,7 +306,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       }
     }
 
-    private fun onOperational(
+    private fun onProcessing(
       node: Node<MessageT, InboundMessageTranslator, Payload>
     ): Long {
       synchronized(node.msgForAcknowledge) {

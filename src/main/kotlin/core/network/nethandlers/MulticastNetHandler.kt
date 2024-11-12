@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers
 
-import d.zhdanov.ccfit.nsu.core.network.core.P2PContext
+import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkHandler
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
@@ -27,7 +27,7 @@ class MulticastNetHandler<
   private var group: NioEventLoopGroup? = null
   private var bootstrap: Bootstrap = Bootstrap()
 
-  override fun configure(context: P2PContext<MessageT, InboundMessageTranslator>) {
+  override fun configure(context: NetworkController<MessageT, InboundMessageTranslator>) {
     bootstrap.apply {
       channel(NioDatagramChannel::class.java)
       handler(object : ChannelInitializer<NioDatagramChannel>() {
@@ -57,7 +57,7 @@ class MulticastNetHandler<
       InboundMessageTranslator : MessageTranslatorT<MessageT>
       >(
     private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-    private val context: P2PContext<MessageT, InboundMessageTranslator>
+    private val context: NetworkController<MessageT, InboundMessageTranslator>
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket
