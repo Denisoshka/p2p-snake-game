@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.states
+package d.zhdanov.ccfit.nsu.core.network.core
 
 import com.google.common.base.Preconditions
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
@@ -70,7 +70,7 @@ import java.util.concurrent.atomic.AtomicReference
  * that he is becoming the Master.
  * (*receiverRole* = [NodeRole.MASTER])
  */
-class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   joinBacklog: Int,
   addrAndMsg: Pair<InetSocketAddress, P2PMessage>?,
   private val p2p: P2PContext<MessageT, InboundMessageTranslator>,
@@ -229,7 +229,7 @@ class NodesContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   }
 
   /**
-   * Perform logic only when [NodesContext.nodeRole]==[NodeRole.MASTER]
+   * Perform logic only when [NodesHandler.nodeRole]==[NodeRole.MASTER]
    * other msgs handle higher
    */
   private fun onNodeGoOut(

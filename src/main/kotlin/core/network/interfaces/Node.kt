@@ -6,4 +6,11 @@ interface Node<AddressT> {
   val nodeRole : NodeRole
   val id: Int
   val address: AddressT
+  enum class NodeState {
+
+  }
+  enum class NodeEvent {
+    ClusterShutdownEvent,
+    UserShutdownEvent,
+  }
 }

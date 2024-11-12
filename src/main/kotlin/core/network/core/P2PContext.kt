@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.states
+package d.zhdanov.ccfit.nsu.core.network.core
 
 import core.network.nethandlers.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
@@ -31,9 +31,9 @@ class P2PContext<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
 
   fun initContext(master: InetSocketAddress?) {
     nodes = master?.run {
-      return@run NodesContext<>
+      return@run NodesHandler<>
     } ?: run {
-      return@run NodesContext<>
+      return@run NodesHandler<>
     }
   }
 
