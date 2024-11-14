@@ -9,7 +9,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodePayloadT
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicLong
 

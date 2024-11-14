@@ -1,9 +1,9 @@
-package core.network.nethandlers
+package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
+import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.interfaces.UnicastNetworkHandler
-import d.zhdanov.ccfit.nsu.core.network.utils.MessageTranslatorT
-import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
+import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
+import d.zhdanov.ccfit.nsu.core.network.nethandlers.UnicastNetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.Unpooled
@@ -19,24 +19,21 @@ import java.net.InetSocketAddress
 
 private val logger = KotlinLogging.logger {}
 
-class UnicastNetHandler<
-    MessageT,
-    MessageDescriptor,
-    InboundMessageTranslator : MessageTranslatorT<MessageT>
-    >(
-  private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-) : UnicastNetworkHandler<MessageT, InboundMessageTranslator> {
+class UnicastNetHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+  context: NetworkController<MessageT, InboundMessageTranslator, Payload>,
+) : UnicastNetworkHandler<MessageT, InboundMessageTranslator, Payload> {
   private lateinit var channel: DatagramChannel
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()
+  private val msgUtils = context.messageUtils
 
-  override fun configure(context: NetworkController<MessageT, InboundMessageTranslator>) {
+  init {
     bootstrap.apply {
       group(group)
       channel(NioDatagramChannel::class.java)
       handler(object : ChannelInitializer<DatagramChannel>() {
         override fun initChannel(ch: DatagramChannel) {
-          ch.pipeline().addLast(Handler(msgUtils, context))
+          ch.pipeline().addLast(Handler(context))
         }
       })
     }
@@ -48,31 +45,30 @@ class UnicastNetHandler<
     channel = bootstrap.bind().sync().channel() as DatagramChannel
   }
 
-  override fun sendUnicastMessage(message: MessageT, address: InetSocketAddress) {
+  override fun close() {
+    group?.shutdownGracefully()
+  }
+
+  override fun sendUnicastMessage(
+    message: MessageT, address: InetSocketAddress
+  ) {
     val data = Unpooled.wrappedBuffer(msgUtils.toBytes(message))
     val packet = DatagramPacket(data, address)
     channel.writeAndFlush(packet)
   }
 
-  override fun close() {
-    group?.shutdownGracefully()
-  }
-
-  class Handler<
-      MessageT,
-      MessageDescriptor,
-      InboundMessageTranslator : MessageTranslatorT<MessageT>
-      >(
-    private val msgUtils: MessageUtilsT<MessageT, MessageDescriptor>,
-    private val context: NetworkController<MessageT, InboundMessageTranslator>
+  class Handler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+    private val context: NetworkController<MessageT, InboundMessageTranslator, Payload>
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
+    private val msgUtils = context.messageUtils
+
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket
     ) {
       try {
         val message = msgUtils.fromBytes(packet.content().array())
         context.handleUnicastMessage(message, packet.sender())
-      } catch (e: IOException) {
+      } catch(e: IOException) {
         logger.error(e) { "invalid packet from " + packet.sender().toString() }
       }
     }

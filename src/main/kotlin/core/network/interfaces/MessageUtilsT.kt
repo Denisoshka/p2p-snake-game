@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.utils
+package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 interface MessageUtilsT<MessageT, MessageDescriptor> {
 	fun needToAcknowledge(msgDescriptor: MessageDescriptor): Boolean

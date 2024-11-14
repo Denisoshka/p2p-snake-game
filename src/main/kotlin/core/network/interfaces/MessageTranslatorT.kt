@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.utils
+package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType

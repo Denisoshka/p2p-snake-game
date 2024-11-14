@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.nethandlers
+package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
 import java.net.InetSocketAddress
 import java.net.NetworkInterface

@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.interfaces
+package d.zhdanov.ccfit.nsu.core.interaction.v1
 
 interface NodePayloadT {
   fun onObserverTerminated()

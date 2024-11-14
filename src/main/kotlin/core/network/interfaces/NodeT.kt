@@ -8,7 +8,6 @@ interface NodeT<AddressT> {
   enum class NodeState {
     Active,
     Listening,
-    Disabled;
   }
 
   enum class NodeEvent {

@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.utils.MessageUtilsT
+import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageUtilsT
 
 object MessageUtils :
-		MessageUtilsT<SnakesProto.GameMessage, SnakesProto.GameMessage.TypeCase> {
+  MessageUtilsT<SnakesProto.GameMessage, SnakesProto.GameMessage.TypeCase> {
 	private val ackMsg: SnakesProto.GameMessage.AckMsg =
 		SnakesProto.GameMessage.AckMsg.newBuilder().build()
 	private val pingMsg: SnakesProto.GameMessage.PingMsg =
