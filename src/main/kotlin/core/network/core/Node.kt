@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.controller
 
-import core.network.controller.exceptions.IllegalStateMachineStateIsNull
+import core.network.core.exceptions.IllegalStateMachineStateIsNull
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
@@ -27,12 +27,13 @@ private const val IncorrectRegisterEvent =
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   initMsgSeqNum: Long,
   messageComparator: Comparator<MessageT>,
-  observerScope: CoroutineScope,
+  private val observerScope: CoroutineScope,
   @Volatile override var nodeState: NodeT.NodeState,
   override val id: Int,
-  override val address: InetSocketAddress,
+  override val ipAddress: InetSocketAddress,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>
-) : NodeT<InetSocketAddress> {
+  var payloadT: NodePayloadT? = null
+) : NodeT {
   val resendDelay = nodesHandler.resendDelay
   val thresholdDelay = nodesHandler.thresholdDelay
   @Volatile var running = true
@@ -65,18 +66,18 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     val seq = getNextMSGSeqNum()
 
     val ping = nodesHandler.msgUtils.getPingMsg(seq)
-    nodesHandler.sendUnicast(ping, address)
+    nodesHandler.sendUnicast(ping, ipAddress)
     lastSend = System.currentTimeMillis()
   }
 
-  fun approveMessage(message: MessageT) {
+  fun ackMessage(message: MessageT) {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge.remove(message)
       lastReceive = System.currentTimeMillis()
     }
   }
 
-  fun addMessageForAcknowledge(message: MessageT): Boolean {
+  fun addMessageForAck(message: MessageT): Boolean {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
       lastSend = System.currentTimeMillis()
@@ -84,7 +85,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     return true
   }
 
-  fun addAllMessageForAcknowledge(messages: List<MessageT>) {
+  fun addAllMessageForAck(messages: List<MessageT>) {
     synchronized(msgForAcknowledge) {
       for(msg in messages) {
         msgForAcknowledge[msg] = System.currentTimeMillis()
@@ -122,7 +123,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
       if(now - time < thresholdDelay) {
         ret = ret.coerceAtMost(thresholdDelay + time - now)
         entry.setValue(now)
-        nodesHandler.sendUnicast(msg, address)
+        nodesHandler.sendUnicast(msg, ipAddress)
       } else {
         it.remove()
       }
@@ -186,7 +187,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
             changeState(InternalNodeState.Processing)
           } else if(ret == null) {
 //              todo make error send here
-            node.nodeState = NodeT.NodeState.Disabled
+//            node.nodeState = NodeT.NodeState.Disabled
             changeState(InternalNodeState.Terminated)
           } else {
             throw IllegalNodeRegisterAttempt(IncorrectRegisterEvent)
@@ -207,7 +208,6 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
           InternalNodeState.FinalizationStart -> {
             if(changeState(InternalNodeState.FinalizingProcess)) {
-              node.nodeState = NodeT.NodeState.Disabled
               node.nodesHandler.handleNodeDetachPrepare(node)
             }
           }
@@ -218,7 +218,6 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
           }
 
           InternalNodeState.FinalizedState    -> {
-            node.nodeState = NodeT.NodeState.Disabled
             currState.set(InternalNodeState.Terminated)
           }
 
@@ -270,6 +269,10 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
         NodeEvent.ShutdownFromCluster         -> {
           changeState(InternalNodeState.FinalizationStart)
+        }
+
+        NodeEvent.ShutdownNowFromCluster      -> {
+          changeState(InternalNodeState.Terminated)
         }
 
         NodeEvent.ShutdownFromUser            -> {

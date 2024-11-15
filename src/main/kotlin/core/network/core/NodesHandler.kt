@@ -1,9 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.controller
 
+import core.network.core.NetworkStateMachine
+import core.network.core.exceptions.IllegalNodeHandlerInit
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -15,15 +16,14 @@ private val logger = KotlinLogging.logger {}
 
 class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   joinBacklog: Int,
-  val resendDelay: Long, val thresholdDelay: Long,
-  private val localNode: NodeT<InetSocketAddress>,
-  private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-  private val messageTranslator: InboundMessageTranslator,
+  val resendDelay: Long,
+  val thresholdDelay: Long,
+//  private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
+  private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
 ) : NodeContext<MessageT, InboundMessageTranslator, Payload> {
-  private val nodesScope = CoroutineScope(Dispatchers.Default)
+  @Volatile private var nodesScope: CoroutineScope? = null
   private val nodesByIp =
     ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator, Payload>>()
-  @Volatile lateinit var observerJob: Job
   private val deadNodeChannel =
     Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
   private val registerNewNode =
@@ -31,41 +31,61 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   private val reconfigureContext =
     Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
 
-  init {
-    observerJob = launchNodesWatcher()
-  }
-
+  /**
+   * @throws IllegalNodeHandlerInit
+   * */
   fun initHandler() {
     synchronized(this) {
-      observerJob = launchNodesWatcher()
+      nodesScope ?: throw IllegalNodeHandlerInit()
+      nodesScope = CoroutineScope(Dispatchers.Default);
     }
   }
 
   fun shutdownHandler() {
     synchronized(this) {
-      nodesScope.cancel()
+      nodesScope?.cancel()
       nodesByIp.clear()
     }
+  }
+
+  fun getNode(ipAddr: InetSocketAddress) = nodesByIp[ipAddr]
+  fun findNode(
+    condition: (Node<MessageT, InboundMessageTranslator, Payload>) -> Boolean
+  ): Node<MessageT, InboundMessageTranslator, Payload>? {
+    for((_, node) in nodesByIp) {
+      if(condition(node)) return node
+    }
+    return null
   }
 
   /**
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
    */
   private fun launchNodesWatcher(): Job {
-    return nodesScope.launch {
+    return nodesScope?.launch {
       while(true) {
         select {
-          deadNodeChannel.onReceive { node -> onNodeTermination(node) }
           registerNewNode.onReceive { node -> onNodeRegistration(node) }
-          reconfigureContext.onReceive { node -> onNodeDetach(node) }
+          reconfigureContext.onReceive { node ->
+            ncStateMachine.handleNodeDetach(node)
+          }
+          deadNodeChannel.onReceive { node ->
+            nodesByIp.remove(node.ipAddress)
+            ncStateMachine.handleNodeDetach(node)
+          }
         }
       }
-    }
+    } ?: throw RuntimeException("xyi")
+
   }
 
   override fun sendUnicast(
     msg: MessageT, nodeAddress: InetSocketAddress
-  ) = netController.sendUnicast(msg, nodeAddress)
+  ) = ncStateMachine.sendUnicast(msg, nodeAddress)
+
+  override fun shutdown() {
+    TODO("Not yet implemented")
+  }
 
 
   override fun addNewNode(

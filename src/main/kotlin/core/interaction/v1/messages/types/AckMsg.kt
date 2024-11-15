@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types
 
-import d.zhdanov.ccfit.nsu.core.interaction.messages.v1.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 
-class AckMsg() : d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.Msg(MessageType.AckMsg) {
-}
+class AckMsg : Msg(MessageType.AckMsg)

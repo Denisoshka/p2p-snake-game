@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import java.net.InetSocketAddress
 
-interface NetworkStateCommandHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT> {
+interface NetworkState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT> {
   fun joinHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {
@@ -51,8 +51,8 @@ interface NetworkStateCommandHandler<MessageT, InboundMessageTranslator : Messag
   ) {
   }
 
-  fun handleDeputyDeath(
-    master: Node<MessageT, InboundMessageTranslator, Payload>
+  fun handleNodeJoin(
+    node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
   }
 
@@ -60,6 +60,4 @@ interface NetworkStateCommandHandler<MessageT, InboundMessageTranslator : Messag
     node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
   }
-
-  fun initState() {}
 }

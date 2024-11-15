@@ -26,6 +26,8 @@ class PlayerContext(
     }
   }
 
+  override fun handleEvent(event: SteerMsg, seq: Long) = update(event, seq)
+
   override fun onObservedExpired() {
     TODO("implement me please")
   }

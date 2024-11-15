@@ -1,9 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-interface NodeT<AddressT> {
+import java.net.InetSocketAddress
+
+interface NodeT {
   var nodeState: NodeState
   val id: Int
-  val address: AddressT
+  val ipAddress: InetSocketAddress
 
   enum class NodeState {
     Active,
@@ -13,6 +15,7 @@ interface NodeT<AddressT> {
   enum class NodeEvent {
     NodeRegistered,
     ShutdownFromCluster,
+    ShutdownNowFromCluster,
     ShutdownFinishedFromCluster,
     ShutdownFromUser,
   }
