@@ -60,4 +60,7 @@ interface NetworkState<MessageT, InboundMessageTranslator : MessageTranslatorT<M
     node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
   }
+
+  fun initialize()
+  fun cleanup()
 }

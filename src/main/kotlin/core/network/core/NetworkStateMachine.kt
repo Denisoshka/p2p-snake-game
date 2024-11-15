@@ -1,5 +1,9 @@
 package core.network.core
 
+import core.network.core.states.ActiveStateHandler
+import core.network.core.states.LobbyState
+import core.network.core.states.MasterState
+import core.network.core.states.PassiveState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
@@ -39,7 +43,7 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   private val lobbyState = LobbyState(
     this, netController, nodesHandler
   )
-  private val msgTranslator = netController.messageTranslator
+  val msgTranslator = netController.messageTranslator
 
   @Volatile private var nodeId = 0
   private val state: AtomicReference<NetworkState<MessageT, InboundMessageTranslatorT, PayloadT>> =
@@ -101,7 +105,7 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
     node: Node<MessageT, InboundMessageTranslatorT, PayloadT>
   ) = state.get().handleNodeDetach(node)
 
-  private fun getP2PAck(
+  fun getP2PAck(
     message: MessageT, node: Node<MessageT, InboundMessageTranslatorT, PayloadT>
   ): P2PMessage {
     val ack = AckMsg()
@@ -110,7 +114,7 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
     return p2pmsg
   }
 
-  private fun getP2PRoleChange(
+  fun getP2PRoleChange(
     senderRole: NodeRole?,
     receiverRole: NodeRole?,
     senderId: Int,
@@ -126,7 +130,8 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
    * @return `Node<MessageT, InboundMessageTranslatorT, PayloadT>` if new
    * deputy was chosen successfully, else `null`
    */
-  private fun chooseSetNewDeputy(): Node<MessageT, InboundMessageTranslatorT, PayloadT>? {
+  fun chooseSetNewDeputy(): Node<MessageT, InboundMessageTranslatorT,
+    PayloadT>? {
     fun validDeputy(
       node: Node<MessageT, InboundMessageTranslatorT, PayloadT>
     ): Boolean = node.running && node.nodeState == NodeT.NodeState.Active
@@ -141,7 +146,7 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   /**
    * @throws IllegalNodeDestination
    * */
-  private fun updateDeputyFromState(state: P2PMessage) {
+  fun updateDeputyFromState(state: P2PMessage) {
     if(state.msg.type != MessageType.StateMsg) return
     val inp2p = state.msg as StateMsg
     val depStateInfo = inp2p.players.find { it.nodeRole == NodeRole.DEPUTY }
@@ -158,235 +163,29 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
     masterDeputy.set(Pair(msInfo, newDepInfo))
   }
 
-  class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
-    private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-    private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-  ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
-    override fun joinHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      val request = ncStateMachine.msgTranslator.fromMessageT(
-        message, msgT
-      )
-      val inMsg = request.msg as JoinMsg
-      if(inMsg.playerName.isBlank()) {
-        logger.atTrace { "$ipAddress player name empty" }
-        return
-      }
-      if(inMsg.nodeRole != NodeRole.VIEWER || inMsg.nodeRole != NodeRole.NORMAL) {
-        logger.atTrace { "$ipAddress invalid node role: ${inMsg.nodeRole}{}" }
-        return
-      }
-      val node = ncStateMachine.nodesHandler.getNode(ipAddress)?.let {
-        return
-      }
-    }
-
-    override fun pingHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      val node = nodesHandler.getNode(ipAddress)
-      node ?: return
-      val outp2p = ncStateMachine.getP2PAck(message, node)
-      val outmsg = ncStateMachine.msgTranslator.toMessageT(
-        outp2p, MessageType.AckMsg
-      )
-      netController.sendUnicast(outmsg, node.ipAddress)
-    }
-
-    override fun ackHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      ncStateMachine.nodesHandler.getNode(ipAddress)?.ackMessage(message)
-    }
-
-    override fun roleChangeHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      val node = nodesHandler.getNode(ipAddress) ?: return
-      if(!node.running) return
-      val inp2p = netController.messageTranslator.fromMessageT(
-        message, MessageType.RoleChangeMsg
-      )
-      (inp2p.msg as RoleChangeMsg).let {
-        if(it.senderRole != NodeRole.VIEWER && it.receiverRole != null) return
-      }
-      val outp2p = ncStateMachine.getP2PAck(message, node)
-      val outmsg = ncStateMachine.msgTranslator.toMessageT(
-        outp2p, MessageType.AckMsg
-      )
-      netController.sendUnicast(outmsg, ipAddress)
-      node.addMessageForAck(outmsg)
-      node.handleEvent(NodeT.NodeEvent.ShutdownFromCluster)
-    }
-
-    override fun steerHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      val node = nodesHandler.getNode(ipAddress) ?: return
-      if(!node.running) return
-      val inp2p = netController.messageTranslator.fromMessageT(
-        message, MessageType.SteerMsg
-      )
-      node.payloadT?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
-    }
-
-
-    override fun handleNodeDetach(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ) {
-      val (msInfo, depInfo) = ncStateMachine.masterDeputy.get()
-      depInfo?.let {
-        if(node.id == it.second) onDeputyDetach(msInfo)
-      }
-    }
-
-    private fun onDeputyDetach(msInfo: Pair<InetSocketAddress, Int>) {
-      val newDepInfo = ncStateMachine.chooseSetNewDeputy()?.run {
-        return@run Pair(this.ipAddress, this.id)
-      }
-      ncStateMachine.masterDeputy.set(Pair(msInfo, newDepInfo))
-    }
+  fun onPingMsg(
+    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+  ) {
+    val node = nodesHandler.getNode(ipAddress)
+    node ?: return
+    val outp2p = getP2PAck(message, node)
+    val outmsg = msgTranslator.toMessageT(
+      outp2p, MessageType.AckMsg
+    )
+    netController.sendUnicast(outmsg, node.ipAddress)
   }
 
-  class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val networkStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>
-    private val controller: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-    private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-  ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
-    override fun joinHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun pingHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun ackHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun stateHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-
-      TODO("Not yet implemented")
-    }
-
-    override fun roleChangeHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun announcementHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun errorHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun steerHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun handleMasterDeath(
-      master: Node<MessageT, InboundMessageTranslator, Payload>
-    ) {
-      TODO("Not yet implemented")
-    }
+  fun onAckMsg(
+    ipAddress: InetSocketAddress, message: MessageT
+  ) {
+    nodesHandler.getNode(ipAddress)?.ackMessage(message)
   }
 
-  class LobbyState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val stateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>
-    private val controller: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-    private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-  ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
-    override fun joinHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun pingHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun ackHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun roleChangeHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun announcementHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun errorHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
+  override fun initialize() {
+    TODO("Not yet implemented")
   }
 
-  class PassiveState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val networkStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
-    private val controller: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-    private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-  ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
-
-    override fun pingHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun ackHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun stateHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun roleChangeHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
-
-    override fun errorHandle(
-      ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-    ) {
-      TODO("Not yet implemented")
-    }
+  override fun cleanup() {
+    TODO("Not yet implemented")
   }
 }
