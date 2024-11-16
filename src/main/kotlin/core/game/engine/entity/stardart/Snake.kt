@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.game.engine.entity.stardart
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
-import d.zhdanov.ccfit.nsu.core.game.states.impl.GameState
+import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
@@ -11,7 +11,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
 class Snake(
-  context: GameState,
+  context: GameEngine,
   startX: Int,
   startY: Int,
   var direction: Direction,
@@ -30,7 +30,7 @@ class Snake(
     context.map.addEntity(this)
   }
 
-  override fun shootState(context: GameState, state: StateMsg) {
+  override fun shootState(context: GameEngine, state: StateMsg) {
     val head = hitBox.first()
     val cordsShoot = ArrayList<Coord>(hitBox.size)
     for(cord in hitBox) {
@@ -47,7 +47,7 @@ class Snake(
     return score
   }
 
-  override fun update(context: GameState) {
+  override fun update(context: GameEngine) {
     hitBox.removeLast()
     val point = EntityOnMapInfo(
       hitBox[0].x + direction.dx, hitBox[0].y + direction.dy
@@ -62,7 +62,7 @@ class Snake(
   }
 
   override fun checkCollisions(
-    entity: Entity, context: GameState
+    entity: Entity, context: GameEngine
   ) {
     if(!alive) return
     val head = hitBox.first()

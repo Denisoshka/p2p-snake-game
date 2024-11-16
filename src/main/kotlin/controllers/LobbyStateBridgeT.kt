@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.game.states
+package d.zhdanov.ccfit.nsu.states
 
 import d.zhdanov.ccfit.nsu.core.game.GameConfig
 

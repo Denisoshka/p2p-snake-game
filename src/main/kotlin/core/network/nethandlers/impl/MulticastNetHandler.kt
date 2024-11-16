@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
+import core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.NetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging

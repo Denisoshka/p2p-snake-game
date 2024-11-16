@@ -1,11 +1,11 @@
-package d.zhdanov.ccfit.nsu.core.game.states.impl
+package d.zhdanov.ccfit.nsu.core.game.engine
 
 import d.zhdanov.ccfit.nsu.core.game.GameConfig
-import d.zhdanov.ccfit.nsu.core.game.GameController
+import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.PlayerT
 import d.zhdanov.ccfit.nsu.core.game.engine.map.GameMap
-import d.zhdanov.ccfit.nsu.core.game.states.State
+import d.zhdanov.ccfit.nsu.states.State
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
@@ -13,7 +13,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-class GameState(
+class GameEngine(
   initialStateOrder: Int,
   private val gameConfig: GameConfig,
   private val gameController: GameController

@@ -9,7 +9,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.*
-import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
@@ -45,13 +44,14 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   )
   val msgTranslator = netController.messageTranslator
 
-  @Volatile private var nodeId = 0
+  @Volatile var nodeId = 0
+    private set
   private val state: AtomicReference<NetworkState<MessageT, InboundMessageTranslatorT, PayloadT>> =
     AtomicReference(lobbyState)
 
   private val curNetStateOrder = AtomicInteger()
 
-  private val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>> =
+  val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>> =
     AtomicReference()
 
   override fun sendUnicast(
@@ -130,8 +130,7 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
    * @return `Node<MessageT, InboundMessageTranslatorT, PayloadT>` if new
    * deputy was chosen successfully, else `null`
    */
-  fun chooseSetNewDeputy(): Node<MessageT, InboundMessageTranslatorT,
-    PayloadT>? {
+  fun chooseSetNewDeputy(): Node<MessageT, InboundMessageTranslatorT, PayloadT>? {
     fun validDeputy(
       node: Node<MessageT, InboundMessageTranslatorT, PayloadT>
     ): Boolean = node.running && node.nodeState == NodeT.NodeState.Active
@@ -181,11 +180,27 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
     nodesHandler.getNode(ipAddress)?.ackMessage(message)
   }
 
-  override fun initialize() {
+  fun onStateMsg(p2pMsg: P2PMessage) {
+    val stateMsg = p2pMsg.msg as StateMsg
+    val newStateOrder = stateMsg.stateOrder
+    val curStateOrder = curNetStateOrder.get()
+    if(newStateOrder <= curStateOrder) return
+    if(!curNetStateOrder.compareAndSet(curStateOrder, newStateOrder)) return
+    submitNewGameState(stateMsg)
+  }
+
+  fun submitNewGameState(state: StateMsg) {
+  }
+
+  override fun onEvent() {
+  }
+
+  override fun submitSteerMsg(steerMsg: SteerMsg) {
     TODO("Not yet implemented")
   }
 
-  override fun cleanup() {
-    TODO("Not yet implemented")
+  override fun initialize() {
   }
+
+  override fun cleanup() {}
 }

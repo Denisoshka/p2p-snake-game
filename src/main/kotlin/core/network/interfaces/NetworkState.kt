@@ -2,10 +2,13 @@ package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import java.net.InetSocketAddress
 
 interface NetworkState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT> {
+  fun submitSteerMsg(steerMsg: SteerMsg)
+
   fun joinHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {

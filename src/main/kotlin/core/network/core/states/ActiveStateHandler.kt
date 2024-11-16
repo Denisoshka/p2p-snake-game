@@ -3,7 +3,8 @@ package core.network.core.states
 import core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.controller.NetworkController
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
+import core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
@@ -38,6 +39,8 @@ class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {
+    val inP2PMsg = ncStateMachine.msgTranslator.fromMessageT(message)
+    val (master, )
     TODO("Not yet implemented")
   }
 
@@ -62,6 +65,20 @@ class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT
   override fun handleMasterDeath(
     master: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
+    TODO("Not yet implemented")
+  }
+
+  override fun submitSteerMsg(steerMsg: SteerMsg) {
+    val (masterInfo,  _) = ncStateMachine.masterDeputy.get()
+    controller.sendUnicast()
+    TODO("Not yet implemented")
+  }
+
+  override fun initialize() {
+    TODO("Not yet implemented")
+  }
+
+  override fun cleanup() {
     TODO("Not yet implemented")
   }
 }

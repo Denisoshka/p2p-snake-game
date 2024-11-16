@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.game.states
+package d.zhdanov.ccfit.nsu.states
 
 interface State {
   fun launch()

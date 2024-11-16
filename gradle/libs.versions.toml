@@ -1,0 +1,32 @@
+[versions]
+kotlin = "2.0.21"
+compose-plugin = "1.7.1"
+protobuf-version = "4.28.2"
+protobuf-plugin = "0.9.4"
+coroutines = "1.9.0"
+mapstruct = "1.5.5.Final"
+netty = "4.1.114.Final"
+kotlin-logging = "7.0.0"
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+compose-plugin = { id = "org.jetbrains.compose", version.ref ="compose-plugin" }
+multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref ="kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
+
+[libraries]
+protobuf-util = { group = "com.google.protobuf", name = "protobuf-java-util", version.ref = "protobuf-version" }
+protobuf-core = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf-version" }
+coroutines-jvm = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
+coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+mapstruct = { group = "org.mapstruct", name = "mapstruct", version.ref = "mapstruct" }
+mapstruct-processor = { group = "org.mapstruct", name = "mapstruct-processor", version.ref = "mapstruct" }
+netty = { group = "io.netty", name = "netty-all", version.ref = "netty" }
+kotlin-logging = { group = "io.github.oshai", name = "kotlin-logging-jvm", version.ref = "kotlin-logging" }
+compose-runtime = { group = "org.jetbrains.compose.runtime", name ="runtime", version.ref = "compose-plugin" }
+compose-foundation = { group = "org.jetbrains.compose.foundation", name = "foundation", version.ref = "compose-plugin" }
+compose-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref = "compose-plugin" }
+compose-ui-tooling = { group = "org.jetbrains.compose.ui", name = "ui-tooling", version.ref = "compose-plugin" }
+compose-material = { group = "org.jetbrains.compose.material", name = "material", version.ref = "compose-plugin" }

@@ -1,7 +1,12 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+
 plugins {
-  kotlin("jvm") version "2.0.21"
-  kotlin("kapt") version "2.0.21"
-  id("com.google.protobuf") version "0.9.4"
+  alias(libs.plugins.kotlin.jvm)
+  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.multiplatform)
+  alias(libs.plugins.compose.plugin)
+  alias(libs.plugins.compose.compiler)
+  alias(libs.plugins.protobuf)
 }
 
 java {
@@ -14,7 +19,7 @@ group = "d.zhdanov.ccfit.nsu"
 version = "1.0-SNAPSHOT"
 
 val protobufVersion = "4.28.2"
-val mapstructVersion = "1.5.5.Final"
+
 repositories {
   gradlePluginPortal()
   mavenCentral()
@@ -22,22 +27,25 @@ repositories {
 
 dependencies {
   testImplementation(kotlin("test"))
-  runtimeOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0")
-  implementation("com.google.protobuf:protobuf-java-util:${protobufVersion}")
-  implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
-  implementation("io.netty:netty-all:4.1.114.Final")
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-  implementation("org.mapstruct:mapstruct:${mapstructVersion}")
-  kapt("org.mapstruct:mapstruct-processor:${mapstructVersion}")
-  implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+
+  runtimeOnly(libs.coroutines.jvm)
+
+  implementation(compose.desktop.currentOs)
+  implementation(libs.protobuf.util)
+  implementation(libs.protobuf.core)
+  implementation(libs.netty)
+  implementation(libs.coroutines.core)
+  implementation(libs.mapstruct)
+  implementation(libs.kotlin.logging)
+  implementation(libs.compose.runtime)
+  implementation(libs.compose.foundation)
+  implementation(libs.compose.material)
+
+  kapt(libs.mapstruct.processor)
 }
 
 kapt {
   arguments {
-    // Set Mapstruct Configuration options here
-    // https://kotlinlang.org/docs/reference/kapt.html#annotation-processor-arguments
-    // https://mapstruct.org/documentation/stable/reference/html/#configuration-options
-    // arg("mapstruct.defaultComponentModel", "spring")
   }
 }
 
@@ -51,8 +59,12 @@ tasks.test {
   useJUnitPlatform()
 }
 
-protobuf {
-  protoc {
-    artifact = "com.google.protobuf:protoc:${protobufVersion}"
+compose.desktop {
+  application {
+    mainClass = "MainKt"
+    nativeDistributions {
+      targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+      packageVersion = "1.0.0"
+    }
   }
 }

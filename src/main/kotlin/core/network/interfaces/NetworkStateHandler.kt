@@ -7,5 +7,4 @@ interface NetworkStateHandler<MessageT, InboundMessageTranslator : MessageTransl
   NetworkState<MessageT, InboundMessageTranslator, Payload> {
   fun sendUnicast(msg: MessageT, nodeAddress: InetSocketAddress)
   fun onEvent()
-
 }

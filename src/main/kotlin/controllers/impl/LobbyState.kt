@@ -1,6 +1,6 @@
-package d.zhdanov.ccfit.nsu.core.game.states.impl
+package d.zhdanov.ccfit.nsu.states.impl
 
-import d.zhdanov.ccfit.nsu.core.game.states.State
+import d.zhdanov.ccfit.nsu.states.State
 
 class LobbyState : State {
   override fun launch() {
