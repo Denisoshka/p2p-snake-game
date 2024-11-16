@@ -1,12 +1,13 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-  alias(libs.plugins.kotlin.jvm)
-  alias(libs.plugins.kotlin.kapt)
-  alias(libs.plugins.multiplatform)
-  alias(libs.plugins.compose.plugin)
+  alias(libs.plugins.kotlin.multiplatform)
+  alias(libs.plugins.kotlin.plugin)
   alias(libs.plugins.compose.compiler)
+//  alias(libs.plugins.kotlin.jvm)
   alias(libs.plugins.protobuf)
+  alias(libs.plugins.kotlin.kapt)
+  id("java")
 }
 
 java {
@@ -25,23 +26,39 @@ repositories {
   mavenCentral()
 }
 
-dependencies {
-  testImplementation(kotlin("test"))
+kotlin {
+  jvm("desktop") {
+    withJava() // Включение совместимости с Java
+  }
+  sourceSets {
+    val desktopMain by getting {
+      dependencies {
+//        testImplementation(kotlin("test"))
 
-  runtimeOnly(libs.coroutines.jvm)
+        runtimeOnly(libs.coroutines.jvm)
 
-  implementation(compose.desktop.currentOs)
-  implementation(libs.protobuf.util)
-  implementation(libs.protobuf.core)
-  implementation(libs.netty)
-  implementation(libs.coroutines.core)
-  implementation(libs.mapstruct)
-  implementation(libs.kotlin.logging)
-  implementation(libs.compose.runtime)
-  implementation(libs.compose.foundation)
-  implementation(libs.compose.material)
+        implementation(compose.desktop.currentOs)
+        implementation(libs.protobuf.util)
+        implementation(libs.protobuf.core)
+        implementation(libs.netty)
+        implementation(libs.coroutines.core)
+        implementation(libs.mapstruct)
+        implementation(libs.kotlin.logging)
+        implementation(libs.compose.runtime)
+        implementation(libs.compose.foundation)
+        implementation(libs.compose.material)
 
-  kapt(libs.mapstruct.processor)
+//      kapt(libs.mapstruct.processor)
+      }
+    }
+  }
+}
+
+
+protobuf {
+  protoc {
+    artifact = "com.google.protobuf:protoc:${protobufVersion}"
+  }
 }
 
 kapt {
@@ -49,11 +66,7 @@ kapt {
   }
 }
 
-protobuf {
-  protoc {
-    artifact = "com.google.protobuf:protoc:${protobufVersion}"
-  }
-}
+
 
 tasks.test {
   useJUnitPlatform()

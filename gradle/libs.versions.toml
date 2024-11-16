@@ -9,11 +9,11 @@ netty = "4.1.114.Final"
 kotlin-logging = "7.0.0"
 
 [plugins]
+kotlin-plugin = { id = "org.jetbrains.compose", version.ref ="compose-plugin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref ="kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
-compose-plugin = { id = "org.jetbrains.compose", version.ref ="compose-plugin" }
-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref ="kotlin" }
-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 
 [libraries]
