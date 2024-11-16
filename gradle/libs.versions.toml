@@ -20,7 +20,7 @@ protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 protobuf-util = { group = "com.google.protobuf", name = "protobuf-java-util", version.ref = "protobuf-version" }
 protobuf-core = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf-version" }
 coroutines-jvm = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name ="kotlinx-coroutines-core", version.ref = "coroutines" }
 mapstruct = { group = "org.mapstruct", name = "mapstruct", version.ref = "mapstruct" }
 mapstruct-processor = { group = "org.mapstruct", name = "mapstruct-processor", version.ref = "mapstruct" }
 netty = { group = "io.netty", name = "netty-all", version.ref = "netty" }
