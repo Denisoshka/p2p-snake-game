@@ -5,6 +5,14 @@ import java.net.InetSocketAddress
 
 interface NetworkStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT> :
   NetworkState<MessageT, InboundMessageTranslator, Payload> {
+  enum class NetworkEvents {
+    JoinAccepted,
+    JoinRejected,
+    NodeDeputyNow,
+    NodeMasterNow,
+    ShutdownContext,
+  }
+
+  fun handleNetworkStateEvent(event: NetworkEvents)
   fun sendUnicast(msg: MessageT, nodeAddress: InetSocketAddress)
-  fun onEvent()
 }

@@ -1,30 +1,56 @@
 package d.zhdanov.ccfit.nsu.core.game.engine
 
-import d.zhdanov.ccfit.nsu.core.game.GameConfig
 import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.core.game.GameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.PlayerT
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.Snake
 import d.zhdanov.ccfit.nsu.core.game.engine.map.GameMap
-import d.zhdanov.ccfit.nsu.states.State
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.states.State
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
 class GameEngine(
-  initialStateOrder: Int,
   private val gameConfig: GameConfig,
-  private val gameController: GameController
+  private val gameController: GameController,
+  private val state: StateMsg? = null,
 ) : State {
   private val entities: MutableList<Entity> = mutableListOf()
-  private val players: MutableMap<Int, PlayerT> = HashMap()
+  private val players: MutableMap<Int, Player> = HashMap()
   private val contextId: AtomicLong = AtomicLong(0)
   private val executor = Executors.newSingleThreadExecutor()
   private val delayMillis = 1000L / gameConfig.updatesPerSecond
-  var stateOrder = initialStateOrder + 1
-    private set
+  private var stateOrder = state?.stateOrder ?: 0
+
+  init {
+    state?.let { restoreContext(state, this) }
+  }
+
+  private fun restoreContext(state: StateMsg, gameEngine: GameEngine) {
+
+    for(entity in gameEngine.entities) {
+      when(entity.type) {
+        GameType.Snake -> {
+
+        }
+
+        GameType.Apple -> {
+
+        }
+
+        GameType.None  -> {
+
+        }
+      }
+    }
+    for(pl in state.players) {
+      sn = Snake()
+    }
+  }
 
   val map: GameMap = TODO()
 
@@ -118,4 +144,13 @@ class GameEngine(
       gameLoop()
     }
   }
+
+  fun restoreState() {
+
+  }
+
+  override fun launch(state: State) {
+
+  }
+
 }

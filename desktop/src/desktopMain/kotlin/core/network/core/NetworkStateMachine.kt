@@ -1,10 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateHandler
-import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyState
-import d.zhdanov.ccfit.nsu.core.network.core.states.MasterState
-import d.zhdanov.ccfit.nsu.core.network.core.states.PassiveState
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.PlayerContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
@@ -12,13 +10,16 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.*
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
+import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyState
+import d.zhdanov.ccfit.nsu.core.network.core.states.MasterState
+import d.zhdanov.ccfit.nsu.core.network.core.states.PassiveState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
@@ -28,12 +29,13 @@ private val kPortRange = 1..65535
 class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslatorT<MessageT>, PayloadT : NodePayloadT>(
   private val netController: NetworkController<MessageT, InboundMessageTranslatorT, PayloadT>
 ) : NetworkStateHandler<MessageT, InboundMessageTranslatorT, PayloadT> {
+  private val emptyAddress = InetSocketAddress("0.0.0.0", 0)
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslatorT, PayloadT> =
     TODO()
   private val masterState = MasterState(
     this, netController, nodesHandler
   )
-  private val activeState = ActiveStateHandler(
+  private val activeState = ActiveState(
     this, netController, nodesHandler
   )
   private val passiveState = PassiveState(
@@ -49,10 +51,43 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   private val state: AtomicReference<NetworkState<MessageT, InboundMessageTranslatorT, PayloadT>> =
     AtomicReference(lobbyState)
 
-  private val curNetStateOrder = AtomicInteger()
-
+  val latestState = AtomicReference<Pair<StateMsg, Int>>()
   val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>> =
     AtomicReference()
+
+  override fun submitSteerMsg(steerMsg: SteerMsg) {
+    state.get().submitSteerMsg(steerMsg)
+  }
+
+  override fun handleNetworkStateEvent(event: NetworkStateHandler.NetworkEvents) {
+    when(event) {
+      NetworkStateHandler.NetworkEvents.JoinAccepted    -> TODO()
+      NetworkStateHandler.NetworkEvents.JoinRejected    -> TODO()
+      NetworkStateHandler.NetworkEvents.NodeDeputyNow   -> {
+        when(val st = state.get()) {
+          is ActiveState -> {
+            val oldInfo = masterDeputy.get()
+            val (msInfo, _) = oldInfo
+            val newDepInfo = emptyAddress to nodeId
+            // А вообще же по идее других конкурентных ситуаций и не будет???)))
+            masterDeputy.compareAndSet(oldInfo, msInfo to newDepInfo)
+          }
+        }
+      }
+
+      NetworkStateHandler.NetworkEvents.NodeMasterNow   -> {
+        when(val st = state.get()) {
+          is ActiveState -> {
+            state.compareAndSet(activeState, masterState)
+
+          }
+        }
+      }
+
+      NetworkStateHandler.NetworkEvents.ShutdownContext -> TODO()
+    }
+  }
+
 
   override fun sendUnicast(
     msg: MessageT, nodeAddress: InetSocketAddress
@@ -183,21 +218,17 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   fun onStateMsg(p2pMsg: P2PMessage) {
     val stateMsg = p2pMsg.msg as StateMsg
     val newStateOrder = stateMsg.stateOrder
-    val curStateOrder = curNetStateOrder.get()
+    val curStateOrder = latestState.get()
     if(newStateOrder <= curStateOrder) return
-    if(!curNetStateOrder.compareAndSet(curStateOrder, newStateOrder)) return
-    submitNewGameState(stateMsg)
+    if(!latestState.compareAndSet(curStateOrder, newStateOrder)) return
+    handleInboundState(stateMsg)
   }
 
-  fun submitNewGameState(state: StateMsg) {
+  fun handleInboundState(state: StateMsg) {
   }
 
-  override fun onEvent() {
-  }
 
-  override fun submitSteerMsg(steerMsg: SteerMsg) {
-    TODO("Not yet implemented")
-  }
+  fun restoreSnake(){}
 
   override fun initialize() {
   }

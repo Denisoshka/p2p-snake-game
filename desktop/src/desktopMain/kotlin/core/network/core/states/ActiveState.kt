@@ -1,21 +1,25 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import java.net.InetSocketAddress
 
-class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+class ActiveState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
   private val controller: NetworkController<MessageT, InboundMessageTranslator, Payload>,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
 ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
+  private val translator = ncStateMachine.msgTranslator
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {
@@ -39,9 +43,19 @@ class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {
-    val inP2PMsg = ncStateMachine.msgTranslator.fromMessageT(message)
-    val (master, )
-    TODO("Not yet implemented")
+    val inp2p = translator.fromMessageT(message)
+    if(inp2p.senderId == null || inp2p.receiverId == null) return
+
+    val (msInfo, _) = ncStateMachine.masterDeputy.get()
+    if(inp2p.senderId != msInfo.second) return
+
+    val rlchn = inp2p.msg as RoleChangeMsg
+
+    if(rlchn.receiverRole == NodeRole.VIEWER) {
+      TODO("out snake dead")
+    } else if(rlchn.receiverRole == NodeRole.DEPUTY) {
+
+    }
   }
 
   override fun announcementHandle(
@@ -69,8 +83,12 @@ class ActiveStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT
   }
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
-    val (masterInfo,  _) = ncStateMachine.masterDeputy.get()
-    controller.sendUnicast()
+    val (masterInfo, _) = ncStateMachine.masterDeputy.get()
+    val master = nodesHandler.getNode(masterInfo.first)?.let {
+      val p2pmsg = P2PMessage()
+      it.addMessageForAck()
+      controller.sendUnicast()
+    }
     TODO("Not yet implemented")
   }
 

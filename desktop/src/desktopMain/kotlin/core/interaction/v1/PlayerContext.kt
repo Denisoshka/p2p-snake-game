@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1
 
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.PlayerT
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.stardart.Snake
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.Snake
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
@@ -15,7 +15,7 @@ class PlayerContext(
   snake: Snake,
   private val nodeT: NodeT,
   private val lastUpdateSeq: AtomicLong = AtomicLong(0L), name: String,
-) : PlayerT(name, snake), NodePayloadT {
+) : Player(name, snake), NodePayloadT {
   override fun update(steer: SteerMsg, seq: Long) {
     synchronized(lastUpdateSeq) {
       if(seq <= lastUpdateSeq.get()) return

@@ -18,10 +18,7 @@ class NetworkController<MessageT, InboundMessageTranslatorT : MessageTranslatorT
   val messageTranslator: InboundMessageTranslatorT,
 ) : AutoCloseable {
   private val unicastNetHandler = UnicastNetHandler(this)
-  private val multicastNetHandler =
-    MulticastNetHandler<MessageT, InboundMessageTranslatorT, PayloadT>(
-      TODO(), this
-    )
+  private val multicastNetHandler = MulticastNetHandler(TODO(), this)
   private val messageHandler: NetworkStateMachine<MessageT, InboundMessageTranslatorT, PayloadT>
 
   fun handleUnicastMessage(

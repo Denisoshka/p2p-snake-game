@@ -1,15 +1,15 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
@@ -108,5 +108,18 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
       outP2PRoleChange, MessageType.RoleChangeMsg
     )
     netController.sendUnicast(outMsg, newDep.ipAddress)
+  }
+
+  override fun submitSteerMsg(steerMsg: SteerMsg) {
+    TODO("Not yet implemented")
+  }
+
+  override fun initialize() {
+    val (state, seg) = ncStateMachine.latestState.get()!!
+
+  }
+
+  override fun cleanup() {
+    TODO("Not yet implemented")
   }
 }

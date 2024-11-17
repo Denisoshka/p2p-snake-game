@@ -11,4 +11,5 @@ interface Entity {
   fun checkCollisions(entity: Entity, context: GameEngine)
   fun update(context: GameEngine)
   fun shootState(context: GameEngine, state: StateMsg)
+  fun atDead()
 }

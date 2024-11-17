@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.game.engine.entity.stardart
+package d.zhdanov.ccfit.nsu.core.game.engine.entity.standart
 
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType

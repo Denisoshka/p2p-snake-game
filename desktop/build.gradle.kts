@@ -7,8 +7,6 @@ plugins {
   alias(libs.plugins.kotlin.kapt)
 }
 
-
-
 group = "d.zhdanov.ccfit.nsu"
 version = "1.0-SNAPSHOT"
 
@@ -27,21 +25,19 @@ kotlin {
   sourceSets {
     val desktopMain by getting
     desktopMain.dependencies {
-      runtimeOnly(libs.coroutines.jvm)
 
       implementation(compose.desktop.currentOs)
-      implementation(libs.protobuf.util)
-      implementation(libs.protobuf.core)
       implementation(libs.netty)
-      implementation(libs.kotlinx.coroutines.core)
       implementation(libs.mapstruct)
+      implementation(libs.mapstruct.processor)
       implementation(libs.kotlin.logging)
       implementation(libs.compose.runtime)
       implementation(libs.compose.foundation)
       implementation(libs.compose.material)
+      implementation(libs.kotlinx.coroutines.core)
+      implementation(libs.kotlinx.coroutines.jvm)
       implementation(project(":proto"))
     }
-
   }
 }
 
