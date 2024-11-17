@@ -20,6 +20,7 @@ class GameEngine(
   private val state: StateMsg? = null,
 ) : State {
   private val entities: MutableList<Entity> = mutableListOf()
+  private val sideEffectEntity: MutableList<Entity> = mutableListOf()
   private val players: MutableMap<Int, Player> = HashMap()
   private val contextId: AtomicLong = AtomicLong(0)
   private val executor = Executors.newSingleThreadExecutor()
@@ -30,8 +31,21 @@ class GameEngine(
     state?.let { restoreContext(state, this) }
   }
 
-  private fun restoreContext(state: StateMsg, gameEngine: GameEngine) {
+  fun addSideEffect(entity: Entity) {
+    sideEffectEntity.add(entity)
+  }
 
+  fun addEntity(entity: Entity) {
+    map.addEntity(entity)
+    entities.add(entity)
+  }
+
+  fun addPlayer(player: Player) {
+    players[player.snake.id] = player
+    map.addEntity(player)
+  }
+
+  fun restoreContext(state: StateMsg, gameEngine: GameEngine) {
     for(entity in gameEngine.entities) {
       when(entity.type) {
         GameType.Snake -> {
@@ -73,7 +87,7 @@ class GameEngine(
   }
 
   private fun update() {
-    addNewSnakes()
+    updatePreprocess()
 
     for(entity in entities) {
       entity.update(this)
@@ -94,13 +108,21 @@ class GameEngine(
       }
     }
 
-    entities.removeIf { !it.alive }
-    val it = players.iterator()
-    while(it.hasNext()) {
-      val (_, player) = it.next()
+
+    val entrIt = entities.iterator()
+    while(entrIt.hasNext()) {
+      val ent = entrIt.next()
+      if(!ent.alive) {
+        entrIt.remove()
+        ent.atDead(this)
+      }
+    }
+    val plIt = players.iterator()
+    while(plIt.hasNext()) {
+      val (_, player) = plIt.next()
       if(!player.alive) {
-        it.remove()
-        player.onObservedExpired()
+        plIt.remove()
+        player.atDead(this)
       }
     }
   }
@@ -122,17 +144,10 @@ class GameEngine(
     gameController.submitGameState(state)
   }
 
-  fun getNextId(): Long {
-    return contextId.getAndIncrement()
-  }
-
-  private fun addNewSnakes() {
-    var addedSnakes = MutableList()
-    for(num in 0 until gameConfig.maxSnakesQuantityAddedPerUpdate) {
-      map.findFreeSquare()?.also {
-        TODO()
-      }
-    }
+  private fun updatePreprocess() {
+    entities.addAll(sideEffectEntity)
+    for(se in sideEffectEntity) map.addEntity(se)
+    sideEffectEntity.clear()
   }
 
   override fun terminate() {

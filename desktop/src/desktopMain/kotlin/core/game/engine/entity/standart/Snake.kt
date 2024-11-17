@@ -9,6 +9,10 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
+import kotlin.random.Random
+
+private val FoodSpawnChance = 0.5
 
 class Snake(
   direction: Direction,
@@ -17,19 +21,14 @@ class Snake(
   override var alive: Boolean = true
   override var type: GameType = GameType.Snake
   override val hitBox: MutableList<EntityOnMapInfo> = ArrayList(2)
-  var direction: Direction = direction
+  private var direction: Direction = direction
     private set
   var score: Int = 0
     private set
   @Volatile var snakeState = SnakeState.ALIVE
 
-  init {
-    TODO()
-  }
-
-  fun restoreState(offsets: List<Coord>) {
+  override fun restoreHitbox(offsets: List<Coord>) {
     if(hitBox.isNotEmpty()) throw RuntimeException("ты че пидор")
-    val points = mutableListOf<EntityOnMapInfo>()
 
     val currentPoint = offsets.first()
     for(nextOffset in offsets.drop(1)) {
@@ -44,7 +43,7 @@ class Snake(
         }
 
         for(x in rangeX.drop(1)) {
-          points.add(EntityOnMapInfo(x, currentPoint.y))
+          hitBox.add(EntityOnMapInfo(x, currentPoint.y))
         }
       } else if(currentPoint.y != nextY && currentPoint.x == nextX) {
         val rangeY = if(nextY > currentPoint.y) {
@@ -54,13 +53,13 @@ class Snake(
         }
 
         for(y in rangeY.drop(1)) {
-          points.add(EntityOnMapInfo(currentPoint.x, y))
+          hitBox.add(EntityOnMapInfo(currentPoint.x, y))
         }
       }
       currentPoint.x = nextX
       currentPoint.y = nextY
 
-      points.add(EntityOnMapInfo(nextX, nextY))
+      hitBox.add(EntityOnMapInfo(nextX, nextY))
     }
   }
 
@@ -96,6 +95,14 @@ class Snake(
 
     val shoot = Snake(snakeState, id, cordsShoot, direction)
     state.snakes.add(shoot)
+  }
+
+  override fun atDead(context: GameEngine) {
+    for(cord in hitBox) {
+      if(Random.nextDouble() < FoodSpawnChance) {
+        context.addSideEffect(Apple(cord.x, cord.y))
+      }
+    }
   }
 
   fun getScore(): Int {
@@ -137,8 +144,8 @@ class Snake(
     }
   }
 
-  fun changeState(newDirection: Direction) {
-    if(!isOpposite(newDirection)) direction = newDirection
+  fun changeState(steer: SteerMsg) {
+    if(!isOpposite(steer.direction)) direction = steer.direction
   }
 
   private fun isOpposite(newDirection: Direction): Boolean {

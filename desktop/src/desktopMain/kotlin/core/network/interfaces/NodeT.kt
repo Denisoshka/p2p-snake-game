@@ -9,7 +9,8 @@ interface NodeT {
 
   enum class NodeState {
     Active,
-    Listening,
+    Passive,
+    Disconnected,
   }
 
   enum class NodeEvent {

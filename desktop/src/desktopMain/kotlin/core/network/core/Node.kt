@@ -1,8 +1,9 @@
 package d.zhdanov.ccfit.nsu.core.network.controller
 
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalStateMachineStateIsNull
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalStateMachineStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
@@ -27,13 +28,22 @@ private const val IncorrectRegisterEvent =
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   initMsgSeqNum: Long,
   messageComparator: Comparator<MessageT>,
+  @Volatile var nodeRole: NodeRole,
   private val observerScope: CoroutineScope,
-  @Volatile override var nodeState: NodeT.NodeState,
   override val id: Int,
   override val ipAddress: InetSocketAddress,
-  private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>
+  private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
   var payloadT: NodePayloadT? = null
 ) : NodeT {
+  val isRunning: Boolean
+    get() {
+      return nodeState != NodeT.NodeState.Disconnected
+    }
+
+  @Volatile override var nodeState =
+    if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
+    else NodeT.NodeState.Active
+
   val resendDelay = nodesHandler.resendDelay
   val thresholdDelay = nodesHandler.thresholdDelay
   @Volatile var running = true
@@ -44,7 +54,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
   @Volatile private var observeJob: Job? = null
   private val stateHolder =
     StateHolder<MessageT, InboundMessageTranslator, Payload>(
-      TODO()
+
     )
 
   init {
@@ -106,7 +116,6 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
   fun shutdown() {
     running = false;
-
   }
 
   fun shutdownNow() {
@@ -208,6 +217,8 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
           InternalNodeState.FinalizationStart -> {
             if(changeState(InternalNodeState.FinalizingProcess)) {
+              node.payloadT?.onContextObserverTerminated()
+              node.nodeState = NodeT.NodeState.Disconnected
               node.nodesHandler.handleNodeDetachPrepare(node)
             }
           }
@@ -222,6 +233,8 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
           }
 
           InternalNodeState.Terminated        -> {
+            node.payloadT?.onContextObserverTerminated()
+            node.nodeState = NodeT.NodeState.Disconnected
             node.nodesHandler.handleNodeTermination(node)
             break
           }
@@ -257,7 +270,9 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     fun onEvent(event: NodeEvent) {
       when(event) {
         NodeEvent.NodeRegistered              -> {
-          if(currState.get() != InternalNodeState.Booting) throw IllegalNodeRegisterAttempt()
+          if(currState.get() != InternalNodeState.Booting) {
+            throw IllegalNodeRegisterAttempt(NodeAlreadyRegisteredMsg)
+          }
           bootChannel.run {
             val ret = trySend(event)
             if(ret.isFailure || ret.isClosed) {
@@ -347,7 +362,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
         val now = System.currentTimeMillis()
         val ret = checkNodeConditions(now, node)
         if(node.msgForAcknowledge.isEmpty()) {
-          node.nodeState = NodeT.NodeState.Disabled
+          node.nodeState = NodeT.NodeState.Disconnected
           changeState(InternalNodeState.FinalizedState)
           return 0
         }
