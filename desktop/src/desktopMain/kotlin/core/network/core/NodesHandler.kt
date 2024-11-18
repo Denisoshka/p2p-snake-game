@@ -29,6 +29,8 @@ class NodesHandler(
     Channel<Node>(joinBacklog)
   private val reconfigureContext =
     Channel<Node>(joinBacklog)
+  val nextSeqNum
+    get() = ncStateMachine.nextSegNum
 
   /**
    * @throws IllegalNodeHandlerInit

@@ -1,8 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.NetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.bootstrap.Bootstrap
@@ -16,11 +14,10 @@ import java.io.IOException
 
 private val logger = KotlinLogging.logger {}
 
-class MulticastNetHandler<MessageT, InboundMessageTranslator :
-MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+class MulticastNetHandler(
   private val config: NetConfig,
-  context: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-) : NetworkHandler<MessageT, InboundMessageTranslator, Payload> {
+  context: NetworkController,
+) : NetworkHandler {
   private var group: NioEventLoopGroup? = null
   private var bootstrap: Bootstrap = Bootstrap()
 
@@ -48,8 +45,8 @@ MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
     group?.shutdownGracefully()
   }
 
-  class MulticastHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val context: NetworkController<MessageT, InboundMessageTranslator, Payload>
+  class MulticastHandler(
+    private val context: NetworkController
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     private val msgUtils = context.messageUtils
     override fun channelRead0(

@@ -1,9 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageUtilsT
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.MulticastNetHandler
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -13,67 +11,62 @@ private val logger = KotlinLogging.logger {}
 private val PortRange = 0..65535
 
 
-class NetworkController<MessageT, InboundMessageTranslatorT : MessageTranslatorT<MessageT>, PayloadT : NodePayloadT>(
-  val messageUtils: MessageUtilsT<MessageT, MessageType>,
-  val pingDelay: Long,
-  val messageTranslator: InboundMessageTranslatorT,
+class NetworkController(
 ) : AutoCloseable {
   private val unicastNetHandler = UnicastNetHandler(this)
   private val multicastNetHandler = MulticastNetHandler(TODO(), this)
-  private val messageHandler: NetworkStateMachine<MessageT, InboundMessageTranslatorT, PayloadT>
+  private val messageHandler: NetworkStateMachine
 
   fun handleUnicastMessage(
-    message: MessageT, ipAddress: InetSocketAddress
+    message: GameMessage, ipAddress: InetSocketAddress
   ) {
-    val msgT = messageTranslator.getMessageType(message)
-    when(msgT) {
-      MessageType.PingMsg       -> messageHandler.pingHandle(
+    when(message.typeCase) {
+      GameMessage.TypeCase.PING        -> messageHandler.pingHandle(
         ipAddress, message, MessageType.PingMsg
       )
 
-      MessageType.SteerMsg      -> messageHandler.steerHandle(
+      GameMessage.TypeCase.STEER       -> messageHandler.steerHandle(
         ipAddress, message, MessageType.SteerMsg
       )
 
-      MessageType.AckMsg        -> messageHandler.ackHandle(
+      GameMessage.TypeCase.ACK         -> messageHandler.ackHandle(
         ipAddress, message, MessageType.AckMsg
       )
 
-      MessageType.StateMsg      -> messageHandler.stateHandle(
+      GameMessage.TypeCase.STATE       -> messageHandler.stateHandle(
         ipAddress, message, MessageType.StateMsg
       )
 
-      MessageType.JoinMsg       -> messageHandler.joinHandle(
+      GameMessage.TypeCase.JOIN        -> messageHandler.joinHandle(
         ipAddress, message, MessageType.JoinMsg
       )
 
-      MessageType.ErrorMsg      -> messageHandler.errorHandle(
+      GameMessage.TypeCase.ERROR       -> messageHandler.errorHandle(
         ipAddress, message, MessageType.ErrorMsg
       )
 
-      MessageType.RoleChangeMsg -> messageHandler.roleChangeHandle(
+      GameMessage.TypeCase.ROLE_CHANGE -> messageHandler.roleChangeHandle(
         ipAddress, message, MessageType.RoleChangeMsg
       )
 
-      else                      -> {}
+      else                             -> {}
     }
   }
 
   fun handleMulticastMessage(
-    message: MessageT, ipAddress: InetSocketAddress
+    message: GameMessage, ipAddress: InetSocketAddress
   ) {
-    val msgT = messageTranslator.getMessageType(message)
-    when(msgT) {
-      MessageType.AnnouncementMsg -> messageHandler.announcementHandle(
+    when(message.typeCase) {
+      GameMessage.TypeCase.ANNOUNCEMENT -> messageHandler.announcementHandle(
         ipAddress, message, MessageType.AnnouncementMsg
       )
 
-      else                        -> {}
+      else                              -> {}
     }
   }
 
   fun sendUnicast(
-    msg: MessageT, nodeAddress: InetSocketAddress
+    msg: GameMessage, nodeAddress: InetSocketAddress
   ) = unicastNetHandler.sendUnicastMessage(msg, nodeAddress)
 
   override fun close() {

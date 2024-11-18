@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
 import core.network.core.NodesHandler
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
@@ -11,13 +12,13 @@ import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import java.net.InetSocketAddress
 
-class LobbyState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-  private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
-  private val controller: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-  private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
+class LobbyState(
+  private val ncStateMachine: NetworkStateMachine,
+  private val controller: NetworkController,
+  private val nodesHandler: NodesHandler,
+) : NetworkState {
   override fun ackHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val p2pmsg = ncStateMachine.msgTranslator.fromMessageT(
       message, MessageType.AckMsg
@@ -26,14 +27,14 @@ class LobbyState<MessageT, InboundMessageTranslator : MessageTranslatorT<Message
   }
 
   override fun announcementHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
 
     TODO("Not yet implemented")
   }
 
   override fun errorHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     nodesHandler.getNode(ipAddress)?.handleEvent(
       NodeT.NodeEvent.ShutdownNowFromCluster

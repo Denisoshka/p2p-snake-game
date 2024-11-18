@@ -19,9 +19,9 @@ import java.net.InetSocketAddress
 
 private val logger = KotlinLogging.logger {}
 
-class UnicastNetHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-  context: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-) : UnicastNetworkHandler<MessageT, InboundMessageTranslator, Payload> {
+class UnicastNetHandler(
+  context: NetworkController,
+) : UnicastNetworkHandler {
   private lateinit var channel: DatagramChannel
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()
@@ -57,8 +57,8 @@ class UnicastNetHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<
     channel.writeAndFlush(packet)
   }
 
-  class Handler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    private val context: NetworkController<MessageT, InboundMessageTranslator, Payload>
+  class Handler(
+    private val context: NetworkController
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
     private val msgUtils = context.messageUtils
 

@@ -10,12 +10,10 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterState
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import java.util.concurrent.atomic.AtomicLong
 
-class LocalPlayerContext<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>>(
+class LocalPlayerContext(
   name: String,
-  context: MasterState<MessageT, InboundMessageTranslator, LocalPlayerContext<MessageT, InboundMessageTranslator>>,
   snakeEnt: SnakeEnt,
   private val lastUpdateSeq: AtomicLong = AtomicLong(0L),
 ) : Player(name, snakeEnt), NodePayloadT {

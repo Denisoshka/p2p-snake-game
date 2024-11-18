@@ -2,12 +2,12 @@ package d.zhdanov.ccfit.nsu.core.network.core.states
 
 import core.network.core.Node
 import core.network.core.NodesHandler
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
 import d.zhdanov.ccfit.nsu.core.interaction.v1.LocalPlayerContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NetPlayerContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
@@ -17,64 +17,76 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
 
 private val logger = KotlinLogging.logger(MasterState::class.java.name)
+private const val PlayerNameIsBlank = "player name blank"
+private const val NodeAlreadyRunning = "node already running"
 
-class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-  private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
-  private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
-  private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
-  @Volatile var playerAndGame: Pair<LocalPlayerContext<MessageT, InboundMessageTranslator>, GameEngine>? =
+class MasterState(
+  private val ncStateMachine: NetworkStateMachine,
+  private val netController: NetworkController,
+  private val nodesHandler: NodesHandler,
+) : NetworkState {
+  @Volatile var playerAndGame: Pair<LocalPlayerContext, GameEngine>? =
     null
-  private val msgTranslator = netController.messageTranslator
+
   override fun joinHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val request = msgTranslator.fromMessageT(
+    val request = MessageTranslator.fromMessageT(
       message, msgT
     )
-    val inMsg = request.msg as JoinMsg
-    if(inMsg.playerName.isBlank()) {
-      logger.atTrace { "$ipAddress player name empty" }
-      return
+    try {
+      val inMsg = request.msg as JoinMsg
+      if(inMsg.playerName.isBlank()) {
+        throw IllegalNodeRegisterAttempt(PlayerNameIsBlank)
+      }
+      if(inMsg.nodeRole != NodeRole.VIEWER || inMsg.nodeRole != NodeRole.NORMAL) {
+        throw IllegalNodeRegisterAttempt("$ipAddress invalid node role: ${inMsg.nodeRole}")
+      }
+      nodesHandler.getNode(ipAddress)?.let {
+        if(it.running) return
+        throw IllegalNodeRegisterAttempt("$ipAddress invalid node role: ${inMsg.nodeRole}")
+      }
+
+    } catch(e: IllegalNodeRegisterAttempt) {
+      logger.trace { e }
+
     }
-    if(inMsg.nodeRole != NodeRole.VIEWER || inMsg.nodeRole != NodeRole.NORMAL) {
-      logger.atTrace { "$ipAddress invalid node role: ${inMsg.nodeRole}{}" }
-      return
-    }
-    val node = nodesHandler.getNode(ipAddress)?.let {
-      return
-    }
+
+
   }
 
   override fun pingHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) = ncStateMachine.onPingMsg(ipAddress, message, msgT)
 
   override fun ackHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-  ) = ncStateMachine.onAckMsg(ipAddress, message)
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+  ) {
+    ncStateMachine.onAckMsg(ipAddress, message)
+  }
 
 
   override fun roleChangeHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
     if(!node.running) return
-    val inp2p = msgTranslator.fromMessageT(
+    val inp2p = MessageTranslator.fromMessageT(
       message, MessageType.RoleChangeMsg
     )
     (inp2p.msg as RoleChangeMsg).let {
       if(it.senderRole != NodeRole.VIEWER && it.receiverRole != null) return
     }
     val outp2p = ncStateMachine.getP2PAck(message, node)
-    val outmsg = msgTranslator.toMessageT(
+    val outmsg = MessageTranslator.toMessageT(
       outp2p, MessageType.AckMsg
     )
     netController.sendUnicast(outmsg, ipAddress)
@@ -83,11 +95,11 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
   }
 
   override fun steerHandle(
-    ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
     if(!node.running) return
-    val inp2p = netController.messageTranslator.fromMessageT(
+    val inp2p = MessageTranslator.fromMessageT(
       message, MessageType.SteerMsg
     )
     node.payloadT?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
@@ -95,7 +107,7 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
 
 
   override fun handleNodeDetach(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   ) {
     val (msInfo, depInfo) = ncStateMachine.masterDeputy.get() ?: return
     if(depInfo == null || node.id != depInfo.second) return
@@ -113,7 +125,7 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
       newDep.id,
       newDep.getNextMSGSeqNum()
     )
-    val outMsg = ncStateMachine.msgTranslator.toMessageT(
+    val outMsg = MessageTranslator.toMessageT(
       outP2PRoleChange, MessageType.RoleChangeMsg
     )
     netController.sendUnicast(outMsg, newDep.ipAddress)
@@ -121,7 +133,7 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
     playerAndGame?.first?.handleEvent(
-      steerMsg, ncStateMachine.seqNumProvider.getAndIncrement()
+      steerMsg, ncStateMachine.nextSegNum
     )
   }
 
@@ -140,7 +152,7 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
         sn.snakeState = sninfo.snakeState
         if(sn.snakeState == SnakeState.ALIVE) xyi[sninfo.playerId] = sn
       }
-      for (plinfo in gameState.snakes){
+      for(plinfo in gameState.snakes) {
         val pl = NetPlayerContext
       }
     } else {

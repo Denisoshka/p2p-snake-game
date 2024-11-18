@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import java.net.InetSocketAddress
 
-interface NetworkStateHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT> :
-  NetworkState<MessageT, InboundMessageTranslator, Payload> {
+interface NetworkStateHandler :
+  NetworkState {
   enum class NetworkEvents {
     JoinAccepted,
     JoinRejected,
@@ -13,5 +13,5 @@ interface NetworkStateHandler<MessageT, InboundMessageTranslator : MessageTransl
     ShutdownContext,
   }
 
-  fun sendUnicast(msg: MessageT, nodeAddress: InetSocketAddress)
+  fun sendUnicast(msg: GameMessage, nodeAddress: InetSocketAddress)
 }
