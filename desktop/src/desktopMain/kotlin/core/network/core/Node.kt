@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.controller
+package core.network.core
 
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
@@ -28,14 +28,15 @@ private const val IncorrectRegisterEvent =
 class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   initMsgSeqNum: Long,
   messageComparator: Comparator<MessageT>,
-  @Volatile var nodeRole: NodeRole,
+  @Volatile override var nodeRole: NodeRole,
   private val observerScope: CoroutineScope,
   override val id: Int,
   override val ipAddress: InetSocketAddress,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
-  var payloadT: NodePayloadT? = null
+  var requireToRegisterInContext: Boolean = true,
 ) : NodeT {
-  val isRunning: Boolean
+  @Volatile var payloadT: NodePayloadT? = null
+  val running: Boolean
     get() {
       return nodeState != NodeT.NodeState.Disconnected
     }
@@ -46,8 +47,7 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
   val resendDelay = nodesHandler.resendDelay
   val thresholdDelay = nodesHandler.thresholdDelay
-  @Volatile var running = true
-    private set
+
   @Volatile private var lastReceive = System.currentTimeMillis()
   @Volatile private var lastSend = System.currentTimeMillis()
   private val msgSeqNum = AtomicLong(initMsgSeqNum)
@@ -112,14 +112,6 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
 
   fun getNextMSGSeqNum(): Long {
     return msgSeqNum.incrementAndGet()
-  }
-
-  fun shutdown() {
-    running = false;
-  }
-
-  fun shutdownNow() {
-
   }
 
   private fun checkMessages(): Long {

@@ -1,13 +1,20 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
+import core.network.core.Node
+import core.network.core.NodesHandler
+import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
+import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
+import d.zhdanov.ccfit.nsu.core.interaction.v1.LocalPlayerContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.NetPlayerContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.controller.Node
-import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
@@ -23,6 +30,8 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
   private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
 ) : NetworkState<MessageT, InboundMessageTranslator, Payload> {
+  @Volatile var playerAndGame: Pair<LocalPlayerContext<MessageT, InboundMessageTranslator>, GameEngine>? =
+    null
   private val msgTranslator = netController.messageTranslator
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
@@ -88,7 +97,7 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
   override fun handleNodeDetach(
     node: Node<MessageT, InboundMessageTranslator, Payload>
   ) {
-    val (msInfo, depInfo) = ncStateMachine.masterDeputy.get()
+    val (msInfo, depInfo) = ncStateMachine.masterDeputy.get() ?: return
     if(depInfo == null || node.id != depInfo.second) return
 
     val newDep = ncStateMachine.chooseSetNewDeputy()
@@ -111,11 +120,36 @@ class MasterState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
   }
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
-    TODO("Not yet implemented")
+    playerAndGame?.first?.handleEvent(
+      steerMsg, ncStateMachine.seqNumProvider.getAndIncrement()
+    )
   }
 
   override fun initialize() {
-    val (state, seg) = ncStateMachine.latestState.get()!!
+
+  }
+
+  fun init(gameConfig: InternalGameConfig, gameState: StateMsg?) {
+    val stOrder = gameState?.stateOrder ?: 0
+    val eng = GameEngine(gameConfig, ,stOrder)
+    if(gameState != null) {
+      val xyi: MutableMap<Int, SnakeEnt> = HashMap()
+      for(sninfo in gameState.snakes) {
+        val sn = SnakeEnt(sninfo.direction, sninfo.playerId)
+        sn.restoreHitbox(sninfo.cords)
+        sn.snakeState = sninfo.snakeState
+        if(sn.snakeState == SnakeState.ALIVE) xyi[sninfo.playerId] = sn
+      }
+      for (plinfo in gameState.snakes){
+        val pl = NetPlayerContext
+      }
+    } else {
+      val sn = eng.spawnSnake(
+        ncStateMachine.nodeId
+      ) ?: throw RuntimeException("ну пиздец")
+      val pl = LocalPlayerContext(gameConfig.playerName, this, sn)
+      playerAndGame = pl to eng
+    }
 
   }
 

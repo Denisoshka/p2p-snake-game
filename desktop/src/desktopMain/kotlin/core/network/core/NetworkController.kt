@@ -14,7 +14,8 @@ private val PortRange = 0..65535
 
 
 class NetworkController<MessageT, InboundMessageTranslatorT : MessageTranslatorT<MessageT>, PayloadT : NodePayloadT>(
-  val messageUtils: MessageUtilsT<MessageT, MessageType>, val pingDelay: Long,
+  val messageUtils: MessageUtilsT<MessageT, MessageType>,
+  val pingDelay: Long,
   val messageTranslator: InboundMessageTranslatorT,
 ) : AutoCloseable {
   private val unicastNetHandler = UnicastNetHandler(this)
@@ -22,13 +23,53 @@ class NetworkController<MessageT, InboundMessageTranslatorT : MessageTranslatorT
   private val messageHandler: NetworkStateMachine<MessageT, InboundMessageTranslatorT, PayloadT>
 
   fun handleUnicastMessage(
-    inboundMsg: MessageT, ipAddress: InetSocketAddress
+    message: MessageT, ipAddress: InetSocketAddress
   ) {
+    val msgT = messageTranslator.getMessageType(message)
+    when(msgT) {
+      MessageType.PingMsg       -> messageHandler.pingHandle(
+        ipAddress, message, MessageType.PingMsg
+      )
+
+      MessageType.SteerMsg      -> messageHandler.steerHandle(
+        ipAddress, message, MessageType.SteerMsg
+      )
+
+      MessageType.AckMsg        -> messageHandler.ackHandle(
+        ipAddress, message, MessageType.AckMsg
+      )
+
+      MessageType.StateMsg      -> messageHandler.stateHandle(
+        ipAddress, message, MessageType.StateMsg
+      )
+
+      MessageType.JoinMsg       -> messageHandler.joinHandle(
+        ipAddress, message, MessageType.JoinMsg
+      )
+
+      MessageType.ErrorMsg      -> messageHandler.errorHandle(
+        ipAddress, message, MessageType.ErrorMsg
+      )
+
+      MessageType.RoleChangeMsg -> messageHandler.roleChangeHandle(
+        ipAddress, message, MessageType.RoleChangeMsg
+      )
+
+      else                      -> {}
+    }
   }
 
   fun handleMulticastMessage(
     message: MessageT, ipAddress: InetSocketAddress
   ) {
+    val msgT = messageTranslator.getMessageType(message)
+    when(msgT) {
+      MessageType.AnnouncementMsg -> messageHandler.announcementHandle(
+        ipAddress, message, MessageType.AnnouncementMsg
+      )
+
+      else                        -> {}
+    }
   }
 
   fun sendUnicast(

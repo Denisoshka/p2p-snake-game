@@ -34,6 +34,8 @@ kotlin {
       implementation(libs.compose.runtime)
       implementation(libs.compose.foundation)
       implementation(libs.compose.material)
+      implementation(libs.protobuf.util)
+      implementation(libs.protobuf.core)
       implementation(libs.kotlinx.coroutines.core)
       implementation(libs.kotlinx.coroutines.jvm)
       implementation(project(":proto"))

@@ -7,7 +7,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
-class Apple(
+class AppleEnt(
   x: Int,
   y: Int,
 ) : Entity {
@@ -27,11 +27,13 @@ class Apple(
   override fun update(context: GameEngine) {}
 
   override fun shootState(context: GameEngine, state: StateMsg) {
-    val xy = hitBox.first()
-    state.foods.add(Coord(xy.x, xy.y))
+    val xyi = hitBox.first()
+    state.foods.add(Coord(xyi.x, xyi.y))
   }
 
   override fun atDead(context: GameEngine) {
     context.map.removeEntity(this)
   }
+
+  override fun restoreHitbox(offsets: List<Coord>) {}
 }

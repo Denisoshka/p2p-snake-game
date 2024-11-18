@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.states.impl
 
-import d.zhdanov.ccfit.nsu.states.State
+import controllers.State
 
 class LobbyState : State {
   override fun launch() {

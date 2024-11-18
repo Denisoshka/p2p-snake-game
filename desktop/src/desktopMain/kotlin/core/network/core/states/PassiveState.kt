@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
+import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import java.net.InetSocketAddress

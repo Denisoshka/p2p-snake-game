@@ -1,8 +1,9 @@
-package d.zhdanov.ccfit.nsu.core.network.controller
+package core.network.core
 
+import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerInit
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -16,13 +17,13 @@ private val logger = KotlinLogging.logger {}
 
 class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
   joinBacklog: Int,
-  val resendDelay: Long,
-  val thresholdDelay: Long,
-//  private val netController: NetworkController<MessageT, InboundMessageTranslator, Payload>,
+  @Volatile var resendDelay: Long,
+  @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
 ) : NodeContext<MessageT, InboundMessageTranslator, Payload> {
+  val msgComparator = ncStateMachine.utils.getComparator()
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp =
+  val nodesByIp =
     ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator, Payload>>()
   private val deadNodeChannel =
     Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
@@ -88,10 +89,26 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
   }
 
 
-  override fun addNewNode(
-    ipAddress: InetSocketAddress
+  fun addNewNode(
+    initialSeq: Long,
+    nodeRole: NodeRole,
+    nodeId: Int,
+    ipAddress: InetSocketAddress,
+    registerInContext: Boolean
   ): Node<MessageT, InboundMessageTranslator, Payload> {
-    TODO("Not yet implemented")
+    nodesByIp[ipAddress]?.let { return it }
+    val node = Node(
+      initialSeq,
+      msgComparator,
+      nodeRole,
+      nodesScope!!,
+      nodeId,
+      ipAddress,
+      this,
+      registerInContext
+    )
+    val ret = nodesByIp.putIfAbsent(ipAddress, node) ?: return node
+    return ret
   }
 
   override suspend fun handleNodeRegistration(

@@ -1,14 +1,13 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
+import core.network.core.Node
+import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.interaction.v1.PlayerContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.*
-import d.zhdanov.ccfit.nsu.core.network.controller.Node
-import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyState
@@ -20,6 +19,8 @@ import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
@@ -29,7 +30,9 @@ private val kPortRange = 1..65535
 class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslatorT<MessageT>, PayloadT : NodePayloadT>(
   private val netController: NetworkController<MessageT, InboundMessageTranslatorT, PayloadT>
 ) : NetworkStateHandler<MessageT, InboundMessageTranslatorT, PayloadT> {
-  private val emptyAddress = InetSocketAddress("0.0.0.0", 0)
+  val emptyAddress = InetSocketAddress("0.0.0.0", 0)
+  val seqNumProvider = AtomicLong(0)
+  val utils = netController.messageUtils
   private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslatorT, PayloadT> =
     TODO()
   private val masterState = MasterState(
@@ -51,43 +54,37 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   private val state: AtomicReference<NetworkState<MessageT, InboundMessageTranslatorT, PayloadT>> =
     AtomicReference(lobbyState)
 
-  val latestState = AtomicReference<Pair<StateMsg, Int>>()
-  val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>> =
+  val latestGameState = AtomicReference<Pair<StateMsg, Int>?>()
+  val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
     AtomicReference()
+
+  val waitToJoin = ConcurrentHashMap<InetSocketAddress, GameConfig>()
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
     state.get().submitSteerMsg(steerMsg)
   }
 
-  override fun handleNetworkStateEvent(event: NetworkStateHandler.NetworkEvents) {
-    when(event) {
-      NetworkStateHandler.NetworkEvents.JoinAccepted    -> TODO()
-      NetworkStateHandler.NetworkEvents.JoinRejected    -> TODO()
-      NetworkStateHandler.NetworkEvents.NodeDeputyNow   -> {
-        when(val st = state.get()) {
-          is ActiveState -> {
-            val oldInfo = masterDeputy.get()
-            val (msInfo, _) = oldInfo
-            val newDepInfo = emptyAddress to nodeId
-            // А вообще же по идее других конкурентных ситуаций и не будет???)))
-            masterDeputy.compareAndSet(oldInfo, msInfo to newDepInfo)
-          }
-        }
-      }
-
-      NetworkStateHandler.NetworkEvents.NodeMasterNow   -> {
-        when(val st = state.get()) {
-          is ActiveState -> {
-            state.compareAndSet(activeState, masterState)
-
-          }
-        }
-      }
-
-      NetworkStateHandler.NetworkEvents.ShutdownContext -> TODO()
-    }
+  fun submitJoinMsg(
+    joinMsg: JoinMsg,
+    address: InetSocketAddress,
+    nodeId: Int,
+    config: GameConfig
+  ) {
+    if(state.get() !is LobbyState) return
+    val seq = seqNumProvider.getAndIncrement()
+    val node = nodesHandler.addNewNode(
+      seq,
+      NodeRole.MASTER,
+      nodeId,
+      address,
+      false
+    )
+    val outp2pmsg = P2PMessage(seq, joinMsg, null, nodeId)
+    val out = msgTranslator.toMessageT(outp2pmsg, MessageType.JoinMsg)
+    node.addMessageForAck(out)
+    waitToJoin[address] = config
+    sendUnicast(out, address)
   }
-
 
   override fun sendUnicast(
     msg: MessageT, nodeAddress: InetSocketAddress
@@ -170,9 +167,10 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
       node: Node<MessageT, InboundMessageTranslatorT, PayloadT>
     ): Boolean = node.running && node.nodeState == NodeT.NodeState.Active
 
-    val (masterInfo, _) = masterDeputy.get()
+    val (masterInfo, _) = masterDeputy.get() ?: return null
     val node = nodesHandler.findNode(::validDeputy)
     val newDeputyInfo = node?.let { Pair(it.ipAddress, it.id) }
+
     masterDeputy.set(Pair(masterInfo, newDeputyInfo))
     return node
   }
@@ -180,11 +178,9 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
   /**
    * @throws IllegalNodeDestination
    * */
-  fun updateDeputyFromState(state: P2PMessage) {
-    if(state.msg.type != MessageType.StateMsg) return
-    val inp2p = state.msg as StateMsg
-    val depStateInfo = inp2p.players.find { it.nodeRole == NodeRole.DEPUTY }
-    val (msInfo, depInfo) = masterDeputy.get()
+  private fun updateDeputyFromState(state: StateMsg) {
+    val depStateInfo = state.players.find { it.nodeRole == NodeRole.DEPUTY }
+    val (msInfo, depInfo) = masterDeputy.get() ?: return
     if(depInfo?.second == depStateInfo?.id) return
     val newDepInfo = depStateInfo?.let {
       try {
@@ -193,15 +189,15 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
         logger.error(e) { "deputy destination has dirty info" }
         throw IllegalNodeDestination(e)
       }
-    }
+    }/*TODO здесь может быть гонка данных когда мы уже в другом состоянии но
+       эта функция долго работает*/
     masterDeputy.set(Pair(msInfo, newDepInfo))
   }
 
   fun onPingMsg(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
   ) {
-    val node = nodesHandler.getNode(ipAddress)
-    node ?: return
+    val node = nodesHandler.getNode(ipAddress) ?: return
     val outp2p = getP2PAck(message, node)
     val outmsg = msgTranslator.toMessageT(
       outp2p, MessageType.AckMsg
@@ -211,24 +207,46 @@ class NetworkStateMachine<MessageT, InboundMessageTranslatorT : MessageTranslato
 
   fun onAckMsg(
     ipAddress: InetSocketAddress, message: MessageT
-  ) {
-    nodesHandler.getNode(ipAddress)?.ackMessage(message)
-  }
+  ) = nodesHandler.getNode(ipAddress)?.ackMessage(message)
 
-  fun onStateMsg(p2pMsg: P2PMessage) {
+
+  fun onStateMsg(ipAddress: InetSocketAddress, message: MessageT) {
+    val (ms, _) = masterDeputy.get() ?: return
+    if(ms.first != ipAddress) return
+
+    val p2pMsg = msgTranslator.fromMessageT(message, MessageType.StateMsg)
     val stateMsg = p2pMsg.msg as StateMsg
     val newStateOrder = stateMsg.stateOrder
-    val curStateOrder = latestState.get()
-    if(newStateOrder <= curStateOrder) return
-    if(!latestState.compareAndSet(curStateOrder, newStateOrder)) return
-    handleInboundState(stateMsg)
+    while(true) {
+      val curState = latestGameState.get() ?: return
+      if(newStateOrder <= curState.second) return
+      val newState = stateMsg to newStateOrder
+      if(!latestGameState.compareAndSet(curState, newState)) return
+      else break
+    }
+    updateDeputyFromState(stateMsg)
   }
 
-  fun handleInboundState(state: StateMsg) {
+  sealed class StateEvents {
+    data class StartGame(val role: NodeRole, val gameConfig: GameConfig) :
+      StateEvents()
   }
 
-
-  fun restoreSnake(){}
+  fun changeState(event: StateEvents) {
+    when(val st = state.get()) {
+      is LobbyState -> {
+        if(event is StateEvents.StartGame) {
+          val ret = when(event.role) {
+            NodeRole.VIEWER -> state.compareAndSet(st, activeState)
+            NodeRole.MASTER -> state.compareAndSet(st, masterState)
+            else            -> state.compareAndSet(st, passiveState)
+          }
+          if(!ret) return
+          st = state.get()
+        }
+      }
+    }
+  }
 
   override fun initialize() {
   }

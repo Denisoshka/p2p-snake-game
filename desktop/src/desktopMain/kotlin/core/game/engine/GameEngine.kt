@@ -1,36 +1,30 @@
 package d.zhdanov.ccfit.nsu.core.game.engine
 
 import d.zhdanov.ccfit.nsu.controllers.GameController
-import d.zhdanov.ccfit.nsu.core.game.GameConfig
+import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.Snake
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
+import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.game.engine.map.GameMap
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
-import d.zhdanov.ccfit.nsu.states.State
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
 
 class GameEngine(
-  private val gameConfig: GameConfig,
+  private val internalGameConfig: InternalGameConfig,
   private val gameController: GameController,
-  private val state: StateMsg? = null,
-) : State {
+  private var stateOrder: Int = 0
+) {
   private val entities: MutableList<Entity> = mutableListOf()
   private val sideEffectEntity: MutableList<Entity> = mutableListOf()
   private val players: MutableMap<Int, Player> = HashMap()
-  private val contextId: AtomicLong = AtomicLong(0)
   private val executor = Executors.newSingleThreadExecutor()
-  private val delayMillis = 1000L / gameConfig.updatesPerSecond
-  private var stateOrder = state?.stateOrder ?: 0
-
-  init {
-    state?.let { restoreContext(state, this) }
-  }
-
+  private val delayMillis = 1000L / internalGameConfig.updatesPerSecond
+  private val directions = Direction.entries.toTypedArray()
   fun addSideEffect(entity: Entity) {
     sideEffectEntity.add(entity)
   }
@@ -41,28 +35,17 @@ class GameEngine(
   }
 
   fun addPlayer(player: Player) {
-    players[player.snake.id] = player
+    players[player.snakeEnt.id] = player
     map.addEntity(player)
   }
 
-  fun restoreContext(state: StateMsg, gameEngine: GameEngine) {
-    for(entity in gameEngine.entities) {
-      when(entity.type) {
-        GameType.Snake -> {
+  fun spawnSnake(id: Int, direction: Direction? = null): SnakeEnt? {
+    val coords = map.findFreeSquare() ?: return null
+    val dir = direction ?: directions[Random.nextInt(directions.size)]
 
-        }
-
-        GameType.Apple -> {
-
-        }
-
-        GameType.None  -> {
-
-        }
-      }
-    }
-    for(pl in state.players) {
-      sn = Snake()
+    return SnakeEnt(dir, id).apply {
+      hitBox.add(EntityOnMapInfo(coords.x, coords.y))
+      hitBox.add(EntityOnMapInfo(coords.x + dir.dx, coords.y + dir.dy))
     }
   }
 
@@ -93,7 +76,7 @@ class GameEngine(
       entity.update(this)
     }
     for((_, snake) in players) {
-      snake.snake.update(this)
+      snake.snakeEnt.update(this)
     }
   }
 
@@ -103,8 +86,8 @@ class GameEngine(
         if(x != y) x.checkCollisions(y, this);
       }
       for((_, snake) in players) {
-        snake.snake.checkCollisions(x, this)
-        x.checkCollisions(snake.snake, this)
+        snake.snakeEnt.checkCollisions(x, this)
+        x.checkCollisions(snake.snakeEnt, this)
       }
     }
 
@@ -128,7 +111,8 @@ class GameEngine(
   }
 
   private fun shootState() {
-    val snakeSnapshot = ArrayList<Snake>(players.size)
+    val snakeSnapshot =
+      ArrayList<d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake>(players.size)
     val foodSnapshot = ArrayList<Coord>(entities.size)
     val playersSnapshot = ArrayList<GamePlayer>(players.size)
     val nextOrder = ++stateOrder;
@@ -150,22 +134,13 @@ class GameEngine(
     sideEffectEntity.clear()
   }
 
-  override fun terminate() {
+  fun terminate() {
     executor.shutdownNow()
   }
 
-  override fun launch() {
+  fun launch() {
     executor.submit {
       gameLoop()
     }
   }
-
-  fun restoreState() {
-
-  }
-
-  override fun launch(state: State) {
-
-  }
-
 }

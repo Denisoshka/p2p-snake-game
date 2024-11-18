@@ -12,19 +12,16 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import kotlin.random.Random
 
-private val FoodSpawnChance = 0.5
+private const val FoodSpawnChance = 0.5
 
-class Snake(
-  direction: Direction,
+class SnakeEnt(
+  @Volatile var direction: Direction,
   val id: Int,
 ) : Entity {
   override var alive: Boolean = true
   override var type: GameType = GameType.Snake
   override val hitBox: MutableList<EntityOnMapInfo> = ArrayList(2)
-  private var direction: Direction = direction
-    private set
   var score: Int = 0
-    private set
   @Volatile var snakeState = SnakeState.ALIVE
 
   override fun restoreHitbox(offsets: List<Coord>) {
@@ -100,7 +97,7 @@ class Snake(
   override fun atDead(context: GameEngine) {
     for(cord in hitBox) {
       if(Random.nextDouble() < FoodSpawnChance) {
-        context.addSideEffect(Apple(cord.x, cord.y))
+        context.addSideEffect(AppleEnt(cord.x, cord.y))
       }
     }
   }

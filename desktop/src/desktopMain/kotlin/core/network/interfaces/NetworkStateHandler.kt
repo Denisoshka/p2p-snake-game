@@ -13,6 +13,5 @@ interface NetworkStateHandler<MessageT, InboundMessageTranslator : MessageTransl
     ShutdownContext,
   }
 
-  fun handleNetworkStateEvent(event: NetworkEvents)
   fun sendUnicast(msg: MessageT, nodeAddress: InetSocketAddress)
 }

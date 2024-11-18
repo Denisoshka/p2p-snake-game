@@ -7,5 +7,5 @@ interface GameStateBridgeT {
   fun exitGame()
   fun submitGameState(state: StateMsg)
   fun applyGameState(state: StateMsg)
-  fun onAction
+  fun onAction()
 }

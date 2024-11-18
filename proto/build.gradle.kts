@@ -1,6 +1,6 @@
 plugins {
-  id("java")
-  id("com.google.protobuf") version "0.9.4"
+  java
+  alias(libs.plugins.protobuf)
 }
 
 repositories {
@@ -8,16 +8,13 @@ repositories {
   mavenCentral()
 }
 
-
-val protobufVersion = "4.28.2"
-
 dependencies {
-  implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
-  implementation("com.google.protobuf:protobuf-java-util:${protobufVersion}")
+  implementation(libs.protobuf.util)
+  implementation(libs.protobuf.core)
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    artifact = libs.protobuf.protoc.get().toString()
   }
 }

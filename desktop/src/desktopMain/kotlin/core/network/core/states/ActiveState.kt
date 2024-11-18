@@ -6,8 +6,8 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.controller.Node
-import d.zhdanov.ccfit.nsu.core.network.controller.NodesHandler
+import core.network.core.Node
+import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
@@ -36,9 +36,7 @@ class ActiveState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
 
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
-  ) {
-    TODO("Not yet implemented")
-  }
+  ) = ncStateMachine.onStateMsg(ipAddress, message)
 
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: MessageT, msgT: MessageType
@@ -46,15 +44,20 @@ class ActiveState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
     val inp2p = translator.fromMessageT(message)
     if(inp2p.senderId == null || inp2p.receiverId == null) return
 
-    val (msInfo, _) = ncStateMachine.masterDeputy.get()
-    if(inp2p.senderId != msInfo.second) return
+    val msDepInfo = ncStateMachine.masterDeputy.get() ?: return
+    if(inp2p.senderId != msDepInfo.first.second) return
 
     val rlchn = inp2p.msg as RoleChangeMsg
 
     if(rlchn.receiverRole == NodeRole.VIEWER) {
-      TODO("out snake dead")
+      TODO("our snake dead, need go to lobby")
     } else if(rlchn.receiverRole == NodeRole.DEPUTY) {
-
+      if(msDepInfo.second?.second == ncStateMachine.nodeId) return;
+      val newDepInfo = ncStateMachine.emptyAddress to ncStateMachine.nodeId
+      val newMsDep = msDepInfo.first to newDepInfo
+      do {
+        val oldMsDepInfo = ncStateMachine.masterDeputy.get() ?: return
+      } while(ncStateMachine.masterDeputy.compareAndSet(oldMsDepInfo, newMsDep))
     }
   }
 
@@ -83,7 +86,7 @@ class ActiveState<MessageT, InboundMessageTranslator : MessageTranslatorT<Messag
   }
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
-    val (masterInfo, _) = ncStateMachine.masterDeputy.get()
+    val (masterInfo, _) = ncStateMachine.masterDeputy.get() ?: return
     val master = nodesHandler.getNode(masterInfo.first)?.let {
       val p2pmsg = P2PMessage()
       it.addMessageForAck()

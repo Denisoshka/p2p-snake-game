@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import d.zhdanov.ccfit.nsu.core.network.controller.Node
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import core.network.core.Node
 import java.net.InetSocketAddress
 
 interface NodeContext<MessageT, InboundMessageTranslator :
@@ -13,7 +13,7 @@ MessageTranslatorT<MessageT>, Payload : NodePayloadT> {
   )
 
   fun addNewNode(
-    ipAddress: InetSocketAddress
+    ipAddress: InetSocketAddress, registerInContext: Boolean = true
   ): Node<MessageT, InboundMessageTranslator, Payload>
 
   suspend fun handleNodeRegistration(

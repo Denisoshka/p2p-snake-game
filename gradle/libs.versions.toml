@@ -19,6 +19,7 @@ protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 [libraries]
 protobuf-util = { group = "com.google.protobuf", name = "protobuf-java-util", version.ref = "protobuf-version" }
 protobuf-core = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf-version" }
+protobuf-protoc = {group = "com.google.protobuf", name = "protoc", version.ref ="protobuf-version"}
 kotlinx-coroutines-jvm = { group = "org.jetbrains.kotlinx", name ="kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name ="kotlinx-coroutines-core", version.ref = "coroutines" }
 mapstruct = { group = "org.mapstruct", name = "mapstruct", version.ref = "mapstruct" }
