@@ -1,16 +1,15 @@
 package core.network.core
 
+import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalStateMachineStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT.NodeEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import java.net.InetSocketAddress
 import java.util.*
 import java.util.concurrent.atomic.AtomicLong
@@ -25,25 +24,17 @@ private const val IncorrectRegisterEvent =
 /**
  * todo fix doc
  */
-class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+class Node(
   initMsgSeqNum: Long,
-  messageComparator: Comparator<MessageT>,
+  messageComparator: Comparator<GameMessage>,
   @Volatile override var nodeRole: NodeRole,
   private val observerScope: CoroutineScope,
   override val id: Int,
   override val ipAddress: InetSocketAddress,
-  private val nodesHandler: NodesHandler<MessageT, InboundMessageTranslator, Payload>,
+  private val nodesHandler: NodesHandler,
   var requireToRegisterInContext: Boolean = true,
 ) : NodeT {
   @Volatile var payloadT: NodePayloadT? = null
-  val running: Boolean
-    get() {
-      return nodeState != NodeT.NodeState.Disconnected
-    }
-
-  @Volatile override var nodeState =
-    if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
-    else NodeT.NodeState.Active
 
   val resendDelay = nodesHandler.resendDelay
   val thresholdDelay = nodesHandler.thresholdDelay
@@ -52,21 +43,22 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
   @Volatile private var lastSend = System.currentTimeMillis()
   private val msgSeqNum = AtomicLong(initMsgSeqNum)
   @Volatile private var observeJob: Job? = null
-  private val stateHolder =
-    StateHolder<MessageT, InboundMessageTranslator, Payload>(
-
-    )
-
-  init {
-    observeJob = with(stateHolder) {
-      observerScope.startObservation(this@Node)
+  private val stateHolder = AtomicReference(
+    if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
+    else NodeT.NodeState.Active
+  )
+  val state: NodeT.NodeState
+    get() = stateHolder.get()
+  val running: Boolean
+    get() {
+      val ret = stateHolder.get()
+      return ret == NodeT.NodeState.Active || ret == NodeT.NodeState.Passive
     }
-  }
 
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<MessageT, Long> = TreeMap(
+  private val msgForAcknowledge: TreeMap<GameMessage, Long> = TreeMap(
     messageComparator
   )
 
@@ -80,14 +72,15 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     lastSend = System.currentTimeMillis()
   }
 
-  fun ackMessage(message: MessageT) {
+  fun ackMessage(message: GameMessage): GameMessage? {
     synchronized(msgForAcknowledge) {
-      msgForAcknowledge.remove(message)
       lastReceive = System.currentTimeMillis()
+      msgForAcknowledge.remove(message) ?: return null
+      return message
     }
   }
 
-  fun addMessageForAck(message: MessageT): Boolean {
+  fun addMessageForAck(message: GameMessage): Boolean {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
       lastSend = System.currentTimeMillis()
@@ -95,19 +88,13 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     return true
   }
 
-  fun addAllMessageForAck(messages: List<MessageT>) {
+  fun addAllMessageForAck(messages: List<GameMessage>) {
     synchronized(msgForAcknowledge) {
       for(msg in messages) {
         msgForAcknowledge[msg] = System.currentTimeMillis()
       }
       lastSend = System.currentTimeMillis()
     }
-  }
-
-  fun handleEvent(event: NodeEvent) = stateHolder.onEvent(event)
-
-  fun getUnacknowledgedMessages(): List<MessageT> {
-    return stateHolder.getUnacknowledgedMessages(this)
   }
 
   fun getNextMSGSeqNum(): Long {
@@ -132,245 +119,113 @@ class Node<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Pa
     return ret
   }
 
-  class StateHolder<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
-    state: InternalNodeState
-  ) {
-    private val currState = AtomicReference(state)
-    private var bootChannel: Channel<NodeEvent> = Channel()
+  private fun changeState(newState: NodeT.NodeState): Boolean {
+    do {
+      val prevState = stateHolder.get()
+      if(newState <= prevState) return false;
+    } while(stateHolder.compareAndSet(prevState, newState))
+    return true
+  }
 
-    /**
-     * Represents the various states of a node in the system.
-     * ## State Diagram:
-     * ```
-     *  ┌───────┐
-     *  │Booting│───────────────────►┐
-     *  └──┬────┘                    │
-     *     ▼                         │
-     *  ┌──────────┐                 ▼
-     *  │Processing│────────────────►┤
-     *  └──┬───────┘                 │
-     *     ▼                         │
-     *  ┌─────────────────┐          │
-     *  │FinalizationStart│          │
-     *  └──┬──────────────┘          │
-     *     ▼                         │
-     *  ┌─────────────────┐          ▼
-     *  │FinalizingProcess│─────────►┤
-     *  └──┬──────────────┘          │
-     *     ▼                         │
-     *  ┌──────────────┐             │
-     *  │FinalizedState│             │
-     *  └──┬───────────┘             │
-     *     ▼                         │
-     *   ┌──────────┐                ▼
-     *   │Terminated│◄───────────────┘
-     *   └──────────┘
-     * ```
-     */
-    enum class InternalNodeState {
-      Booting,
-      Processing,
-      FinalizationStart,
-      FinalizingProcess,
-      FinalizedState,
-      Terminated;
-    }
-
-    fun CoroutineScope.startObservation(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ) = launch {
-      if(currState.get() == InternalNodeState.Booting) {
-        launch {
-          val ret = withTimeoutOrNull(node.thresholdDelay) {
-            bootChannel.receive()
-          }
-          if(ret != null && ret != NodeEvent.NodeRegistered) {
-            changeState(InternalNodeState.Processing)
-          } else if(ret == null) {
-//              todo make error send here
-//            node.nodeState = NodeT.NodeState.Disabled
-            changeState(InternalNodeState.Terminated)
-          } else {
-            throw IllegalNodeRegisterAttempt(IncorrectRegisterEvent)
-          }
-        }
+  fun handleEvent(event: NodeEvent) {
+    when(event) {
+      NodeEvent.ShutdownFromCluster, NodeEvent.ShutdownNowFromCluster -> {
+        changeState(NodeT.NodeState.Disconnected)
       }
-      while(isActive) {
-        when(currState.get()) {
-          InternalNodeState.Booting           -> {
-            val ret = onBooting(node)
-            delay(ret)
-          }
 
-          InternalNodeState.Processing        -> {
-            val ret = onProcessing(node)
-            delay(ret)
-          }
+      NodeEvent.ShutdownFromUser                                      -> {
+        changeState(NodeT.NodeState.Disconnected)
+      }
 
-          InternalNodeState.FinalizationStart -> {
-            if(changeState(InternalNodeState.FinalizingProcess)) {
-              node.payloadT?.onContextObserverTerminated()
-              node.nodeState = NodeT.NodeState.Disconnected
-              node.nodesHandler.handleNodeDetachPrepare(node)
-            }
-          }
+      else                                                            -> {}
+    }
+  }
 
-          InternalNodeState.FinalizingProcess -> {
-            val ret = onFinalizingProcess(node)
-            delay(ret)
-          }
+  fun CoroutineScope.startObservation(
+    node: Node
+  ) = launch {
+    while(isActive) {
+      var detachedFromCluster: Boolean = false
+      when(stateHolder.get()) {
+        NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
 
-          InternalNodeState.FinalizedState    -> {
-            currState.set(InternalNodeState.Terminated)
-          }
+        }
 
-          InternalNodeState.Terminated        -> {
+        NodeT.NodeState.Disconnected                    -> {
+          if(!detachedFromCluster) {
+            detachedFromCluster = true
             node.payloadT?.onContextObserverTerminated()
-            node.nodeState = NodeT.NodeState.Disconnected
-            node.nodesHandler.handleNodeTermination(node)
-            break
-          }
-
-          else                                -> {
-            logger.error { "state machine state is null" }
-            throw IllegalStateMachineStateIsNull()
-          }
-        }
-      }
-    }
-
-    /**
-     * Atomically sets a new state in the state machine, ensuring state hierarchy consistency.
-     *
-     * Attempts to update `statemachineState` to the specified `newState`. This operation succeeds
-     * only if the current state in `statemachineState` has not changed during execution
-     * and is lower in the hierarchy than `newState`.
-     *
-     * @param newState The new state to set, which should be hierarchically higher than the current state.
-     * @return `true` if the state was successfully updated to `newState`;
-     *         `false` if `newState` is less than or equal to the current state, in which case
-     *         the update is prevented to maintain the hierarchical order.
-     */
-    private fun changeState(newState: InternalNodeState): Boolean {
-      do {
-        val prevState = currState.get()
-        if(newState <= prevState) return false;
-      } while(currState.compareAndSet(prevState, newState))
-      return true
-    }
-
-    fun onEvent(event: NodeEvent) {
-      when(event) {
-        NodeEvent.NodeRegistered              -> {
-          if(currState.get() != InternalNodeState.Booting) {
-            throw IllegalNodeRegisterAttempt(NodeAlreadyRegisteredMsg)
-          }
-          bootChannel.run {
-            val ret = trySend(event)
-            if(ret.isFailure || ret.isClosed) {
-              throw IllegalNodeRegisterAttempt(NodeAlreadyRegisteredMsg)
-            }
-            close()
+            node.payloadT = null
+            node.nodesHandler.handleNodeDetachPrepare(node)
           }
         }
 
-        NodeEvent.ShutdownFromCluster         -> {
-          changeState(InternalNodeState.FinalizationStart)
+        NodeT.NodeState.Terminated                      -> {
+          node.payloadT?.onContextObserverTerminated()
+          node.payloadT = null
         }
 
-        NodeEvent.ShutdownNowFromCluster      -> {
-          changeState(InternalNodeState.Terminated)
-        }
-
-        NodeEvent.ShutdownFromUser            -> {
-          changeState(InternalNodeState.FinalizationStart)
-        }
-
-        NodeEvent.ShutdownFinishedFromCluster -> {
-          throw IllegalStateException("not supported")
+        else                                            -> {
+          logger.error { "state machine state is null" }
+          throw IllegalStateMachineStateIsNull()
         }
       }
     }
+  }
 
-    /**
-     * @return [List]`<MessageT>` node [InternalNodeState] == [InternalNodeState.Terminated]
-     * @throws IllegalUnacknowledgedMessagesGetAttempt if [InternalNodeState] !=
-     * [InternalNodeState.Terminated]
-     * */
-    fun getUnacknowledgedMessages(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ): List<MessageT> {
-      if(currState.get() != InternalNodeState.Terminated) {
-        throw IllegalUnacknowledgedMessagesGetAttempt()
-      }
-      return synchronized(node.msgForAcknowledge) {
-        node.msgForAcknowledge.keys.toList();
-      }
+  fun getUnacknowledgedMessages(
+    node: Node
+  ): List<GameMessage> {
+    if(stateHolder.get() > NodeT.NodeState.Disconnected) {
+      throw IllegalUnacknowledgedMessagesGetAttempt()
     }
-
-
-    private fun onBooting(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ): Long {
-      synchronized(node.msgForAcknowledge) {
-        if(currState.get() != InternalNodeState.Booting) return 0
-
-        val now = System.currentTimeMillis()
-        if(now - node.lastReceive < node.thresholdDelay) {
-
-          currState.set(InternalNodeState.Terminated)
-          return 0
-        }
-        node.sendPingIfNecessary(node.resendDelay, now)
-
-        return node.resendDelay
-      }
+    return synchronized(node.msgForAcknowledge) {
+      node.msgForAcknowledge.keys.toList();
     }
+  }
 
-    private fun onProcessing(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ): Long {
-      synchronized(node.msgForAcknowledge) {
-        if(currState.get() != InternalNodeState.Processing) return 0
-
-        val now = System.currentTimeMillis()
-        if(now - node.lastReceive > node.thresholdDelay) {
-          currState.set(InternalNodeState.Terminated)
-          return 0
-        }
-
-        val nextDelay = node.checkMessages()
-        node.sendPingIfNecessary(nextDelay, now)
-
-        return nextDelay
-      }
+  private fun checkNodeConditions(
+    now: Long, node: Node
+  ): Long {
+    if(now - node.lastReceive > node.thresholdDelay) {
+      stateHolder.set(NodeT.NodeState.Terminated)
+      return 0
     }
+    val nextDelay = node.checkMessages()
+    return nextDelay
+  }
 
-    private fun onFinalizingProcess(
-      node: Node<MessageT, InboundMessageTranslator, Payload>
-    ): Long {
-      synchronized(node.msgForAcknowledge) {
-        if(currState.get() != InternalNodeState.FinalizingProcess) return 0
-        val now = System.currentTimeMillis()
-        val ret = checkNodeConditions(now, node)
-        if(node.msgForAcknowledge.isEmpty()) {
-          node.nodeState = NodeT.NodeState.Disconnected
-          changeState(InternalNodeState.FinalizedState)
-          return 0
-        }
-        return ret;
-      }
-    }
+  private fun onProcessing(
+    node: Node
+  ): Long {
+    synchronized(node.msgForAcknowledge) {
+      if(!running) return 0
 
-    private fun checkNodeConditions(
-      now: Long, node: Node<MessageT, InboundMessageTranslator, Payload>
-    ): Long {
+      val now = System.currentTimeMillis()
       if(now - node.lastReceive > node.thresholdDelay) {
-        currState.set(InternalNodeState.Terminated)
+        stateHolder.set(NodeT.NodeState.Terminated)
         return 0
       }
+
       val nextDelay = node.checkMessages()
+      node.sendPingIfNecessary(nextDelay, now)
+
       return nextDelay
+    }
+  }
+
+  private fun onFinalizingProcess(
+    node: Node
+  ): Long {
+    synchronized(node.msgForAcknowledge) {
+      if(stateHolder.get() != NodeT.NodeState.Disconnected) return 0
+      val now = System.currentTimeMillis()
+      val ret = checkNodeConditions(now, node)
+      if(node.msgForAcknowledge.isEmpty()) {
+        stateHolder.set(NodeT.NodeState.Terminated)
+        return 0
+      }
+      return ret;
     }
   }
 }

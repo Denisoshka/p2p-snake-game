@@ -1,10 +1,8 @@
 package core.network.core
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerInit
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -15,22 +13,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val logger = KotlinLogging.logger {}
 
-class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload : NodePayloadT>(
+class NodesHandler(
   joinBacklog: Int,
   @Volatile var resendDelay: Long,
   @Volatile var thresholdDelay: Long,
-  private val ncStateMachine: NetworkStateMachine<MessageT, InboundMessageTranslator, Payload>,
-) : NodeContext<MessageT, InboundMessageTranslator, Payload> {
+  private val ncStateMachine: NetworkStateMachine,
+) : NodeContext {
   val msgComparator = ncStateMachine.utils.getComparator()
   @Volatile private var nodesScope: CoroutineScope? = null
   val nodesByIp =
-    ConcurrentHashMap<InetSocketAddress, Node<MessageT, InboundMessageTranslator, Payload>>()
+    ConcurrentHashMap<InetSocketAddress, Node>()
   private val deadNodeChannel =
-    Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
+    Channel<Node>(joinBacklog)
   private val registerNewNode =
-    Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
+    Channel<Node>(joinBacklog)
   private val reconfigureContext =
-    Channel<Node<MessageT, InboundMessageTranslator, Payload>>(joinBacklog)
+    Channel<Node>(joinBacklog)
 
   /**
    * @throws IllegalNodeHandlerInit
@@ -51,8 +49,8 @@ class NodesHandler<MessageT, InboundMessageTranslator : MessageTranslatorT<Messa
 
   fun getNode(ipAddr: InetSocketAddress) = nodesByIp[ipAddr]
   fun findNode(
-    condition: (Node<MessageT, InboundMessageTranslator, Payload>) -> Boolean
-  ): Node<MessageT, InboundMessageTranslator, Payload>? {
+    condition: (Node) -> Boolean
+  ): Node? {
     for((_, node) in nodesByIp) {
       if(condition(node)) return node
     }

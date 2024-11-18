@@ -5,7 +5,6 @@ import java.net.InetSocketAddress
 
 interface NodeT {
   var nodeRole: NodeRole
-  var nodeState: NodeState
   val id: Int
   val ipAddress: InetSocketAddress
 
@@ -14,10 +13,10 @@ interface NodeT {
     Active,
     Passive,
     Disconnected,
+    Terminated,
   }
 
   enum class NodeEvent {
-    NodeRegistered,
     ShutdownFromCluster,
     ShutdownNowFromCluster,
     ShutdownFinishedFromCluster,

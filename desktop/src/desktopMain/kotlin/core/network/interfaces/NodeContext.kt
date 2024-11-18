@@ -14,17 +14,17 @@ MessageTranslatorT<MessageT>, Payload : NodePayloadT> {
 
   fun addNewNode(
     ipAddress: InetSocketAddress, registerInContext: Boolean = true
-  ): Node<MessageT, InboundMessageTranslator, Payload>
+  ): Node
 
   suspend fun handleNodeRegistration(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   )
 
   suspend fun handleNodeTermination(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   )
 
   suspend fun handleNodeDetachPrepare(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   )
 }
