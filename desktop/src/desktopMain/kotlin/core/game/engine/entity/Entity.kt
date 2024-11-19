@@ -10,7 +10,7 @@ interface Entity {
   var type: GameType
   var alive: Boolean
   fun checkCollisions(entity: Entity, context: GameEngine)
-  fun update(context: GameEngine)
+  fun update(context: GameEngine, sideEffects: List<Entity>)
   fun shootState(context: GameEngine, state: StateMsg)
   fun atDead(context: GameEngine)
   fun restoreHitbox(offsets: List<Coord>)

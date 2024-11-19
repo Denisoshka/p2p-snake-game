@@ -5,18 +5,15 @@ import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
 import d.zhdanov.ccfit.nsu.core.interaction.v1.LocalPlayerContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NetPlayerContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
@@ -27,19 +24,21 @@ import java.net.InetSocketAddress
 private val logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val PlayerNameIsBlank = "player name blank"
 private const val NodeAlreadyRunning = "node already running"
+private const val ConfigIsNull = "game config not set"
 
 class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
   private val nodesHandler: NodesHandler,
 ) : NetworkState {
-  @Volatile var playerAndGame: Pair<LocalPlayerContext, GameEngine>? =
-    null
+  private val gameEngine: GameEngine = GameEngine()
+  @Volatile var config: InternalGameConfig? = null
+  @Volatile var player: LocalPlayerContext? = null
 
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val request = MessageTranslator.fromMessageT(
+    val request = MessageTranslator.fromProto(
       message, msgT
     )
     try {
@@ -59,8 +58,6 @@ class MasterState(
       logger.trace { e }
 
     }
-
-
   }
 
   override fun pingHandle(
@@ -79,7 +76,7 @@ class MasterState(
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
     if(!node.running) return
-    val inp2p = MessageTranslator.fromMessageT(
+    val inp2p = MessageTranslator.fromProto(
       message, MessageType.RoleChangeMsg
     )
     (inp2p.msg as RoleChangeMsg).let {
@@ -99,7 +96,7 @@ class MasterState(
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
     if(!node.running) return
-    val inp2p = MessageTranslator.fromMessageT(
+    val inp2p = MessageTranslator.fromProto(
       message, MessageType.SteerMsg
     )
     node.payloadT?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
@@ -123,7 +120,7 @@ class MasterState(
       NodeRole.DEPUTY,
       ncStateMachine.nodeId,
       newDep.id,
-      newDep.getNextMSGSeqNum()
+      ncStateMachine.nextSegNum
     )
     val outMsg = MessageTranslator.toMessageT(
       outP2PRoleChange, MessageType.RoleChangeMsg
@@ -132,40 +129,18 @@ class MasterState(
   }
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
-    playerAndGame?.first?.handleEvent(
+    player?.handleEvent(
       steerMsg, ncStateMachine.nextSegNum
     )
   }
 
   override fun initialize() {
-
-  }
-
-  fun init(gameConfig: InternalGameConfig, gameState: StateMsg?) {
-    val stOrder = gameState?.stateOrder ?: 0
-    val eng = GameEngine(gameConfig, ,stOrder)
-    if(gameState != null) {
-      val xyi: MutableMap<Int, SnakeEnt> = HashMap()
-      for(sninfo in gameState.snakes) {
-        val sn = SnakeEnt(sninfo.direction, sninfo.playerId)
-        sn.restoreHitbox(sninfo.cords)
-        sn.snakeState = sninfo.snakeState
-        if(sn.snakeState == SnakeState.ALIVE) xyi[sninfo.playerId] = sn
-      }
-      for(plinfo in gameState.snakes) {
-        val pl = NetPlayerContext
-      }
-    } else {
-      val sn = eng.spawnSnake(
-        ncStateMachine.nodeId
-      ) ?: throw RuntimeException("ну пиздец")
-      val pl = LocalPlayerContext(gameConfig.playerName, this, sn)
-      playerAndGame = pl to eng
-    }
-
+    val conf = config ?: throw IllegalMasterLaunchAttempt(ConfigIsNull)
+    gameEngine.initContext(conf, null, null)
+    gameEngine.spawnSnake(ncStateMachine.nodeId)
   }
 
   override fun cleanup() {
-    TODO("Not yet implemented")
+
   }
 }

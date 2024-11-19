@@ -3,84 +3,53 @@ package d.zhdanov.ccfit.nsu.core.network.core
 import core.network.core.Node
 import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.*
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AckMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
-import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveState
-import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyState
-import d.zhdanov.ccfit.nsu.core.network.core.states.MasterState
-import d.zhdanov.ccfit.nsu.core.network.core.states.PassiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.*
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
-private val logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
+private val Logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
 private val kPortRange = 1..65535
-
 
 class NetworkStateMachine(
   private val netController: NetworkController
 ) : NetworkStateHandler {
-  val emptyAddress = InetSocketAddress("0.0.0.0", 0)
   private val seqNumProvider = AtomicLong(0)
   val nextSegNum
     get() = seqNumProvider.incrementAndGet()
   private val nodesHandler: NodesHandler =
     TODO()
-  private val masterState = MasterState(
-    this, netController, nodesHandler
-  )
-  private val activeState = ActiveState(
-    this, netController, nodesHandler
-  )
-  private val passiveState = PassiveState(
-    this, netController, nodesHandler
-  )
-  private val lobbyState = LobbyState(
-    this, netController, nodesHandler
-  )
+  private val masterState = MasterState(this, netController, nodesHandler)
+  private val activeState = ActiveState(this, netController, nodesHandler)
+  private val passiveState = PassiveState(this, netController, nodesHandler)
+  private val lobbyState = LobbyState(this, netController, nodesHandler)
 
   @Volatile var nodeId = 0
     private set
   private val state: AtomicReference<NetworkState> =
     AtomicReference(lobbyState)
-
+  val networkState: NetworkState
+    get() = state.get()
   val latestGameState = AtomicReference<Pair<StateMsg, Int>?>()
   val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
     AtomicReference()
 
-  val waitToJoin = ConcurrentHashMap<InetSocketAddress, GameConfig>()
+  override fun submitSteerMsg(
+    steerMsg: SteerMsg
+  ) = state.get().submitSteerMsg(steerMsg)
 
-  override fun submitSteerMsg(steerMsg: SteerMsg) {
-    state.get().submitSteerMsg(steerMsg)
-  }
-
-  fun submitJoinMsg(
-    joinMsg: JoinMsg,
-    address: InetSocketAddress,
-    nodeId: Int,
-    config: GameConfig
-  ) {
-    if(state.get() !is LobbyState) return
-    val seq = seqNumProvider.getAndIncrement()
-    val node = nodesHandler.addNewNode(
-      seq,
-      NodeRole.MASTER,
-      nodeId,
-      address,
-      false
-    )
-    val outp2pmsg = P2PMessage(seq, joinMsg, null, nodeId)
-    val out = MessageTranslator.toMessageT(outp2pmsg, MessageType.JoinMsg)
-    node.addMessageForAck(out)
-    waitToJoin[address] = config
-    sendUnicast(out, address)
-  }
 
   override fun sendUnicast(
     msg: GameMessage, nodeAddress: InetSocketAddress
@@ -181,7 +150,7 @@ class NetworkStateMachine(
       try {
         Pair(InetSocketAddress(it.ipAddress, it.port!!), it.id)
       } catch(e: Exception) {
-        logger.error(e) { "deputy destination has dirty info" }
+        Logger.error(e) { "deputy destination has dirty info" }
         throw IllegalNodeDestination(e)
       }
     }/*TODO здесь может быть гонка данных когда мы уже в другом состоянии но
@@ -200,6 +169,9 @@ class NetworkStateMachine(
     netController.sendUnicast(outmsg, node.ipAddress)
   }
 
+  /**
+   * provide base action on ack msg
+   */
   fun onAckMsg(
     ipAddress: InetSocketAddress, message: GameMessage
   ) = nodesHandler.getNode(ipAddress)?.ackMessage(message)
@@ -209,7 +181,7 @@ class NetworkStateMachine(
     val (ms, _) = masterDeputy.get() ?: return
     if(ms.first != ipAddress) return
 
-    val p2pMsg = MessageTranslator.fromMessageT(message, MessageType.StateMsg)
+    val p2pMsg = MessageTranslator.fromProto(message, MessageType.StateMsg)
     val stateMsg = p2pMsg.msg as StateMsg
     val newStateOrder = stateMsg.stateOrder
     while(true) {
@@ -220,6 +192,53 @@ class NetworkStateMachine(
       else break
     }
     parseState(stateMsg)
+    TODO("проверить на корректность")
+  }
+
+  fun changeState(event: NetworkStateChangeEvents) {
+    synchronized(this) {
+      val curState = state.get()
+      when(event) {
+        is NetworkStateChangeEvents.LaunchGame   -> {
+          if(curState !is LobbyState) return
+          curState.cleanup()
+          masterState.config = event.config
+
+          state.set(masterState)
+          masterState.initialize()
+        }
+
+        is NetworkStateChangeEvents.MasterNow    -> {
+          if(curState !is ActiveState) return
+
+          state.set(masterState)
+          masterState.initialize()
+        }
+
+        NetworkStateChangeEvents.SwitchToLobby   -> {
+          if(curState is LobbyState) return
+          curState.cleanup()
+
+          state.set(lobbyState)
+          lobbyState.initialize()
+        }
+
+        is NetworkStateChangeEvents.JoinAsNormal -> {
+          if(curState is LobbyState) return
+          curState.cleanup()
+
+          state.set(activeState)
+          activeState.initialize()
+        }
+
+        is NetworkStateChangeEvents.JoinAsViewer -> {
+          if(curState is LobbyState) return
+
+          state.set(passiveState)
+          activeState.initialize()
+        }
+      }
+    }
   }
 
   override fun initialize() {

@@ -106,7 +106,7 @@ class SnakeEnt(
     return score
   }
 
-  override fun update(context: GameEngine) {
+  override fun update(context: GameEngine, sideEffects: List<Entity>) {
     hitBox.removeLast()
     val point = EntityOnMapInfo(
       hitBox[0].x + direction.dx, hitBox[0].y + direction.dy
@@ -127,16 +127,18 @@ class SnakeEnt(
     val head = hitBox.first()
 
     if(entity.hitBox.any { point -> point.x == head.x && point.y == head.y }) {
-      when(entity.type) {
-        GameType.Snake -> {
+      when(entity) {
+        is SnakeEnt -> {
           if(this === entity) {
             TODO()
+          }else {
+            entity.score++
+            alive = false
           }
-          alive = false
         }
 
-        GameType.Apple -> if(entity.alive) ++score
-        else           -> {}
+        is AppleEnt -> if(entity.alive) ++score
+        else        -> {}
       }
     }
   }

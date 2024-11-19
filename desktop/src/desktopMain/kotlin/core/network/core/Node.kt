@@ -3,7 +3,7 @@ package core.network.core
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalStateMachineStateIsNull
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNetworkStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT.NodeEvent
@@ -164,7 +164,7 @@ class Node(
 
         else                                            -> {
           logger.error { "state machine state is null" }
-          throw IllegalStateMachineStateIsNull()
+          throw IllegalNetworkStateIsNull()
         }
       }
     }

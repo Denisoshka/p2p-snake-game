@@ -24,7 +24,7 @@ class AppleEnt(
     }
   }
 
-  override fun update(context: GameEngine) {}
+  override fun update(context: GameEngine, sideEffects: List<Entity>) {}
 
   override fun shootState(context: GameEngine, state: StateMsg) {
     val xyi = hitBox.first()

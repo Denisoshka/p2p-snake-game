@@ -1,15 +1,12 @@
 package d.zhdanov.ccfit.nsu.controllers
 
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import controllers.State
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
-import controllers.State
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 
-class GameController<MessageT, InboundMessageTranslatorT : MessageTranslatorT<MessageT>, PayloadT : NodePayloadT>(
-  baseState: State,
-  val ncStateHandler: NetworkStateMachine<MessageT, InboundMessageTranslatorT, PayloadT>
+class GameController(
+  val ncStateHandler: NetworkStateMachine
 ) {
   private val upSteer = SteerMsg(Direction.UP)
   private val rightSteer = SteerMsg(Direction.RIGHT)

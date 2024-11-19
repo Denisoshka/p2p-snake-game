@@ -1,5 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network.core.exceptions
 
-class IllegalStateMachineStateIsNull : IllegalStateException(
+class IllegalNetworkStateIsNull : IllegalStateException(
   "state machine state is null"
 )
