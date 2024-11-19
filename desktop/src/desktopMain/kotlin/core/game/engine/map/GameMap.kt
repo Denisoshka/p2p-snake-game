@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.game.engine.map
 
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 
-class GameMap(val width: Int, val height: Int) {
+class GameMap(private val width: Int, private val height: Int) {
   private val mapContainer = mutableSetOf<EntityOnMapInfo>()
 
   private fun isSquareFree(point: EntityOnMapInfo): Boolean {

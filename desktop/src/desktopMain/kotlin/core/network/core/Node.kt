@@ -31,8 +31,8 @@ class Node(
   @Volatile var payloadT: NodePayloadT? = null,
 ) : NodeT {
 
-  val resendDelay = nodesHandler.resendDelay
-  val thresholdDelay = nodesHandler.thresholdDelay
+  private val resendDelay = nodesHandler.resendDelay
+  private val thresholdDelay = nodesHandler.thresholdDelay
 
   @Volatile private var lastReceive = System.currentTimeMillis()
   @Volatile private var lastSend = System.currentTimeMillis()
@@ -44,10 +44,10 @@ class Node(
   val state: NodeT.NodeState
     get() = stateHolder.get()
   val running: Boolean
-    get() {
-      val ret = stateHolder.get()
-      return ret == NodeT.NodeState.Active || ret == NodeT.NodeState.Passive
+    get() = stateHolder.get().let {
+      return it == NodeT.NodeState.Active || it == NodeT.NodeState.Passive
     }
+
 
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
@@ -141,7 +141,7 @@ class Node(
     var nextDelay = 0L
     while(isActive) {
       delay(nextDelay)
-      var detachedFromCluster: Boolean = false
+      var detachedFromCluster = false
       when(stateHolder.get()) {
         NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
           nextDelay = onProcessing()
@@ -160,6 +160,7 @@ class Node(
         NodeT.NodeState.Terminated                      -> {
           node.payloadT?.onContextObserverTerminated()
           node.payloadT = null
+          TODO("make node detach")
         }
 
         else                                            -> {
@@ -213,8 +214,7 @@ class Node(
         stateHolder.set(NodeT.NodeState.Terminated)
         return 0
       }
-      val nextDelay = checkMessages()
-      return ret;
+      return ret
     }
   }
 }

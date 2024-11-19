@@ -20,20 +20,18 @@ import kotlin.random.Random
 private val Logger = KotlinLogging.logger(GameEngine::class.java.name)
 private const val GameConfigIsNull = "Game config null"
 
-class GameEngine(
+class GameEngine<PlayerContextInfo>(
+  private val joinInStateQ: Int,
   private var stateOrder: Int = 0
 ) {
   val sideEffectEntity: MutableList<Entity> = mutableListOf()
-  val map: GameMap = TODO()
   private val entities: MutableList<Entity> = mutableListOf()
-//  private val players: MutableMap<Int, Entity> = HashMap()
+  val map: GameMap = TODO()
 
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
   private var gameConfig: InternalGameConfig? = null
-
-  private val joinChannel: Channel<>()
-
+  private val joinBacklog: Channel<PlayerContextInfo>(joinInStateQ)
   fun spawnSnake(id: Int, direction: Direction? = null): SnakeEnt? {
     val coords = map.findFreeSquare() ?: return null
     val dir = direction ?: directions[Random.nextInt(directions.size)]
@@ -47,11 +45,12 @@ class GameEngine(
 
   }
 
-  private fun gameLoop(gameConfig: GameConfig) {
+  private fun gameLoop(gameConfig: InternalGameConfig) {
     synchronized(this) {} /*happens before action lol*/
+    val gameSettings = gameConfig.gameSettings
     while(Thread.currentThread().isAlive) {
       val startTime = System.currentTimeMillis()
-      updatePreprocess(sideEffectEntity, gameConfig)
+      updatePreprocess(sideEffectEntity, gameSettings)
 
       update()
       checkCollision()
@@ -59,7 +58,7 @@ class GameEngine(
 
       val endTime = System.currentTimeMillis()
       val timeTaken = endTime - startTime
-      val sleepTime = gameConfig.stateDelayMs - timeTaken
+      val sleepTime = gameSettings.stateDelayMs - timeTaken
 
       if(sleepTime > 0) {
         Thread.sleep(sleepTime)
@@ -111,7 +110,7 @@ class GameEngine(
 
     val applesQ = entities.count { it.type == GameType.Apple }
     gameConfig.foodStatic - applesQ
-    
+
     sideEffectEntity.forEach { map.addEntity(it) }
     sideEffectEntity.clear()
 
@@ -119,19 +118,18 @@ class GameEngine(
 
   fun shutdownNow() {
     synchronized(this) {
+
       Logger.info { "${GameEngine::class.java.name} launched" }
       executor.shutdownNow()
     }
   }
 
   fun initContext(
-    config: InternalGameConfig, entities: List<Entity>?, players: List<Entity>?
+    config: InternalGameConfig, entities: List<Entity>?
   ) {
-    entities?.let {
-      this.entities.addAll(it)
-    }
-    players?.forEach { this.players[it.snakeEnt.id] = it }
-    TODO("пересобрать мапку из конфига")
+    TODO("make map init")
+    entities?.let { this.entities.addAll(it) }
+    this.entities.forEach { map.addEntity(it) }
   }
 
   fun launch() {

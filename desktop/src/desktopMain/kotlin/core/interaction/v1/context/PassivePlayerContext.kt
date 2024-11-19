@@ -1,7 +1,6 @@
-package d.zhdanov.ccfit.nsu.core.interaction.v1
+package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import core.network.core.Node
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
