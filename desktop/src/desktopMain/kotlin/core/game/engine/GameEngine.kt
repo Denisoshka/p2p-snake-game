@@ -51,7 +51,7 @@ class GameEngine(
     synchronized(this) {} /*happens before action lol*/
     while(Thread.currentThread().isAlive) {
       val startTime = System.currentTimeMillis()
-      updatePreprocess(sideEffectEntity)
+      updatePreprocess(sideEffectEntity, gameConfig)
 
       update()
       checkCollision()
@@ -103,13 +103,18 @@ class GameEngine(
     return state
   }
 
-  private fun updatePreprocess(sideEffectEntity: MutableList<Entity>) {
+  private fun updatePreprocess(
+    sideEffectEntity: MutableList<Entity>,
+    gameConfig: GameConfig
+  ) {
     entities.addAll(sideEffectEntity)
 
     val applesQ = entities.count { it.type == GameType.Apple }
+    gameConfig.foodStatic - applesQ
+    
     sideEffectEntity.forEach { map.addEntity(it) }
     sideEffectEntity.clear()
-    this.
+
   }
 
   fun shutdownNow() {
