@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import core.network.core.Node
 import java.net.InetSocketAddress
 

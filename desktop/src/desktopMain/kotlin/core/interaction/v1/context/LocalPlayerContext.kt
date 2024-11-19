@@ -1,7 +1,7 @@
-package d.zhdanov.ccfit.nsu.core.interaction.v1
+package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
@@ -9,43 +9,43 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.states.MasterState
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import java.util.concurrent.atomic.AtomicLong
 
 class LocalPlayerContext(
-  name: String,
-  override val snakeEnt: SnakeEnt,
+  private val name: String,
+  private val snake: SnakeEnt,
   private val lastUpdateSeq: AtomicLong = AtomicLong(0L),
-) : Player by snakeEnt, NodePayloadT {
+  private val ncStateMachine: NetworkStateMachine
+) : NodePayloadT, Entity by snake {
   override fun handleEvent(event: SteerMsg, seq: Long) {
     synchronized(lastUpdateSeq) {
       if(seq <= lastUpdateSeq.get()) return
 
       lastUpdateSeq.set(seq)
-      snakeEnt.changeState(event.direction)
+      snake.changeState(event.direction)
     }
   }
 
   override fun onContextObserverTerminated() {
-    snakeEnt.snakeState = SnakeState.ZOMBIE
+    snake.snakeState = SnakeState.ZOMBIE
   }
 
-  override fun shootState(context: GameEngine, state: StateMsg) {
-    snakeEnt.shootState(context, state)
+  override fun shootNodeState(state: StateMsg) {
     val pl = GamePlayer(
       name,
-      snakeEnt.id,
+      ncStateMachine.nodeId,
       null,
       null,
       NodeRole.MASTER,
       PlayerType.HUMAN,
-      snakeEnt.score
+      snake.score
     )
     state.players.add(pl)
   }
 
   override fun atDead(context: GameEngine) {
-    super.atDead(context)
+    snake.atDead(context)
     TODO()
   }
 }

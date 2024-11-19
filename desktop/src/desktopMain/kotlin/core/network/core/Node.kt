@@ -1,7 +1,7 @@
 package core.network.core
 
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
-import d.zhdanov.ccfit.nsu.core.interaction.v1.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNetworkStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt

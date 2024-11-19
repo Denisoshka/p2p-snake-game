@@ -26,7 +26,7 @@ class AppleEnt(
 
   override fun update(context: GameEngine, sideEffects: List<Entity>) {}
 
-  override fun shootState(context: GameEngine, state: StateMsg) {
+  override fun shootState(state: StateMsg) {
     val xyi = hitBox.first()
     state.foods.add(Coord(xyi.x, xyi.y))
   }

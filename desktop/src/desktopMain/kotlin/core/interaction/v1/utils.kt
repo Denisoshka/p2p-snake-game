@@ -4,6 +4,8 @@ import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActivePlayerContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.MessageTranslatorT
@@ -14,10 +16,10 @@ fun <MessageT, InboundMessageTranslator : MessageTranslatorT<MessageT>, Payload 
   state: StateMsg
 ) {
   val entities: MutableList<Entity> = mutableListOf()
-  val players: MutableMap<Int, NetPlayerContext> = HashMap()
+  val players: MutableMap<Int, ActivePlayerContext> = HashMap()
   for(pl in state.players) {
     val sn = SnakeEnt()
-    NetPlayerContext(mutableListOf())
+    ActivePlayerContext(mutableListOf())
   }
 }
 

@@ -98,7 +98,7 @@ class GameEngine(
       nextOrder, snakeSnapshot, foodSnapshot, mutableListOf()
     )
     for(entity in entities) {
-      entity.shootState(this, state)
+      entity.shootState(state)
     }
     return state
   }

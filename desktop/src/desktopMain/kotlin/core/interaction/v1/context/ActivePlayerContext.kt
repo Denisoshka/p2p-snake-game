@@ -1,8 +1,8 @@
-package d.zhdanov.ccfit.nsu.core.interaction.v1
+package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import core.network.core.Node
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
@@ -12,41 +12,40 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import java.util.concurrent.atomic.AtomicLong
 
-class NetPlayerContext(
-  name: String,
-  snakeEnt: SnakeEnt,
+class ActivePlayerContext(
   private val node: Node,
+  private val name: String,
+  private val snake: SnakeEnt,
   private val lastUpdateSeq: AtomicLong = AtomicLong(0L),
-) : Player(name, snakeEnt), NodePayloadT {
+) : Entity by snake, NodePayloadT {
   override fun handleEvent(event: SteerMsg, seq: Long) {
     synchronized(lastUpdateSeq) {
       if(seq <= lastUpdateSeq.get()) return
       lastUpdateSeq.set(seq)
-      snakeEnt.changeState(event.direction)
+      snake.changeState(event.direction)
     }
   }
 
   override fun onContextObserverTerminated() {
-    snakeEnt.snakeState = SnakeState.ZOMBIE
+    snake.snakeState = SnakeState.ZOMBIE
   }
 
-  override fun shootState(context: GameEngine, state: StateMsg) {
-    snakeEnt.shootState(context, state)
-    val sockAddr = this.node.ipAddress;
+  override fun shootNodeState(state: StateMsg) {
+    if(!node.running) return
     val pl = GamePlayer(
       name,
-      snakeEnt.id,
-      sockAddr.address.hostAddress,
-      sockAddr.port,
-      this.node.nodeRole,
+      node.id,
+      node.ipAddress.address.hostAddress,
+      node.ipAddress.port,
+      node.nodeRole,
       PlayerType.HUMAN,
-      snakeEnt.score
+      snake.score,
     )
     state.players.add(pl)
   }
 
   override fun atDead(context: GameEngine) {
-    super.atDead(context)
+    snake.atDead(context)
     node.handleEvent(NodeT.NodeEvent.ShutdownFromCluster)
   }
 }

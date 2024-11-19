@@ -5,7 +5,7 @@ import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.LocalPlayerContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalPlayerContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg

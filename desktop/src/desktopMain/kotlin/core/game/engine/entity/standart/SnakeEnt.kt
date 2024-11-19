@@ -14,7 +14,7 @@ import kotlin.random.Random
 
 private const val FoodSpawnChance = 0.5
 
-class SnakeEnt(
+open class SnakeEnt(
   @Volatile var direction: Direction,
   val id: Int,
 ) : Entity {
@@ -60,7 +60,7 @@ class SnakeEnt(
     }
   }
 
-  override fun shootState(context: GameEngine, state: StateMsg) {
+  override fun shootState(state: StateMsg) {
     val head = hitBox.first()
     val cordsShoot = ArrayList<Coord>()
     cordsShoot.add(Coord(head.x, head.y))
