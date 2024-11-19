@@ -97,7 +97,7 @@ class SnakeEnt(
   override fun atDead(context: GameEngine) {
     for(cord in hitBox) {
       if(Random.nextDouble() < FoodSpawnChance) {
-        context.addSideEffect(AppleEnt(cord.x, cord.y))
+        context.sideEffectEntity.add(AppleEnt(cord.x, cord.y))
       }
     }
   }
@@ -131,7 +131,7 @@ class SnakeEnt(
         is SnakeEnt -> {
           if(this === entity) {
             TODO()
-          }else {
+          } else {
             entity.score++
             alive = false
           }

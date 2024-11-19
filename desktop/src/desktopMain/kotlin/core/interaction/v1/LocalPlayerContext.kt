@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 class LocalPlayerContext(
   name: String,
-  snakeEnt: SnakeEnt,
+  override val snakeEnt: SnakeEnt,
   private val lastUpdateSeq: AtomicLong = AtomicLong(0L),
-) : Player(name, snakeEnt), NodePayloadT {
+) : Player by snakeEnt, NodePayloadT {
   override fun handleEvent(event: SteerMsg, seq: Long) {
     synchronized(lastUpdateSeq) {
       if(seq <= lastUpdateSeq.get()) return

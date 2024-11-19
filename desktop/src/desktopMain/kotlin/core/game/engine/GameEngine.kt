@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.game.engine
 
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.Player
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.standart.SnakeEnt
 import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.game.engine.map.GameMap
@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.game.exceptions.IllegalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.Channel
@@ -23,10 +23,10 @@ private const val GameConfigIsNull = "Game config null"
 class GameEngine(
   private var stateOrder: Int = 0
 ) {
-  private val sideEffectEntity: MutableList<Entity> = mutableListOf()
+  val sideEffectEntity: MutableList<Entity> = mutableListOf()
+  val map: GameMap = TODO()
   private val entities: MutableList<Entity> = mutableListOf()
-  private val players: MutableMap<Int, Player> = HashMap()
-  private val map: GameMap = TODO()
+//  private val players: MutableMap<Int, Entity> = HashMap()
 
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
@@ -71,19 +71,12 @@ class GameEngine(
     for(entity in entities) {
       entity.update(this, sideEffectEntity)
     }
-    for((_, snake) in players) {
-      snake.snakeEnt.update(this, sideEffectEntity)
-    }
   }
 
   private fun checkCollision() {
     for(x in entities) {
       for(y in entities) {
         if(x != y) x.checkCollisions(y, this);
-      }
-      for((_, snake) in players) {
-        snake.snakeEnt.checkCollisions(x, this)
-        x.checkCollisions(snake.snakeEnt, this)
       }
     }
 
@@ -95,40 +88,28 @@ class GameEngine(
         ent.atDead(this)
       }
     }
-    val plIt = players.iterator()
-    while(plIt.hasNext()) {
-      val (_, player) = plIt.next()
-      if(!player.alive) {
-        plIt.remove()
-        player.atDead(this)
-      }
-    }
   }
 
   private fun shootState(): StateMsg {
-    val snakeSnapshot =
-      ArrayList<d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake>(players.size)
-    val foodSnapshot = ArrayList<Coord>(entities.size)
-    val playersSnapshot = ArrayList<GamePlayer>(players.size)
+    val snakeSnapshot = ArrayList<Snake>()
+    val foodSnapshot = ArrayList<Coord>()
     val nextOrder = ++stateOrder;
     val state = StateMsg(
-      nextOrder, snakeSnapshot, foodSnapshot, playersSnapshot
+      nextOrder, snakeSnapshot, foodSnapshot, mutableListOf()
     )
     for(entity in entities) {
       entity.shootState(this, state)
-    }
-    for((_, player) in players) {
-      player.shootState(this, state)
     }
     return state
   }
 
   private fun updatePreprocess(sideEffectEntity: MutableList<Entity>) {
     entities.addAll(sideEffectEntity)
-    for(se in sideEffectEntity) map.addEntity(se)
+
+    val applesQ = entities.count { it.type == GameType.Apple }
+    sideEffectEntity.forEach { map.addEntity(it) }
     sideEffectEntity.clear()
-    var aplesToSpawnQ = 0;
-    for()
+    this.
   }
 
   fun shutdownNow() {
@@ -139,7 +120,7 @@ class GameEngine(
   }
 
   fun initContext(
-    config: InternalGameConfig, entities: List<Entity>?, players: List<Player>?
+    config: InternalGameConfig, entities: List<Entity>?, players: List<Entity>?
   ) {
     entities?.let {
       this.entities.addAll(it)
