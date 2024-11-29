@@ -3,6 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.interfaces
 import core.network.core.Node
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import java.net.InetSocketAddress
 
@@ -66,4 +67,5 @@ interface NetworkState {
 
   fun initialize()
   fun cleanup()
+  fun submitState(state: StateMsg, acceptedPlayers: Pair<Node, String>)
 }

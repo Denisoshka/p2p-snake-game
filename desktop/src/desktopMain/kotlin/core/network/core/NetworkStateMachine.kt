@@ -3,6 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.core
 import core.network.core.Node
 import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
@@ -24,7 +25,8 @@ private val Logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
 private val kPortRange = 1..65535
 
 class NetworkStateMachine(
-  private val netController: NetworkController
+  private val netController: NetworkController,
+  private val gameController: GameController
 ) : NetworkStateHandler {
   private val seqNumProvider = AtomicLong(0)
   val nextSegNum
@@ -50,6 +52,11 @@ class NetworkStateMachine(
     steerMsg: SteerMsg
   ) = state.get().submitSteerMsg(steerMsg)
 
+  override fun submitState(
+    state: StateMsg,
+    acceptedPlayers: Pair<Node, String>
+  ) {
+  }
 
   override fun sendUnicast(
     msg: GameMessage, nodeAddress: InetSocketAddress
@@ -199,7 +206,7 @@ class NetworkStateMachine(
     synchronized(this) {
       val curState = state.get()
       when(event) {
-        is NetworkStateChangeEvents.LaunchGame   -> {
+        is NetworkStateChangeEvents.LaunchGame -> {
           if(curState !is LobbyState) return
           curState.cleanup()
           masterState.config = event.config
@@ -208,14 +215,14 @@ class NetworkStateMachine(
           masterState.initialize()
         }
 
-        is NetworkStateChangeEvents.MasterNow    -> {
+        is NetworkStateChangeEvents.MasterNow -> {
           if(curState !is ActiveState) return
 
           state.set(masterState)
           masterState.initialize()
         }
 
-        NetworkStateChangeEvents.SwitchToLobby   -> {
+        NetworkStateChangeEvents.SwitchToLobby -> {
           if(curState is LobbyState) return
           curState.cleanup()
 

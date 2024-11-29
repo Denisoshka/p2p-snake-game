@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.engine
 
+import core.network.core.Node
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
@@ -20,9 +21,8 @@ import kotlin.random.Random
 private val Logger = KotlinLogging.logger(GameEngine::class.java.name)
 private const val GameConfigIsNull = "Game config null"
 
-class GameEngine<PlayerContextInfo>(
-  private val joinInStateQ: Int,
-  private var stateOrder: Int = 0
+class GameEngine(
+  private val joinInStateQ: Int, private var stateOrder: Int = 0
 ) {
   val sideEffectEntity: MutableList<Entity> = mutableListOf()
   private val entities: MutableList<Entity> = mutableListOf()
@@ -31,7 +31,11 @@ class GameEngine<PlayerContextInfo>(
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
   private var gameConfig: InternalGameConfig? = null
-  private val joinBacklog: Channel<PlayerContextInfo>(joinInStateQ)
+
+  private val joinBacklog = Channel<Pair<Node, String>>(joinInStateQ)
+  private val joinedPlayers =
+    ArrayList<Pair<Pair<Node, String>, SnakeEnt?>>(joinInStateQ)
+
   fun spawnSnake(id: Int, direction: Direction? = null): SnakeEnt? {
     val coords = map.findFreeSquare() ?: return null
     val dir = direction ?: directions[Random.nextInt(directions.size)]
@@ -41,8 +45,8 @@ class GameEngine<PlayerContextInfo>(
     }
   }
 
-  private fun offerPlayer(): Boolean {
-
+  private fun offerPlayer(playerInfo: Node, name: String): Boolean {
+    return joinBacklog.trySend(playerInfo to name).isSuccess
   }
 
   private fun gameLoop(gameConfig: InternalGameConfig) {
@@ -103,8 +107,7 @@ class GameEngine<PlayerContextInfo>(
   }
 
   private fun updatePreprocess(
-    sideEffectEntity: MutableList<Entity>,
-    gameConfig: GameConfig
+    sideEffectEntity: MutableList<Entity>, gameConfig: GameConfig
   ) {
     entities.addAll(sideEffectEntity)
 
@@ -113,7 +116,12 @@ class GameEngine<PlayerContextInfo>(
 
     sideEffectEntity.forEach { map.addEntity(it) }
     sideEffectEntity.clear()
-
+    joinedPlayers.clear()
+    repeat(joinInStateQ) {
+      val plInfo = joinBacklog.tryReceive().getOrNull() ?: return@repeat
+      val snake = spawnSnake(plInfo.first.id)
+      joinedPlayers.add(plInfo to snake)
+    }
   }
 
   fun shutdownNow() {

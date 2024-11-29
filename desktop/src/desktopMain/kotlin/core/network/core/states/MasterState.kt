@@ -10,6 +10,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
@@ -142,5 +143,12 @@ class MasterState(
 
   override fun cleanup() {
 
+  }
+
+  override fun submitState(
+    state: StateMsg,
+    acceptedPlayers: Pair<Node, String>
+  ) {
+    TODO("Not yet implemented")
   }
 }
