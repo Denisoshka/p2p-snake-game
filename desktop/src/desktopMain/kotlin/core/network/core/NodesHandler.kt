@@ -1,5 +1,6 @@
 package core.network.core
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerInit
@@ -18,17 +19,13 @@ class NodesHandler(
   @Volatile var resendDelay: Long,
   @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine,
-) : NodeContext {
+) : NodeContext, Iterable<Map.Entry<InetSocketAddress, Node>> {
   val msgComparator = ncStateMachine.utils.getComparator()
   @Volatile private var nodesScope: CoroutineScope? = null
-  val nodesByIp =
-    ConcurrentHashMap<InetSocketAddress, Node>()
-  private val deadNodeChannel =
-    Channel<Node>(joinBacklog)
-  private val registerNewNode =
-    Channel<Node>(joinBacklog)
-  private val reconfigureContext =
-    Channel<Node>(joinBacklog)
+  val nodesByIp = ConcurrentHashMap<InetSocketAddress, Node>()
+  private val deadNodeChannel = Channel<Node>(joinBacklog)
+  private val registerNewNode = Channel<Node>(joinBacklog)
+  private val reconfigureContext = Channel<Node>(joinBacklog)
   val nextSeqNum
     get() = ncStateMachine.nextSegNum
 
@@ -49,10 +46,11 @@ class NodesHandler(
     }
   }
 
-  fun getNode(ipAddr: InetSocketAddress) = nodesByIp[ipAddr]
-  fun findNode(
-    condition: (Node) -> Boolean
-  ): Node? {
+  fun getNode(ipAddr: InetSocketAddress): Node? {
+    return nodesByIp[ipAddr]
+  }
+
+  fun findNode(condition: (Node) -> Boolean): Node? {
     for((_, node) in nodesByIp) {
       if(condition(node)) return node
     }
@@ -76,18 +74,24 @@ class NodesHandler(
           }
         }
       }
-    } ?: throw RuntimeException("xyi")
-
+    } ?: throw RuntimeException(
+      "xyi ну вообще node scope не должен быть равен null"
+    )
   }
 
-  override fun sendUnicast(
-    msg: MessageT, nodeAddress: InetSocketAddress
+  fun sendUnicast(
+    msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
-  override fun shutdown() {
+  override fun addNewNode(
+    ipAddress: InetSocketAddress, registerInContext: Boolean
+  ): Node {
     TODO("Not yet implemented")
   }
 
+  fun shutdown() {
+    TODO("Not yet implemented")
+  }
 
   fun addNewNode(
     initialSeq: Long,
@@ -95,7 +99,7 @@ class NodesHandler(
     nodeId: Int,
     ipAddress: InetSocketAddress,
     registerInContext: Boolean
-  ): Node<MessageT, InboundMessageTranslator, Payload> {
+  ): Node {
     nodesByIp[ipAddress]?.let { return it }
     val node = Node(
       initialSeq,
@@ -112,14 +116,22 @@ class NodesHandler(
   }
 
   override suspend fun handleNodeRegistration(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   ) = registerNewNode.send(node)
 
   override suspend fun handleNodeTermination(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   ) = deadNodeChannel.send(node)
 
   override suspend fun handleNodeDetachPrepare(
-    node: Node<MessageT, InboundMessageTranslator, Payload>
+    node: Node
   ) = reconfigureContext.send(node)
+
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, Node>> {
+    return nodesByIp.entries.iterator()
+  }
+
+  operator fun get(address: InetSocketAddress): Node? {
+    return nodesByIp[address]
+  }
 }

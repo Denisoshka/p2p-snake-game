@@ -15,6 +15,7 @@ val protobufVersion = "4.28.2"
 repositories {
   gradlePluginPortal()
   mavenCentral()
+  google()
 }
 
 kotlin {
@@ -38,6 +39,7 @@ kotlin {
       implementation(libs.protobuf.core)
       implementation(libs.kotlinx.coroutines.core)
       implementation(libs.kotlinx.coroutines.jvm)
+      implementation(libs.androin.lifecycle.viewmodel)
       implementation(project(":proto"))
     }
   }

@@ -1,3 +1,3 @@
 package d.zhdanov.ccfit.nsu.core.network.core.exceptions
 
-class IllegalUnacknowledgedMessagesGetAttempt() : IllegalStateException()
+class IllegalUnacknowledgedMessagesGetAttempt : IllegalStateException()

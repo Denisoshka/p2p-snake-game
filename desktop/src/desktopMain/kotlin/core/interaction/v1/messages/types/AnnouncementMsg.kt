@@ -4,9 +4,9 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 
-class AnnouncementMsg(
-  players: List<GamePlayer>,
-  gameConfig: GameConfig,
-  canJoin: Boolean,
-  gameName: String
+data class AnnouncementMsg(
+  val players: List<GamePlayer>,
+  val gameConfig: GameConfig,
+  val canJoin: Boolean,
+  val gameName: String
 ) : Msg(MessageType.AnnouncementMsg)

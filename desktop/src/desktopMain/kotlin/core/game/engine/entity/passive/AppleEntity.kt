@@ -1,13 +1,12 @@
-package d.zhdanov.ccfit.nsu.core.game.engine.entity.standart
+package d.zhdanov.ccfit.nsu.core.game.engine.entity.passive
 
-import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
+import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
-import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
-class AppleEnt(
+class AppleEntity(
   x: Int,
   y: Int,
 ) : Entity {
@@ -35,5 +34,5 @@ class AppleEnt(
     context.map.removeEntity(this)
   }
 
-  override fun restoreHitbox(offsets: List<Coord>) {}
+  override fun restoreState(offsets: List<Coord>) {}
 }

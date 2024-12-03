@@ -7,6 +7,7 @@ coroutines = "1.9.0"
 mapstruct = "1.5.5.Final"
 netty = "4.1.114.Final"
 kotlin-logging = "7.0.0"
+android-lifecycle = "2.8.7"
 
 [plugins]
 kotlin-plugin = { id = "org.jetbrains.compose", version.ref ="compose-plugin" }
@@ -31,3 +32,4 @@ compose-foundation = { group = "org.jetbrains.compose.foundation", name = "found
 compose-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref = "compose-plugin" }
 compose-ui-tooling = { group = "org.jetbrains.compose.ui", name = "ui-tooling", version.ref = "compose-plugin" }
 compose-material = { group = "org.jetbrains.compose.material", name = "material", version.ref = "compose-plugin" }
+androin-lifecycle-viewmodel = {group = "androidx.lifecycle", name="lifecycle-viewmodel-ktx", version.ref = "android-lifecycle"}

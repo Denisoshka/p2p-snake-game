@@ -1,21 +1,30 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
-import core.network.core.Node
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import java.net.InetSocketAddress
 
-class PassivePlayerContext(
-  private val node: Node,
-  private val name: String
+open class ObserverContext(
+  override val node: NodeT,
+  override val name: String,
 ) : NodePayloadT {
+  override val score: Int
+    get() = 0
+
   override fun handleEvent(event: SteerMsg, seq: Long) {}
 
   override fun onContextObserverTerminated() {}
 
-  override fun shootNodeState(state: StateMsg) {
-    if(!node.running) return
+  override fun shootContextState(
+    state: StateMsg,
+    masterAddrId: Pair<InetSocketAddress, Int>,
+    deputyAddrId: Pair<InetSocketAddress, Int>?
+  ) {
+    val nodeState = node.nodeState
+    if(!NodeT.isRunning(nodeState)) return
     val pl = GamePlayer(
       name,
       node.id,
@@ -23,7 +32,7 @@ class PassivePlayerContext(
       node.ipAddress.port,
       node.nodeRole,
       PlayerType.HUMAN,
-      0,
+      score,
     )
     state.players.add(pl)
   }

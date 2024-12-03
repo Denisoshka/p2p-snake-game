@@ -4,13 +4,12 @@ import core.network.core.Node
 import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalPlayerContext
+import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
@@ -26,15 +25,18 @@ private val logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val PlayerNameIsBlank = "player name blank"
 private const val NodeAlreadyRunning = "node already running"
 private const val ConfigIsNull = "game config not set"
+private const val StateIsNotSet = "state is not set"
+private const val JoinInUpdateQ = 10
 
 class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
   private val nodesHandler: NodesHandler,
 ) : NetworkState {
-  private val gameEngine: GameEngine = GameEngine()
+  private val gameEngine: GameEngine = GameEngine(JoinInUpdateQ, ncStateMachine)
+
   @Volatile var config: InternalGameConfig? = null
-  @Volatile var player: LocalPlayerContext? = null
+  @Volatile var player: LocalObserverContext? = null
 
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
@@ -48,16 +50,21 @@ class MasterState(
         throw IllegalNodeRegisterAttempt(PlayerNameIsBlank)
       }
       if(inMsg.nodeRole != NodeRole.VIEWER || inMsg.nodeRole != NodeRole.NORMAL) {
-        throw IllegalNodeRegisterAttempt("$ipAddress invalid node role: ${inMsg.nodeRole}")
+        throw IllegalNodeRegisterAttempt(
+          "$ipAddress invalid node role: ${inMsg.nodeRole}"
+        )
       }
       nodesHandler.getNode(ipAddress)?.let {
-        if(it.running) return
-        throw IllegalNodeRegisterAttempt("$ipAddress invalid node role: ${inMsg.nodeRole}")
+        val st = it.state
+        if(NodeT.isRunning(st)) return
+        throw IllegalNodeRegisterAttempt(
+          "$ipAddress node already registered: ${inMsg.nodeRole}"
+        )
       }
 
     } catch(e: IllegalNodeRegisterAttempt) {
       logger.trace { e }
-
+      TODO("сделать посыл нахуй")
     }
   }
 
@@ -76,7 +83,7 @@ class MasterState(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
-    if(!node.running) return
+//    if(!node.running) return
     val inp2p = MessageTranslator.fromProto(
       message, MessageType.RoleChangeMsg
     )
@@ -96,11 +103,11 @@ class MasterState(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
-    if(!node.running) return
+//    if(!node.running) return
     val inp2p = MessageTranslator.fromProto(
       message, MessageType.SteerMsg
     )
-    node.payloadT?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
+    node.payload?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
   }
 
 
@@ -108,6 +115,7 @@ class MasterState(
     node: Node
   ) {
     val (msInfo, depInfo) = ncStateMachine.masterDeputy.get() ?: return
+
     if(depInfo == null || node.id != depInfo.second) return
 
     val newDep = ncStateMachine.chooseSetNewDeputy()
@@ -123,9 +131,11 @@ class MasterState(
       newDep.id,
       ncStateMachine.nextSegNum
     )
+
     val outMsg = MessageTranslator.toMessageT(
       outP2PRoleChange, MessageType.RoleChangeMsg
     )
+
     netController.sendUnicast(outMsg, newDep.ipAddress)
   }
 
@@ -135,20 +145,19 @@ class MasterState(
     )
   }
 
+  /**
+   * @throws IllegalMasterLaunchAttempt
+   * */
   override fun initialize() {
     val conf = config ?: throw IllegalMasterLaunchAttempt(ConfigIsNull)
-    gameEngine.initContext(conf, null, null)
-    gameEngine.spawnSnake(ncStateMachine.nodeId)
+    val state = ncStateMachine.latestGameState.get()
+    if(state == null) {
+      gameEngine.initNewGame(conf)
+    } else {
+      gameEngine.initGameFromState(conf, state.first)
+    }
   }
 
   override fun cleanup() {
-
-  }
-
-  override fun submitState(
-    state: StateMsg,
-    acceptedPlayers: Pair<Node, String>
-  ) {
-    TODO("Not yet implemented")
   }
 }

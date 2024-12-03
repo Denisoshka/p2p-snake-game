@@ -1,9 +1,9 @@
-package d.zhdanov.ccfit.nsu.core.game.engine.entity.standart
+package d.zhdanov.ccfit.nsu.core.game.engine.entity.active
 
-import d.zhdanov.ccfit.nsu.core.game.engine.GameEngine
+import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
-import d.zhdanov.ccfit.nsu.core.game.engine.map.EntityOnMapInfo
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
@@ -14,18 +14,25 @@ import kotlin.random.Random
 
 private const val FoodSpawnChance = 0.5
 
-open class SnakeEnt(
+open class SnakeEntity(
   @Volatile var direction: Direction,
-  val id: Int,
-) : Entity {
+  override val id: Int,
+) : ActiveEntity {
+
+  constructor(x: Int, y: Int, direction: Direction, id: Int) : this(
+    direction, id
+  ) {
+    TODO("implement this")
+  }
+
   override var alive: Boolean = true
-  override var type: GameType = GameType.Snake
+  override val type: GameType = GameType.Snake
   override val hitBox: MutableList<EntityOnMapInfo> = ArrayList(2)
   var score: Int = 0
   @Volatile var snakeState = SnakeState.ALIVE
 
-  override fun restoreHitbox(offsets: List<Coord>) {
-    if(hitBox.isNotEmpty()) throw RuntimeException("ты че пидор")
+  override fun restoreState(offsets: List<Coord>) {
+    if(hitBox.isNotEmpty()) throw RuntimeException("братан змея уже готова")
 
     val currentPoint = offsets.first()
     for(nextOffset in offsets.drop(1)) {
@@ -97,7 +104,7 @@ open class SnakeEnt(
   override fun atDead(context: GameEngine) {
     for(cord in hitBox) {
       if(Random.nextDouble() < FoodSpawnChance) {
-        context.sideEffectEntity.add(AppleEnt(cord.x, cord.y))
+        context.addSideEntity(AppleEntity(cord.x, cord.y))
       }
     }
   }
@@ -108,14 +115,10 @@ open class SnakeEnt(
 
   override fun update(context: GameEngine, sideEffects: List<Entity>) {
     hitBox.removeLast()
-    val point = EntityOnMapInfo(
-      hitBox[0].x + direction.dx, hitBox[0].y + direction.dy
-    )
+
 //  todo мб нужно сделать так чтобы здесь выделялась новая точка и не было
 //   проблем с снятием снапшота
-    context.map.movePoint(
-      point, hitBox[0].x + direction.dx, hitBox[0].y + direction.dy
-    )
+
     hitBox.add(0, point)
     TODO("fix this")
   }
@@ -128,7 +131,7 @@ open class SnakeEnt(
 
     if(entity.hitBox.any { point -> point.x == head.x && point.y == head.y }) {
       when(entity) {
-        is SnakeEnt -> {
+        is SnakeEntity -> {
           if(this === entity) {
             TODO()
           } else {
@@ -137,8 +140,8 @@ open class SnakeEnt(
           }
         }
 
-        is AppleEnt -> if(entity.alive) ++score
-        else        -> {}
+        is AppleEntity -> if(entity.alive) ++score
+        else           -> {}
       }
     }
   }

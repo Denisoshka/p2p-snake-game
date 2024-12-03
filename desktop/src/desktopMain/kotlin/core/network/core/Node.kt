@@ -24,12 +24,14 @@ private const val IncorrectRegisterEvent =
  */
 class Node(
   messageComparator: Comparator<GameMessage>,
-  @Volatile override var nodeRole: NodeRole,
   override val id: Int,
   override val ipAddress: InetSocketAddress,
+  @Volatile override var nodeRole: NodeRole,
+  @Volatile override var payload: NodePayloadT? = null,
   private val nodesHandler: NodesHandler,
-  @Volatile var payloadT: NodePayloadT? = null,
 ) : NodeT {
+  override val nodeState: NodeT.NodeState
+    get() = stateHolder.get()
 
   private val resendDelay = nodesHandler.resendDelay
   private val thresholdDelay = nodesHandler.thresholdDelay
@@ -41,13 +43,6 @@ class Node(
     if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
     else NodeT.NodeState.Active
   )
-  val state: NodeT.NodeState
-    get() = stateHolder.get()
-  val running: Boolean
-    get() = stateHolder.get().let {
-      return it == NodeT.NodeState.Active || it == NodeT.NodeState.Passive
-    }
-
 
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
@@ -139,9 +134,9 @@ class Node(
     node: Node
   ) = launch {
     var nextDelay = 0L
+    var detachedFromCluster = false
     while(isActive) {
       delay(nextDelay)
-      var detachedFromCluster = false
       when(stateHolder.get()) {
         NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
           nextDelay = onProcessing()
@@ -150,16 +145,16 @@ class Node(
         NodeT.NodeState.Disconnected                    -> {
           if(!detachedFromCluster) {
             detachedFromCluster = true
-            node.payloadT?.onContextObserverTerminated()
-            node.payloadT = null
+            node.payload?.onContextObserverTerminated()
+            node.payload = null
             node.nodesHandler.handleNodeDetachPrepare(node)
           }
           nextDelay = onDetaching()
         }
 
         NodeT.NodeState.Terminated                      -> {
-          node.payloadT?.onContextObserverTerminated()
-          node.payloadT = null
+          node.payload?.onContextObserverTerminated()
+          node.payload = null
           TODO("make node detach")
         }
 

@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import java.net.InetSocketAddress
 
@@ -7,9 +8,11 @@ interface NodeT {
   var nodeRole: NodeRole
   val id: Int
   val ipAddress: InetSocketAddress
-
+  var payload: NodePayloadT?
+  val nodeState: NodeState
 
   enum class NodeState {
+    None,
     Active,
     Passive,
     Disconnected,
@@ -21,5 +24,11 @@ interface NodeT {
     ShutdownNowFromCluster,
     ShutdownFinishedFromCluster,
     ShutdownFromUser,
+  }
+
+  companion object {
+    fun isRunning(state: NodeState): Boolean {
+      return state == NodeState.Active || state == NodeState.Passive
+    }
   }
 }
