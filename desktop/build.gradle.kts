@@ -45,11 +45,6 @@ kotlin {
   }
 }
 
-kapt {
-  arguments {
-  }
-}
-
 compose.desktop {
   application {
     mainClass = "MainKt"

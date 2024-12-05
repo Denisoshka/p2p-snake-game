@@ -1,32 +1,60 @@
 package d.zhdanov.ccfit.nsu.controllers
 
-import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import d.zhdanov.ccfit.nsu.controllers.dto.AnnouncementInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AnnouncementMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import kotlinx.coroutines.flow.StateFlow
-import androidx.lifecycle.ViewModel
 import java.net.InetSocketAddress
+import java.time.Duration
+import java.time.Instant
 
 class GameController(
   private val ncStateHandler: NetworkStateMachine = TODO()
-) : ViewModel() {
+) {
   private val upSteer = SteerMsg(Direction.UP)
   private val rightSteer = SteerMsg(Direction.RIGHT)
   private val leftSteer = SteerMsg(Direction.LEFT)
   private val downSteer = SteerMsg(Direction.DOWN)
+  private val announcementMsgsState = mutableStateListOf<AnnouncementInfo>()
 
-  private val availableGames = StateFlow<List<GameAnnouncement>>()
+  private var currentScreen by mutableStateOf(ControllerState.Lobby)
+  private var selectedGame by mutableStateOf<AnnouncementMsg?>(null)
+  private var showCreateGameDialog by mutableStateOf(false)
 
-  fun submitSteerMsg() {
-    ncStateHandler.submitSteerMsg()
+  fun addAnnouncementMsg(msg: AnnouncementMsg, from: InetSocketAddress) {
+    if(!announcementMsgsState.any { it.msg.gameName == msg.gameName }) {
+
+      announcementMsgsState = announcementMsgsState + AnnouncementInfo(msg)
+    }
   }
 
-  fun onNewGameAnnouncement(
-    gameAnnouncement: AnnouncementMsg,
-    from: InetSocketAddress
-  ) {
+  fun removeOldMessages(olderThanSeconds: Long) {
+    val now = Instant.now()
+    announcementMsgsState = announcementMsgsState.filter {
+      Duration.between(it.timestamp, now).seconds <= olderThanSeconds
+    }
+  }
 
+  fun openCreateGameDialog() {
+    showCreateGameDialog = true
+  }
+
+  fun closeCreateGameDialog() {
+    showCreateGameDialog = false
+  }
+
+  fun selectGame(game: AnnouncementMsg) {
+    selectedGame = game
+    currentScreen = ControllerState.Game
+  }
+
+  // Вернуться к списку объявлений
+  fun backToAnnouncements() {
+    currentScreen = ControllerState.Lobby
   }
 }

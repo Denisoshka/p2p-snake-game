@@ -13,24 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-
-@Composable
-@Preview
-fun App() {
-  var text by remember { mutableStateOf("Hello, World!") }
-
-  MaterialTheme {
-    Button(
-      onClick = { text = "Hello, Desktop!" },
-      modifier = Modifier.testTag("button")
-    ) {
-      Text(text)
-    }
-  }
-}
+import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.view.AppContent
 
 fun main() = application {
-  Window(onCloseRequest = ::exitApplication) {
-    App()
+  fun main() = application {
+    val gameController = remember { GameController() }
+
+    Window(onCloseRequest = ::exitApplication) {
+      AppContent(gameController = gameController)
+    }
   }
 }

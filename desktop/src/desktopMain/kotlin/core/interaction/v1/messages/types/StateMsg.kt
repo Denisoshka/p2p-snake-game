@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
 
-class StateMsg(
+data class StateMsg(
   var stateOrder: Int, // Порядковый номер состояния, уникален в пределах игры, монотонно возрастает
   var snakes: MutableList<Snake>, // Список змей
   var foods: MutableList<Coord>, // Список клеток с едой
