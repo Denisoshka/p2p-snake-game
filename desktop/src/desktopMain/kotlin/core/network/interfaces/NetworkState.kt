@@ -49,19 +49,13 @@ interface NetworkState {
   ) {
   }
 
-  fun handleMasterDeath(
-    master: Node
-  ) {
+  fun handleMasterDeath(master: Node) {
   }
 
-  fun handleNodeJoin(
-    node: Node
-  ) {
+  fun handleNodeJoin(node: Node) {
   }
 
-  fun handleNodeDetach(
-    node: Node
-  ) {
+  fun handleNodeDetach(node: Node) {
   }
 
   fun initialize()
