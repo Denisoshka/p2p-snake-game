@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
-import core.network.core.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
@@ -188,7 +188,7 @@ class GameEngine(
     joinedPlayers.clear()
     repeat(joinInStateQ) {
       val plInfo = joinBacklog.tryReceive().getOrNull() ?: return@repeat
-      val snake = spawnNewSnake(plInfo.first.id)
+      val snake = spawnNewSnake(plInfo.first.nodeId)
       joinedPlayers.add(plInfo to snake)
     }
   }

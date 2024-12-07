@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import core.network.core.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 

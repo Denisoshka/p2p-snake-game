@@ -15,6 +15,5 @@ interface NetworkStateHandler :
   }
   fun joinToGame(announcement: GameAnnouncement, )
 
-
   fun sendUnicast(msg: GameMessage, nodeAddress: InetSocketAddress)
 }

@@ -1,11 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.NodesHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import java.net.InetSocketAddress
 
@@ -44,11 +44,7 @@ class PassiveState(
     TODO("Not yet implemented")
   }
 
-  override fun initialize() {
-    TODO("Not yet implemented")
-  }
-
   override fun cleanup() {
-    TODO("Not yet implemented")
+    nodesHandler.shutdown()
   }
 }

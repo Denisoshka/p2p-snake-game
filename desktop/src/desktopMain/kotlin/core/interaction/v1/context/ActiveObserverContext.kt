@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
-import core.network.core.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
@@ -41,7 +41,7 @@ class ActiveObserverContext(
 
     val pl = GamePlayer(
       name,
-      node.id,
+      node.nodeId,
       node.ipAddress.address.hostAddress,
       node.ipAddress.port,
       node.nodeRole,

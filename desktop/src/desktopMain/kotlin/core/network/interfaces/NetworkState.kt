@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import core.network.core.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
@@ -47,15 +47,6 @@ interface NetworkState {
   fun steerHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-  }
-
-  fun handleMasterDeath(master: Node) {
-  }
-
-  fun handleNodeJoin(node: Node) {
-  }
-
-  fun handleNodeDetach(node: Node) {
   }
 
   fun cleanup()

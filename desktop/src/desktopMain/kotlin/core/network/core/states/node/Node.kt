@@ -1,12 +1,10 @@
-package core.network.core
+package d.zhdanov.ccfit.nsu.core.network.core.states.nodes
 
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNetworkStateIsNull
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT.NodeEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
@@ -23,9 +21,9 @@ private const val IncorrectRegisterEvent =
  * todo fix doc
  */
 class Node(
-  messageComparator: Comparator<GameMessage>,
+  messageComparator: Comparator<SnakesProto.GameMessage>,
   nodeState: NodeT.NodeState,
-  override val id: Int,
+  override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   @Volatile override var payload: NodePayloadT? = null,
   private val nodesHandler: NodesHandler,
@@ -55,9 +53,10 @@ class Node(
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<GameMessage, Long> = TreeMap(
-    messageComparator
-  )
+  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, Long> =
+    TreeMap(
+      messageComparator
+    )
 
   override fun shutdown() {
     observeJob?.cancel()
@@ -73,7 +72,7 @@ class Node(
     lastSend = System.currentTimeMillis()
   }
 
-  fun ackMessage(message: GameMessage): GameMessage? {
+  override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
     synchronized(msgForAcknowledge) {
       lastReceive = System.currentTimeMillis()
       msgForAcknowledge.remove(message) ?: return null
@@ -81,19 +80,17 @@ class Node(
     }
   }
 
-  fun addMessageForAck(message: GameMessage): Boolean {
+  override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] = System.currentTimeMillis()
       lastSend = System.currentTimeMillis()
     }
-    return true
   }
 
-  fun addAllMessageForAck(messages: List<GameMessage>) {
+  override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
     synchronized(msgForAcknowledge) {
-      for(msg in messages) {
-        msgForAcknowledge[msg] = System.currentTimeMillis()
-      }
+      messages.forEach { msgForAcknowledge[it] = System.currentTimeMillis() }
+
       lastSend = System.currentTimeMillis()
     }
   }
@@ -124,17 +121,17 @@ class Node(
     return true
   }
 
-  fun handleEvent(event: NodeEvent) {
+  fun handleEvent(event: NodeT.NodeEvent) {
     when(event) {
-      NodeEvent.ShutdownFromCluster, NodeEvent.ShutdownNowFromCluster -> {
+      NodeT.NodeEvent.ShutdownFromCluster, NodeT.NodeEvent.ShutdownNowFromCluster -> {
         changeState(NodeT.NodeState.Disconnected)
       }
 
-      NodeEvent.ShutdownFromUser                                      -> {
+      NodeT.NodeEvent.ShutdownFromUser                                            -> {
         changeState(NodeT.NodeState.Disconnected)
       }
 
-      else                                                            -> {}
+      else                                                                        -> {}
     }
   }
 
@@ -143,6 +140,7 @@ class Node(
       var nextDelay = 0L
       var detachedFromCluster = false
       try {
+        logger.trace { "${this@Node} startObservation" }
         while(isActive) {
           delay(nextDelay)
           when(nodeState) {
@@ -152,6 +150,7 @@ class Node(
 
             NodeT.NodeState.Disconnected                    -> {
               if(!detachedFromCluster) {
+                logger.trace { "${this@Node} disconnected" }
                 detachedFromCluster = true
                 this@Node.payload?.onContextObserverTerminated()
                 this@Node.payload = null
@@ -161,6 +160,7 @@ class Node(
             }
 
             NodeT.NodeState.Terminated                      -> {
+              logger.trace { "${this@Node} terminated" }
               this@Node.payload?.onContextObserverTerminated()
               this@Node.payload = null
               TODO("make node detach")
@@ -168,23 +168,19 @@ class Node(
           }
         }
       } catch(e: CancellationException) {
-        if(!detachedFromCluster) {
-          this@Node.nodesHandler.handleNodeTermination(this@Node)
-        }
+        this@Node.nodesHandler.handleNodeTermination(this@Node)
         this.cancel()
       }
     }
     return this@Node.observeJob!!
   }
 
-  override fun getUnacknowledgedMessages(
-    node: Node
-  ): List<GameMessage> {
+  override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
     if(nodeState < NodeT.NodeState.Disconnected) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
-    return synchronized(node.msgForAcknowledge) {
-      node.msgForAcknowledge.keys.toList();
+    return synchronized(msgForAcknowledge) {
+      msgForAcknowledge.keys.toList();
     }
   }
 
@@ -220,5 +216,9 @@ class Node(
       }
       return ret
     }
+  }
+
+  override fun toString(): String {
+    return "Node(nodeId=$nodeId, ipAddress=$ipAddress, running=$running, nodeState=$nodeState)"
   }
 }

@@ -1,29 +1,31 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import core.network.core.Node
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import java.net.InetSocketAddress
 
 interface NodeT {
-  val id: Int
+  val nodeId: Int
   val ipAddress: InetSocketAddress
   var payload: NodePayloadT?
   val nodeState: NodeState
   val running: Boolean
+
   fun shutdown()
+  fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage?
+  fun addMessageForAck(message: SnakesProto.GameMessage)
+  fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>)
   fun CoroutineScope.startObservation(): Job
 
   /**
    * @throws IllegalUnacknowledgedMessagesGetAttempt if [Node.nodeState] <
    * [NodeT.NodeState.Disconnected]
    * */
-  fun getUnacknowledgedMessages(
-    node: Node
-  ): List<GameMessage>
+  fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage>
 
   enum class NodeState {
     Active,
@@ -37,11 +39,5 @@ interface NodeT {
     ShutdownNowFromCluster,
     ShutdownFinishedFromCluster,
     ShutdownFromUser,
-  }
-
-  companion object {
-    fun isRunning(state: NodeState): Boolean {
-      return state == NodeState.Active || state == NodeState.Passive
-    }
   }
 }

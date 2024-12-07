@@ -1,5 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network.core.exceptions
 
-class IllegalNodeHandlerInit : IllegalStateException(
+class IllegalNodeHandlerAlreadyInitialized : IllegalStateException(
   "Nodes handler already initialized"
 )

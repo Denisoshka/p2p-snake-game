@@ -27,7 +27,7 @@ open class ObserverContext(
     if(!NodeT.isRunning(nodeState)) return
     val pl = GamePlayer(
       name,
-      node.id,
+      node.nodeId,
       node.ipAddress.address.hostAddress,
       node.ipAddress.port,
       node.nodeRole,

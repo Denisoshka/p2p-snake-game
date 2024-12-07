@@ -1,42 +1,40 @@
-package core.network.core
+package d.zhdanov.ccfit.nsu.core.network.core.states.nodes
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerInit
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
-import io.github.oshai.kotlinlogging.KotlinLogging
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 
-private val logger = KotlinLogging.logger {}
-
 class NodesHandler(
   joinBacklog: Int,
   @Volatile var resendDelay: Long,
   @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine,
-) : NodeContext, Iterable<Map.Entry<InetSocketAddress, Node>> {
+) : NodeContext, Iterable<Map.Entry<InetSocketAddress, NodeT>> {
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
 
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, Node>()
-  private val deadNodeChannel = Channel<Node>(joinBacklog)
-  private val registerNewNode = Channel<Node>(joinBacklog)
-  private val reconfigureContext = Channel<Node>(joinBacklog)
+  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, NodeT>()
+  private val deadNodeChannel = Channel<NodeT>(joinBacklog)
+  private val registerNewNode = Channel<NodeT>(joinBacklog)
+  private val reconfigureContext = Channel<NodeT>(joinBacklog)
   val nextSeqNum
     get() = ncStateMachine.nextSegNum
 
   /**
-   * @throws IllegalNodeHandlerInit
+   * @throws IllegalNodeHandlerAlreadyInitialized
    * */
   override fun launch() {
     synchronized(this) {
-      this.nodesScope ?: throw IllegalNodeHandlerInit()
+      this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
       this.nodesScope = CoroutineScope(Dispatchers.Default);
     }
   }
@@ -55,7 +53,7 @@ class NodesHandler(
     return nodesScope?.launch {
       while(true) {
         select {
-          registerNewNode.onReceive { node -> onNodeRegistration(node) }
+          registerNewNode.onReceive { node -> TODO() }
           reconfigureContext.onReceive { node ->
             ncStateMachine.handleNodeDetach(node)
           }
@@ -65,9 +63,7 @@ class NodesHandler(
           }
         }
       }
-    } ?: throw RuntimeException(
-      "xyi ну вообще node scope не должен быть равен null"
-    )
+    } ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
   }
 
   override fun sendUnicast(
@@ -75,29 +71,34 @@ class NodesHandler(
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
   override fun registerNode(
-    node: Node, registerInContext: Boolean
-  ): Node {
-    nodesByIp.putIfAbsent(node.ipAddress, node) ?: return node
-    throw IllegalNodeRegisterAttempt("node already registered")
+    node: NodeT, registerInContext: Boolean
+  ): NodeT {
+    nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
+      with(it) {
+        nodesScope?.startObservation()
+          ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
+      }
+      return it
+    } ?: throw IllegalNodeRegisterAttempt("node already registered")
   }
 
   override suspend fun handleNodeRegistration(
-    node: Node
+    node: NodeT
   ) = registerNewNode.send(node)
 
   override suspend fun handleNodeTermination(
-    node: Node
+    node: NodeT
   ) = deadNodeChannel.send(node)
 
   override suspend fun handleNodeDetachPrepare(
-    node: Node
+    node: NodeT
   ) = reconfigureContext.send(node)
 
-  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, Node>> {
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, NodeT>> {
     return nodesByIp.entries.iterator()
   }
 
-  override operator fun get(ipAddress: InetSocketAddress): Node? {
+  override operator fun get(ipAddress: InetSocketAddress): NodeT? {
     return nodesByIp[ipAddress]
   }
 }
