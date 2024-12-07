@@ -1,15 +1,22 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states
+package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.Node
 import core.network.core.NodesHandler
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
-import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
+import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
@@ -19,6 +26,7 @@ import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.*
 import java.net.InetSocketAddress
 
 private val logger = KotlinLogging.logger(MasterState::class.java.name)
@@ -32,14 +40,45 @@ class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
   private val nodesHandler: NodesHandler,
+  gameConfig: GameConfig,
+  playerInfo: GamePlayer,
+  state: StateMsg? = null,
 ) : NetworkState {
-  private val gameEngine: GameEngine = GameEngine(JoinInUpdateQ, ncStateMachine)
+  private val gameEngine: GameContext = GameEngine(
+    JoinInUpdateQ, ncStateMachine, gameConfig
+  )
+  private val player: LocalObserverContext
 
-  @Volatile var config: InternalGameConfig? = null
-  @Volatile var player: LocalObserverContext? = null
+  @Volatile private var nodesInitScope: CoroutineScope? = null
+
+  init {
+    val entities = if(state != null) {
+      gameEngine.initGameFromState(gameConfig, state, playerInfo)
+    } else {
+      gameEngine.initGame(gameConfig, playerInfo)
+    }
+
+    val localSnake = entities.find { it.id == playerInfo.id }
+    if(localSnake != null) {
+      player = LocalObserverContext(
+        name = playerInfo.name,
+        snake = localSnake as SnakeEntity,
+        lastUpdateSeq = 0,
+        ncStateMachine = ncStateMachine,
+      )
+    } else {
+      throw IllegalMasterLaunchAttempt("local snake absent in state message")
+    }
+
+    initSubscriberNodes(state, entities)
+    gameEngine.launch()
+  }
+
 
   override fun joinHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
   ) {
     val request = MessageTranslator.fromProto(
       message, msgT
@@ -69,18 +108,24 @@ class MasterState(
   }
 
   override fun pingHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
   ) = ncStateMachine.onPingMsg(ipAddress, message, msgT)
 
   override fun ackHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
   ) {
     ncStateMachine.onAckMsg(ipAddress, message)
   }
 
 
   override fun roleChangeHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
 //    if(!node.running) return
@@ -100,7 +145,9 @@ class MasterState(
   }
 
   override fun steerHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
   ) {
     val node = nodesHandler.getNode(ipAddress) ?: return
 //    if(!node.running) return
@@ -140,24 +187,62 @@ class MasterState(
   }
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
-    player?.handleEvent(
+    player.handleEvent(
       steerMsg, ncStateMachine.nextSegNum
     )
   }
 
-  /**
-   * @throws IllegalMasterLaunchAttempt
-   * */
-  override fun initialize() {
-    val conf = config ?: throw IllegalMasterLaunchAttempt(ConfigIsNull)
-    val state = ncStateMachine.latestGameState.get()
-    if(state == null) {
-      gameEngine.initNewGame(conf)
-    } else {
-      gameEngine.initGameFromState(conf, state.first)
-    }
+  override fun cleanup() {
+    gameEngine.shutdown()
+    nodesHandler.shutdown()
+    nodesInitScope?.cancel()
   }
 
-  override fun cleanup() {
+  private fun initSubscriberNodes(
+    state: StateMsg?, entities: List<ActiveEntity>
+  ) {
+    if(state != null) {
+      val entMap = entities.associateBy { it.id }
+      nodesInitScope = CoroutineScope(Dispatchers.Default)
+
+      val blowjobs = state.players.map {
+        nodesInitScope?.async {
+          kotlin.runCatching {
+            val sn = entMap[it.id] ?: throw IllegalNodeRegisterAttempt(
+              "snake ${it.id} node not found"
+            )
+
+            val node = Node(
+              messageComparator =,
+              id = it.id,
+              ipAddress = InetSocketAddress(it.ipAddress!!, it.port!!),
+              nodeRole = it.nodeRole,
+              payload = null,
+              nodesHandler = nodesHandler
+            )
+
+            node.payload = if(it.nodeRole == NodeRole.VIEWER) {
+              ObserverContext(node, it.name)
+            } else {
+              ActiveObserverContext(node, it.name, sn as SnakeEntity)
+            }
+
+            nodesHandler.registerNode(node)
+          }.recover { e ->
+            logger.error(e) {
+              "receive when init node id: ${it.id}, addr :${it.ipAddress}:${it.port}"
+            }
+            when(e) {
+              is IllegalArgumentException, is NullPointerException, is IllegalNodeRegisterAttempt -> null
+
+              else                                                                                -> throw e
+            }
+          } ?: return@async
+
+          TODO("make node put")
+        }
+      }
+
+    }
   }
 }

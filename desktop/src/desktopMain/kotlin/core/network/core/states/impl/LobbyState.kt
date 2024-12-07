@@ -1,7 +1,7 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states
+package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.NodesHandler
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
@@ -14,17 +14,17 @@ import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import java.net.InetSocketAddress
-import java.util.*
+import java.util.HashMap
 
 class LobbyState(
   private val ncStateMachine: NetworkStateMachine,
   private val controller: NetworkController,
   private val nodesHandler: NodesHandler,
 ) : NetworkState {
-  private val waitToJoin = HashMap<GameMessage, GameConfig>()
+  private val waitToJoin = HashMap<SnakesProto.GameMessage, GameConfig>()
 
   override fun ackHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     if(ncStateMachine.networkState !is LobbyState) return
 
@@ -39,9 +39,9 @@ class LobbyState(
       p2pmsg.msg as JoinMsg
 
       if(p2pmsg.msg.nodeRole == NodeRole.VIEWER) {
-        ncStateMachine.changeState(NetworkStateChangeEvents.MasterNow)
+        ncStateMachine.changeState(TODO())
       } else if(p2pmsg.msg.nodeRole == NodeRole.NORMAL) {
-        ncStateMachine.changeState(NetworkStateChangeEvents.LaunchGame)
+        ncStateMachine.changeState(TODO())
       }
     }
   }
@@ -55,7 +55,7 @@ class LobbyState(
     if(ncStateMachine.networkState !is LobbyState) return
 
     val seq = ncStateMachine.nextSegNum
-    val node = nodesHandler.addNewNode(
+    val node = nodesHandler.registerNode(
       seq, NodeRole.MASTER, nodeId, address, false
     )
     val outp2pmsg = P2PMessage(seq, joinMsg, null, nodeId)
@@ -66,14 +66,14 @@ class LobbyState(
   }
 
   override fun announcementHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
 
     TODO("Not yet implemented")
   }
 
   override fun errorHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     val msg = ncStateMachine.onAckMsg(ipAddress, message) ?: return
     val p2pmsg = MessageTranslator.fromProto(msg)

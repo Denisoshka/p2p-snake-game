@@ -58,6 +58,5 @@ interface NetworkState {
   fun handleNodeDetach(node: Node) {
   }
 
-  fun initialize()
   fun cleanup()
 }

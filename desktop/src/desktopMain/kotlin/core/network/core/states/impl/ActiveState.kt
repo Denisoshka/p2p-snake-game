@@ -1,8 +1,8 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states
+package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.Node
 import core.network.core.NodesHandler
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
@@ -20,25 +20,25 @@ class ActiveState(
   private val nodesHandler: NodesHandler,
 ) : NetworkState {
   override fun joinHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     TODO("Not yet implemented")
   }
 
   override fun pingHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) = stateMachine.onPingMsg(ipAddress, message, msgT)
 
   override fun ackHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) = stateMachine.onAckMsg(ipAddress, message)
 
   override fun stateHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) = stateMachine.onStateMsg(ipAddress, message)
 
   override fun roleChangeHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     val inp2p = MessageTranslator.fromProto(message)
     if(inp2p.senderId == null || inp2p.receiverId == null) return
@@ -62,13 +62,13 @@ class ActiveState(
   }
 
   override fun announcementHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     TODO("Not yet implemented")
   }
 
   override fun errorHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, msgT: MessageType
   ) {
     TODO("Not yet implemented")
   }

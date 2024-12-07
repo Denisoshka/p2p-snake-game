@@ -10,6 +10,8 @@ interface NodeT {
   val ipAddress: InetSocketAddress
   var payload: NodePayloadT?
   val nodeState: NodeState
+  fun shutdown()
+  fun launch()
 
   enum class NodeState {
     None,

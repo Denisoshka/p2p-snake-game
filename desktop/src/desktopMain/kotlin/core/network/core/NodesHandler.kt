@@ -1,9 +1,9 @@
 package core.network.core
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerInit
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -20,7 +20,6 @@ class NodesHandler(
   @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine,
 ) : NodeContext, Iterable<Map.Entry<InetSocketAddress, Node>> {
-  val msgComparator = ncStateMachine.utils.getComparator()
   @Volatile private var nodesScope: CoroutineScope? = null
   val nodesByIp = ConcurrentHashMap<InetSocketAddress, Node>()
   private val deadNodeChannel = Channel<Node>(joinBacklog)
@@ -32,29 +31,18 @@ class NodesHandler(
   /**
    * @throws IllegalNodeHandlerInit
    * */
-  fun initHandler() {
+  override fun launch() {
     synchronized(this) {
       nodesScope ?: throw IllegalNodeHandlerInit()
       nodesScope = CoroutineScope(Dispatchers.Default);
     }
   }
 
-  fun shutdownHandler() {
+  override fun shutdown() {
     synchronized(this) {
       nodesScope?.cancel()
       nodesByIp.clear()
     }
-  }
-
-  fun getNode(ipAddr: InetSocketAddress): Node? {
-    return nodesByIp[ipAddr]
-  }
-
-  fun findNode(condition: (Node) -> Boolean): Node? {
-    for((_, node) in nodesByIp) {
-      if(condition(node)) return node
-    }
-    return null
   }
 
   /**
@@ -83,36 +71,11 @@ class NodesHandler(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
-  override fun addNewNode(
-    ipAddress: InetSocketAddress, registerInContext: Boolean
+  override fun registerNode(
+    node: Node, registerInContext: Boolean
   ): Node {
-    TODO("Not yet implemented")
-  }
-
-  fun shutdown() {
-    TODO("Not yet implemented")
-  }
-
-  fun addNewNode(
-    initialSeq: Long,
-    nodeRole: NodeRole,
-    nodeId: Int,
-    ipAddress: InetSocketAddress,
-    registerInContext: Boolean
-  ): Node {
-    nodesByIp[ipAddress]?.let { return it }
-    val node = Node(
-      initialSeq,
-      msgComparator,
-      nodeRole,
-      nodesScope!!,
-      nodeId,
-      ipAddress,
-      this,
-      registerInContext
-    )
-    val ret = nodesByIp.putIfAbsent(ipAddress, node) ?: return node
-    return ret
+    nodesByIp.putIfAbsent(node.ipAddress, node) ?: return node
+    throw IllegalNodeRegisterAttempt("node already registered")
   }
 
   override suspend fun handleNodeRegistration(
@@ -131,7 +94,7 @@ class NodesHandler(
     return nodesByIp.entries.iterator()
   }
 
-  operator fun get(address: InetSocketAddress): Node? {
-    return nodesByIp[address]
+  override operator fun get(ipAddress: InetSocketAddress): Node? {
+    return nodesByIp[ipAddress]
   }
 }

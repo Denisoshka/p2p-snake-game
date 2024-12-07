@@ -19,10 +19,8 @@ fun GameField(
 ) {
   Box(modifier = modifier.background(Color.LightGray)) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-
       drawSnakes(snakes, currentPlayerId)
       drawFood(food)
-
     }
   }
 }

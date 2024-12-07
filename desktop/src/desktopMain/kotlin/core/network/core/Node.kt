@@ -35,14 +35,14 @@ class Node(
 
   private val resendDelay = nodesHandler.resendDelay
   private val thresholdDelay = nodesHandler.thresholdDelay
-
-  @Volatile private var lastReceive = System.currentTimeMillis()
-  @Volatile private var lastSend = System.currentTimeMillis()
-  @Volatile private var observeJob: Job? = null
   private val stateHolder = AtomicReference(
     if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
     else NodeT.NodeState.Active
   )
+
+  @Volatile private var lastReceive = System.currentTimeMillis()
+  @Volatile private var lastSend = System.currentTimeMillis()
+  @Volatile private var observeJob: Job? = null
 
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
@@ -51,10 +51,18 @@ class Node(
     messageComparator
   )
 
+  override fun launch() {
+
+  }
+
+  override fun shutdown() {
+    observeJob?.cancel()
+  }
+
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
-    val seq = getNextMSGSeqNum()
+    val seq = nodesHandler.nextSeqNum
 
     val ping = nodesHandler.msgUtils.getPingMsg(seq)
     nodesHandler.sendUnicast(ping, ipAddress)
@@ -84,10 +92,6 @@ class Node(
       }
       lastSend = System.currentTimeMillis()
     }
-  }
-
-  fun getNextMSGSeqNum(): Long {
-    return nodesHandler.nextSeqNum
   }
 
   private fun checkMessages(): Long {
@@ -135,33 +139,39 @@ class Node(
   ) = launch {
     var nextDelay = 0L
     var detachedFromCluster = false
-    while(isActive) {
-      delay(nextDelay)
-      when(stateHolder.get()) {
-        NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
-          nextDelay = onProcessing()
-        }
+    try {
+      while(isActive) {
+        delay(nextDelay)
+        when(stateHolder.get()) {
+          NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
+            nextDelay = onProcessing()
+          }
 
-        NodeT.NodeState.Disconnected                    -> {
-          if(!detachedFromCluster) {
-            detachedFromCluster = true
+          NodeT.NodeState.Disconnected                    -> {
+            if(!detachedFromCluster) {
+              detachedFromCluster = true
+              node.payload?.onContextObserverTerminated()
+              node.payload = null
+              node.nodesHandler.handleNodeDetachPrepare(node)
+            }
+            nextDelay = onDetaching()
+          }
+
+          NodeT.NodeState.Terminated                      -> {
             node.payload?.onContextObserverTerminated()
             node.payload = null
-            node.nodesHandler.handleNodeDetachPrepare(node)
+            TODO("make node detach")
           }
-          nextDelay = onDetaching()
-        }
 
-        NodeT.NodeState.Terminated                      -> {
-          node.payload?.onContextObserverTerminated()
-          node.payload = null
-          TODO("make node detach")
+          else                                            -> {
+            logger.error { "state machine state is null" }
+            throw IllegalNetworkStateIsNull()
+          }
         }
-
-        else                                            -> {
-          logger.error { "state machine state is null" }
-          throw IllegalNetworkStateIsNull()
-        }
+      }
+    } catch(e: CancellationException) {
+      if(!detachedFromCluster) {
+        node.nodesHandler.handleNodeTermination(node)
       }
     }
   }
@@ -190,8 +200,6 @@ class Node(
   private fun onProcessing(
   ): Long {
     synchronized(msgForAcknowledge) {
-      if(!running) return 0
-
       val now = System.currentTimeMillis()
       val nextDelay = checkNodeConditions(now)
       sendPingIfNecessary(nextDelay, now)

@@ -10,6 +10,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import java.net.InetSocketAddress
 
 class ActiveObserverContext(
   node: Node,
@@ -31,7 +32,11 @@ class ActiveObserverContext(
     snake.snakeState = SnakeState.ZOMBIE
   }
 
-  override fun shootContextState(state: StateMsg) {
+  override fun shootContextState(
+    state: StateMsg,
+    masterAddrId: Pair<InetSocketAddress, Int>,
+    deputyAddrId: Pair<InetSocketAddress, Int>?
+  ) {
     if(!node.running) return
 
     val pl = GamePlayer(

@@ -16,7 +16,7 @@ fun app(gameController: GameController) {
         lobbyRoutine(gameController)
         lobbyScreen(
           announcements = gameController.announcementMsgsState,
-          onStartGame = gameController::openGameScreen,
+          onStartGame = gameController::openGame,
         )
       }
 

@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.UnicastNetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -23,7 +24,6 @@ class UnicastNetHandler(
   private lateinit var channel: DatagramChannel
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()
-  private val msgUtils = context.messageUtils
 
   init {
     bootstrap.apply {
@@ -48,9 +48,9 @@ class UnicastNetHandler(
   }
 
   override fun sendUnicastMessage(
-    message: MessageT, address: InetSocketAddress
+    message: SnakesProto.GameMessage, address: InetSocketAddress
   ) {
-    val data = Unpooled.wrappedBuffer(msgUtils.toBytes(message))
+    val data = Unpooled.wrappedBuffer(message.toByteArray())
     val packet = DatagramPacket(data, address)
     channel.writeAndFlush(packet)
   }
@@ -58,13 +58,14 @@ class UnicastNetHandler(
   class Handler(
     private val context: NetworkController
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
-    private val msgUtils = context.messageUtils
 
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket
     ) {
       try {
-        val message = msgUtils.fromBytes(packet.content().array())
+        val message = SnakesProto.GameMessage.parseFrom(
+          packet.content().array()
+        )
         context.handleUnicastMessage(message, packet.sender())
       } catch(e: IOException) {
         logger.error(e) { "invalid packet from " + packet.sender().toString() }

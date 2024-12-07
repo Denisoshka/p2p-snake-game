@@ -4,14 +4,21 @@ import core.network.core.Node
 import core.network.core.NodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AckMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
-import d.zhdanov.ccfit.nsu.core.network.core.states.*
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
@@ -36,23 +43,24 @@ class NetworkStateMachine(
     get() = seqNumProvider.incrementAndGet()
   val nextStateNum
     get() = stateNumProvider.getAndIncrement()
-  private val nodesHandler: NodesHandler =
-    TODO()
-  private val masterState = MasterState(this, netController, nodesHandler)
-  private val activeState = ActiveState(this, netController, nodesHandler)
-  private val passiveState = PassiveState(this, netController, nodesHandler)
-  private val lobbyState = LobbyState(this, netController, nodesHandler)
+  private val nodesHandler: NodesHandler = TODO()
 
-  @Volatile
-  var nodeId = 0
+  @Volatile var nodeId = 0
     private set
-  private val state: AtomicReference<NetworkState> =
-    AtomicReference(lobbyState)
+  private val state: AtomicReference<NetworkState> = AtomicReference(
+    LobbyState(
+      ncStateMachine = this,
+      controller = netController,
+      nodesHandler = nodesHandler,
+    )
+  )
+
   val networkState: NetworkState
     get() = state.get()
   val latestGameState = AtomicReference<Pair<StateMsg, Int>?>()
   val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
     AtomicReference()
+
 
   override fun submitSteerMsg(
     steerMsg: SteerMsg
@@ -67,7 +75,7 @@ class NetworkStateMachine(
     val msdp = masterDeputy.get() ?: return
 
     val (ms, dp) = msdp
-    st.player?.shootContextState(state, ms, dp)
+    st.player.shootContextState(state, ms, dp)
 
     for((_, node) in nodesHandler) {
       node.payload?.shootContextState(state, ms, dp)
@@ -86,6 +94,10 @@ class NetworkStateMachine(
       node.addMessageForAck(protomsg)
       sendUnicast(protomsg, ipAddr)
     }
+  }
+
+  override fun joinToGame(announcement: GameAnnouncement) {
+    TODO("Not yet implemented")
   }
 
   override fun sendUnicast(
@@ -233,60 +245,81 @@ class NetworkStateMachine(
     parseState(stateMsg)
   }
 
-  @Synchronized
-  fun changeState(event: NetworkStateChangeEvents) {
-    val curState = state.get()
-    when(event) {
-      is NetworkStateChangeEvents.LaunchGame   -> {
-        launchGamePreprocess(curState, event)
+  fun changeState(event: StateEvents) {
+    try {
+      when(event) {
+        is StateEvents.ControllerEvent.JoinAsNormal  -> TODO()
+        is StateEvents.ControllerEvent.JoinAsViewer  -> TODO()
+        is StateEvents.ControllerEvent.LaunchGame    -> TODO()
+        is StateEvents.ControllerEvent.SwitchToLobby -> handleSwitchToLobby(
+          event
+        )
+
+        is StateEvents.InternalEvent.JoinAsNormalAck -> TODO()
+        is StateEvents.InternalEvent.JoinAsViewerAck -> handleJoinAsViewerAck(
+          event
+        )
+
+        is StateEvents.InternalEvent.MasterNow       -> handleMasterNowEvent(
+          event
+        )
       }
-
-      is NetworkStateChangeEvents.MasterNow    -> {
-        if(curState !is ActiveState) return
-
-        state.set(masterState)
-        masterState.initialize()
-      }
-
-      NetworkStateChangeEvents.SwitchToLobby   -> {
-        if(curState is LobbyState) return
-        curState.cleanup()
-
-        state.set(lobbyState)
-        lobbyState.initialize()
-      }
-
-      is NetworkStateChangeEvents.JoinAsNormal -> {
-        if(curState is LobbyState) return
-        curState.cleanup()
-
-        state.set(activeState)
-        activeState.initialize()
-      }
-
-      is NetworkStateChangeEvents.JoinAsViewer -> {
-        if(curState is LobbyState) return
-
-        state.set(passiveState)
-        activeState.initialize()
-      }
+    } catch(e: Exception) {
+      Logger.error(e) { "change state failed" }
     }
   }
 
-  private fun launchGamePreprocess(
-    curState: NetworkState,
-    event: NetworkStateChangeEvents.LaunchGame
-  ) {
-    if(curState !is LobbyState) return
+  @Synchronized
+  private fun handleSwitchToLobby(event: StateEvents.ControllerEvent.SwitchToLobby) {
+    val curState = state.get()
+    if(curState is LobbyState) return
+
     curState.cleanup()
-    masterState.config = event.config
-    state
-    state.set(masterState)
-    masterState.initialize()
+
+    state.set(
+      LobbyState(
+        ncStateMachine = this,
+        controller = netController,
+        nodesHandler = nodesHandler,
+      )
+    )
   }
+
+  @Synchronized
+  private fun handleJoinAsViewerAck(event: StateEvents.InternalEvent.JoinAsViewerAck) {
+    val curState = state.get()
+    if(curState !is LobbyState) {
+      throw IllegalChangeStateAttempt(
+        fromState = curState.javaClass.name,
+        toState = MasterState::class.java.name
+      )
+    }
+  }
+
+  @Synchronized
+  private fun handleMasterNowEvent(event: StateEvents.InternalEvent.MasterNow) {
+    val curState = state.get()
+    if(curState !is ActiveState) throw IllegalChangeStateAttempt(
+      fromState = curState.javaClass.name,
+      toState = MasterState::class.java.name
+    )
+
+    state.set(
+      MasterState(
+        ncStateMachine = this,
+        netController = netController,
+        nodesHandler = nodesHandler,
+        playerInfo = event.playerInfo,
+        state = event.gameState
+      )
+    )
+
+  }
+
 
   override fun initialize() {
   }
 
   override fun cleanup() {}
+
 }

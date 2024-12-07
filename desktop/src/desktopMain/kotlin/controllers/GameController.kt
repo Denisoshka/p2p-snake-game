@@ -10,6 +10,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AnnouncementMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -37,6 +38,8 @@ class GameController(
   private var showCreateGameDialog by mutableStateOf(false)
 
   fun addAnnouncementMsg(msg: AnnouncementMsg) {
+    if(currentScreen != Screen.Lobby) return
+
     mainScope.launch {
       val existingIndex =
         announcementMsgsState.indexOfFirst { it.msg.gameName == msg.gameName }
@@ -68,11 +71,13 @@ class GameController(
     cleanupJob = null
   }
 
-  fun openGameScreen(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
+  fun openGame(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
     currentScreen = Screen.Game(gameConfig, announcement)
+
   }
 
   fun openLobby() {
     currentScreen = Screen.Lobby
+    ncStateHandler.changeState(StateEvents.SwitchToLobby)
   }
 }
