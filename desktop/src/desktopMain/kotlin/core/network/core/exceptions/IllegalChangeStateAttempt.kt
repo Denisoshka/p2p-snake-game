@@ -1,6 +1,9 @@
 package d.zhdanov.ccfit.nsu.core.network.core.exceptions
 
-class IllegalChangeStateAttempt(fromState: String, toState: String) :
-  IllegalArgumentException(
-    "illegal attempt to change state from $fromState to $toState"
-  )
+class IllegalChangeStateAttempt : IllegalArgumentException {
+  constructor(
+    fromState: String, toState: String
+  ) : super("illegal attempt to change state from $fromState to $toState")
+
+  constructor(msg: String) : super(msg)
+}

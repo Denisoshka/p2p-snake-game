@@ -2,9 +2,12 @@ package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 import core.network.core.Node
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import java.net.InetSocketAddress
 
 interface NodeContext {
+  val launched: Boolean
+
   fun launch()
   fun shutdown()
 
@@ -12,13 +15,8 @@ interface NodeContext {
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   )
 
-  fun addNewNode(
-    ipAddress: InetSocketAddress, registerInContext: Boolean = true
-  ): Node
-
   /**
-   * @throws d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-   * if node already in context
+   * @throws IllegalNodeRegisterAttempt if node already in context
    * */
   fun registerNode(node: Node, registerInContext: Boolean = true): Node
 

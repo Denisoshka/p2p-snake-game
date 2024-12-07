@@ -101,5 +101,4 @@ class LobbyState(
       waitToJoin.clear()
     }
   }
-
 }

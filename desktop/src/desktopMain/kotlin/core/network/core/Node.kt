@@ -2,8 +2,8 @@ package core.network.core
 
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNetworkStateIsNull
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT.NodeEvent
@@ -24,20 +24,28 @@ private const val IncorrectRegisterEvent =
  */
 class Node(
   messageComparator: Comparator<GameMessage>,
+  nodeState: NodeT.NodeState,
   override val id: Int,
   override val ipAddress: InetSocketAddress,
-  @Volatile override var nodeRole: NodeRole,
   @Volatile override var payload: NodePayloadT? = null,
   private val nodesHandler: NodesHandler,
 ) : NodeT {
+  override val running: Boolean
+    get() = with(nodeState) {
+      this == NodeT.NodeState.Active || this == NodeT.NodeState.Passive
+    }
+
   override val nodeState: NodeT.NodeState
     get() = stateHolder.get()
 
   private val resendDelay = nodesHandler.resendDelay
   private val thresholdDelay = nodesHandler.thresholdDelay
   private val stateHolder = AtomicReference(
-    if(nodeRole == NodeRole.VIEWER) NodeT.NodeState.Passive
-    else NodeT.NodeState.Active
+    if(nodeState != NodeT.NodeState.Active && nodeState != NodeT.NodeState.Passive) {
+      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
+    } else {
+      nodeState
+    }
   )
 
   @Volatile private var lastReceive = System.currentTimeMillis()
@@ -50,10 +58,6 @@ class Node(
   private val msgForAcknowledge: TreeMap<GameMessage, Long> = TreeMap(
     messageComparator
   )
-
-  override fun launch() {
-
-  }
 
   override fun shutdown() {
     observeJob?.cancel()
@@ -114,7 +118,7 @@ class Node(
 
   private fun changeState(newState: NodeT.NodeState): Boolean {
     do {
-      val prevState = stateHolder.get()
+      val prevState = nodeState
       if(newState <= prevState) return false;
     } while(stateHolder.compareAndSet(prevState, newState))
     return true
@@ -134,52 +138,49 @@ class Node(
     }
   }
 
-  fun CoroutineScope.startObservation(
-    node: Node
-  ) = launch {
-    var nextDelay = 0L
-    var detachedFromCluster = false
-    try {
-      while(isActive) {
-        delay(nextDelay)
-        when(stateHolder.get()) {
-          NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
-            nextDelay = onProcessing()
-          }
-
-          NodeT.NodeState.Disconnected                    -> {
-            if(!detachedFromCluster) {
-              detachedFromCluster = true
-              node.payload?.onContextObserverTerminated()
-              node.payload = null
-              node.nodesHandler.handleNodeDetachPrepare(node)
+  override fun CoroutineScope.startObservation(): Job {
+    this@Node.observeJob = launch {
+      var nextDelay = 0L
+      var detachedFromCluster = false
+      try {
+        while(isActive) {
+          delay(nextDelay)
+          when(nodeState) {
+            NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
+              nextDelay = onProcessing()
             }
-            nextDelay = onDetaching()
-          }
 
-          NodeT.NodeState.Terminated                      -> {
-            node.payload?.onContextObserverTerminated()
-            node.payload = null
-            TODO("make node detach")
-          }
+            NodeT.NodeState.Disconnected                    -> {
+              if(!detachedFromCluster) {
+                detachedFromCluster = true
+                this@Node.payload?.onContextObserverTerminated()
+                this@Node.payload = null
+                this@Node.nodesHandler.handleNodeDetachPrepare(this@Node)
+              }
+              nextDelay = onDetaching()
+            }
 
-          else                                            -> {
-            logger.error { "state machine state is null" }
-            throw IllegalNetworkStateIsNull()
+            NodeT.NodeState.Terminated                      -> {
+              this@Node.payload?.onContextObserverTerminated()
+              this@Node.payload = null
+              TODO("make node detach")
+            }
           }
         }
-      }
-    } catch(e: CancellationException) {
-      if(!detachedFromCluster) {
-        node.nodesHandler.handleNodeTermination(node)
+      } catch(e: CancellationException) {
+        if(!detachedFromCluster) {
+          this@Node.nodesHandler.handleNodeTermination(this@Node)
+        }
+        this.cancel()
       }
     }
+    return this@Node.observeJob!!
   }
 
-  fun getUnacknowledgedMessages(
+  override fun getUnacknowledgedMessages(
     node: Node
   ): List<GameMessage> {
-    if(stateHolder.get() > NodeT.NodeState.Disconnected) {
+    if(nodeState < NodeT.NodeState.Disconnected) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
     return synchronized(node.msgForAcknowledge) {
@@ -211,7 +212,7 @@ class Node(
   private fun onDetaching(
   ): Long {
     synchronized(msgForAcknowledge) {
-      if(stateHolder.get() != NodeT.NodeState.Disconnected) return 0
+      if(nodeState <= NodeT.NodeState.Disconnected) return 0
       val ret = checkNodeConditions(System.currentTimeMillis())
       if(msgForAcknowledge.isEmpty()) {
         stateHolder.set(NodeT.NodeState.Terminated)

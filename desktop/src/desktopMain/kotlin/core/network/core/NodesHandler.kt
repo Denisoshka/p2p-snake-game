@@ -20,8 +20,11 @@ class NodesHandler(
   @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine,
 ) : NodeContext, Iterable<Map.Entry<InetSocketAddress, Node>> {
+  override val launched: Boolean
+    get() = nodesScope?.isActive ?: false
+
   @Volatile private var nodesScope: CoroutineScope? = null
-  val nodesByIp = ConcurrentHashMap<InetSocketAddress, Node>()
+  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, Node>()
   private val deadNodeChannel = Channel<Node>(joinBacklog)
   private val registerNewNode = Channel<Node>(joinBacklog)
   private val reconfigureContext = Channel<Node>(joinBacklog)
@@ -33,8 +36,8 @@ class NodesHandler(
    * */
   override fun launch() {
     synchronized(this) {
-      nodesScope ?: throw IllegalNodeHandlerInit()
-      nodesScope = CoroutineScope(Dispatchers.Default);
+      this.nodesScope ?: throw IllegalNodeHandlerInit()
+      this.nodesScope = CoroutineScope(Dispatchers.Default);
     }
   }
 
@@ -67,7 +70,7 @@ class NodesHandler(
     )
   }
 
-  fun sendUnicast(
+  override fun sendUnicast(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 

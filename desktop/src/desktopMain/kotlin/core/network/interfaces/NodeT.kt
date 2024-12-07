@@ -1,20 +1,31 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
+import core.network.core.Node
+import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import java.net.InetSocketAddress
 
 interface NodeT {
-  var nodeRole: NodeRole
   val id: Int
   val ipAddress: InetSocketAddress
   var payload: NodePayloadT?
   val nodeState: NodeState
+  val running: Boolean
   fun shutdown()
-  fun launch()
+  fun CoroutineScope.startObservation(): Job
+
+  /**
+   * @throws IllegalUnacknowledgedMessagesGetAttempt if [Node.nodeState] <
+   * [NodeT.NodeState.Disconnected]
+   * */
+  fun getUnacknowledgedMessages(
+    node: Node
+  ): List<GameMessage>
 
   enum class NodeState {
-    None,
     Active,
     Passive,
     Disconnected,

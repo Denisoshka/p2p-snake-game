@@ -31,9 +31,6 @@ import java.net.InetSocketAddress
 
 private val logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val PlayerNameIsBlank = "player name blank"
-private const val NodeAlreadyRunning = "node already running"
-private const val ConfigIsNull = "game config not set"
-private const val StateIsNotSet = "state is not set"
 private const val JoinInUpdateQ = 10
 
 class MasterState(
@@ -47,7 +44,7 @@ class MasterState(
   private val gameEngine: GameContext = GameEngine(
     JoinInUpdateQ, ncStateMachine, gameConfig
   )
-  private val player: LocalObserverContext
+  val player: LocalObserverContext
 
   @Volatile private var nodesInitScope: CoroutineScope? = null
 
@@ -70,10 +67,13 @@ class MasterState(
       throw IllegalMasterLaunchAttempt("local snake absent in state message")
     }
 
-    initSubscriberNodes(state, entities)
+    when(state) {
+      null -> initContext()
+      else -> initContextFromState(state, entities)
+    }
+
     gameEngine.launch()
   }
-
 
   override fun joinHandle(
     ipAddress: InetSocketAddress,
@@ -93,17 +93,11 @@ class MasterState(
           "$ipAddress invalid node role: ${inMsg.nodeRole}"
         )
       }
-      nodesHandler.getNode(ipAddress)?.let {
-        val st = it.state
-        if(NodeT.isRunning(st)) return
-        throw IllegalNodeRegisterAttempt(
-          "$ipAddress node already registered: ${inMsg.nodeRole}"
-        )
+      nodesHandler[ipAddress]?.let {
+        TODO()
       }
-
     } catch(e: IllegalNodeRegisterAttempt) {
-      logger.trace { e }
-      TODO("сделать посыл нахуй")
+      logger.trace(e) { }
     }
   }
 
@@ -127,8 +121,10 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = nodesHandler.getNode(ipAddress) ?: return
-//    if(!node.running) return
+    val node = nodesHandler[ipAddress]?.let {
+      if(!it.running) return
+    } ?: return
+
     val inp2p = MessageTranslator.fromProto(
       message, MessageType.RoleChangeMsg
     )
@@ -149,8 +145,9 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = nodesHandler.getNode(ipAddress) ?: return
-//    if(!node.running) return
+    val node = nodesHandler[ipAddress] ?: return
+    if(!node.running) return
+
     val inp2p = MessageTranslator.fromProto(
       message, MessageType.SteerMsg
     )
@@ -199,50 +196,61 @@ class MasterState(
   }
 
   private fun initSubscriberNodes(
-    state: StateMsg?, entities: List<ActiveEntity>
+    state: StateMsg, entities: List<ActiveEntity>
   ) {
-    if(state != null) {
-      val entMap = entities.associateBy { it.id }
-      nodesInitScope = CoroutineScope(Dispatchers.Default)
+    val entMap = entities.associateBy { it.id }
 
-      val blowjobs = state.players.map {
-        nodesInitScope?.async {
-          kotlin.runCatching {
-            val sn = entMap[it.id] ?: throw IllegalNodeRegisterAttempt(
-              "snake ${it.id} node not found"
+    state.players.map {
+      nodesInitScope?.async {
+        kotlin.runCatching {
+          val sn = entMap[it.id] ?: throw IllegalNodeRegisterAttempt(
+            "snake ${it.id} node not found"
+          )
+          val nodeState = when(it.nodeRole) {
+            NodeRole.VIEWER                  -> NodeT.NodeState.Passive
+            NodeRole.NORMAL, NodeRole.DEPUTY -> NodeT.NodeState.Active
+            NodeRole.MASTER                  -> throw IllegalNodeRegisterAttempt(
+              "illegal initial node state ${it.nodeRole}" + " during master state initialize"
             )
+          }
+          val node = Node(
+            messageComparator =,
+            id = it.id,
+            ipAddress = InetSocketAddress(it.ipAddress!!, it.port!!),
+            payload = null,
+            nodesHandler = nodesHandler,
+            nodeState = nodeState
+          )
 
-            val node = Node(
-              messageComparator =,
-              id = it.id,
-              ipAddress = InetSocketAddress(it.ipAddress!!, it.port!!),
-              nodeRole = it.nodeRole,
-              payload = null,
-              nodesHandler = nodesHandler
-            )
+          node.payload = if(it.nodeRole == NodeRole.VIEWER) {
+            ObserverContext(node, it.name)
+          } else {
+            ActiveObserverContext(node, it.name, sn as SnakeEntity)
+          }
 
-            node.payload = if(it.nodeRole == NodeRole.VIEWER) {
-              ObserverContext(node, it.name)
-            } else {
-              ActiveObserverContext(node, it.name, sn as SnakeEntity)
-            }
+          nodesHandler.registerNode(node)
+        }.recover { e ->
+          logger.error(e) {
+            "receive when init node id: ${it.id}, addr :${it.ipAddress}:${it.port}"
+          }
 
-            nodesHandler.registerNode(node)
-          }.recover { e ->
-            logger.error(e) {
-              "receive when init node id: ${it.id}, addr :${it.ipAddress}:${it.port}"
-            }
-            when(e) {
-              is IllegalArgumentException, is NullPointerException, is IllegalNodeRegisterAttempt -> null
-
-              else                                                                                -> throw e
-            }
-          } ?: return@async
-
-          TODO("make node put")
+          if(e !is IllegalArgumentException && e !is NullPointerException && e !is IllegalNodeRegisterAttempt) {
+            throw e
+          }
         }
       }
-
     }
+  }
+
+  private fun initContextFromState(
+    state: StateMsg,
+    entities: List<ActiveEntity>
+  ) {
+    initSubscriberNodes(state, entities)
+  }
+
+  private fun initContext() {
+    nodesInitScope = CoroutineScope(Dispatchers.Default)
+    nodesHandler.launch()
   }
 }

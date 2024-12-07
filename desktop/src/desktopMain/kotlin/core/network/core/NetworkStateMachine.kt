@@ -213,7 +213,7 @@ class NetworkStateMachine(
   fun onPingMsg(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val node = nodesHandler.getNode(ipAddress) ?: return
+    val node = nodesHandler[ipAddress] ?: return
     val outp2p = getP2PAck(message, node)
     val outmsg = MessageTranslator.toMessageT(
       outp2p, MessageType.AckMsg
@@ -226,7 +226,7 @@ class NetworkStateMachine(
    */
   fun onAckMsg(
     ipAddress: InetSocketAddress, message: GameMessage
-  ) = nodesHandler.getNode(ipAddress)?.ackMessage(message)
+  ) = nodesHandler[ipAddress]?.ackMessage(message)
 
 
   fun onStateMsg(ipAddress: InetSocketAddress, message: GameMessage) {
