@@ -9,7 +9,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import java.net.InetSocketAddress
 
 class ActiveObserverContext(
@@ -25,7 +24,7 @@ class ActiveObserverContext(
   override fun handleEvent(event: SteerMsg, seq: Long) {
     if(seq <= lastUpdateSeq) return
     lastUpdateSeq = seq
-    snake.changeState(event.direction)
+    snake.changeState(event)
   }
 
   override fun onContextObserverTerminated() {
@@ -37,22 +36,22 @@ class ActiveObserverContext(
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?
   ) {
-    if(!node.running) return
+    val nodeRole = getNodeRole(masterAddrId, deputyAddrId) ?: return
 
     val pl = GamePlayer(
-      name,
-      node.nodeId,
-      node.ipAddress.address.hostAddress,
-      node.ipAddress.port,
-      node.nodeRole,
-      PlayerType.HUMAN,
-      score,
+      name = name,
+      id = node.nodeId,
+      ipAddress = node.ipAddress.address.hostAddress,
+      port = node.ipAddress.port,
+      nodeRole = nodeRole,
+      playerType = PlayerType.HUMAN,
+      score = score,
     )
     state.players.add(pl)
   }
 
   override fun atDead(context: GameEngine) {
     snake.atDead(context)
-    node.handleEvent(NodeT.NodeEvent.ShutdownFromCluster)
+    node.detach()
   }
 }

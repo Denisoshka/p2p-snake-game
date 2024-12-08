@@ -58,6 +58,26 @@ object MessageUtils {
         ).build()
     }
 
+    fun getRoleChangeMsg(
+      msgSeq: Long,
+      senderId: Int,
+      receiverId: Int,
+      senderRole: SnakesProto.NodeRole? = null,
+      receiverRole: SnakesProto.NodeRole? = null,
+    ): SnakesProto.GameMessage {
+      val roleCng = SnakesProto.GameMessage.RoleChangeMsg.newBuilder().apply {
+        senderRole?.let { setSenderRole(it) }
+        receiverRole?.let { setReceiverRole(it) }
+      }.build()
+
+      return SnakesProto.GameMessage.newBuilder().apply {
+        setMsgSeq(msgSeq)
+        setSenderId(senderId)
+        setReceiverId(receiverId)
+        setRoleChange(roleCng)
+      }.build()
+    }
+
     fun getAckMsg(
       msgSeq: SnakesProto.GameMessage, senderId: Int, receiverId: Int
     ): SnakesProto.GameMessage {
@@ -66,7 +86,7 @@ object MessageUtils {
   }
 
   object RoleChangeIdentifier {
-    fun correctRoleChangeMsg(msg: SnakesProto.GameMessage) : Boolean {
+    fun correctRoleChangeMsg(msg: SnakesProto.GameMessage): Boolean {
       return msg.hasRoleChange() && msg.hasReceiverId() && msg.hasSenderId()
     }
 

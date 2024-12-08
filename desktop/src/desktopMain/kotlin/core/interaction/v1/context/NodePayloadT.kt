@@ -9,7 +9,7 @@ import java.net.InetSocketAddress
 interface NodePayloadT {
   val name: String
   val score: Int
-  val node : NodeT
+  val node: NodeT
   fun handleEvent(event: SteerMsg, seq: Long)
   fun onContextObserverTerminated()
   fun shootContextState(
@@ -18,21 +18,18 @@ interface NodePayloadT {
     deputyAddrId: Pair<InetSocketAddress, Int>?
   )
 
-  companion object {
-    fun NodeRoleByNodeState(
-      nodeState: NodeT.NodeState, nodeId: Int, masterId: Int, deputyId: Int?
-    ) {
-      when(nodeState) {
-        NodeT.NodeState.Active  -> {
-          when(nodeId) {
-            masterId -> NodeRole.MASTER
-            deputyId -> NodeRole.DEPUTY
-            else     -> NodeRole.NORMAL
-          }
-        }
-
+  fun getNodeRole(
+    masterAddrId: Pair<InetSocketAddress, Int>,
+    deputyAddrId: Pair<InetSocketAddress, Int>?
+  ) = when(node.nodeId) {
+    masterAddrId.second  -> NodeRole.MASTER
+    deputyAddrId?.second -> NodeRole.DEPUTY
+    else                 -> {
+      when(node.nodeState) {
+        NodeT.NodeState.Active  -> NodeRole.NORMAL
         NodeT.NodeState.Passive -> NodeRole.VIEWER
-        else                    ->
+        else                    -> null
       }
     }
   }
+}

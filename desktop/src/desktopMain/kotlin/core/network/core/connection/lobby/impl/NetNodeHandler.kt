@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
 
+import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-import core.network.core.connection.NodeContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -34,7 +34,7 @@ class NetNodeHandler(
   @Synchronized
   override fun launch() {
     this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
-    this.nodesScope = CoroutineScope(Dispatchers.Default);
+    this.nodesScope = CoroutineScope(Dispatchers.IO);
   }
 
   override fun shutdown() {
@@ -50,7 +50,7 @@ class NetNodeHandler(
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
-          ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
+        ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
       }
       return it
     } ?: throw IllegalNodeRegisterAttempt("node already registered")

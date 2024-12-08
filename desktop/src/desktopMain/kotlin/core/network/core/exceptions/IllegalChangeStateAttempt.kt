@@ -5,5 +5,9 @@ class IllegalChangeStateAttempt : IllegalArgumentException {
     fromState: String, toState: String
   ) : super("illegal attempt to change state from $fromState to $toState")
 
+  constructor(
+    fromState: String, toState: String, msg: String
+  ) : super("illegal attempt to change state from $fromState to $toState : $msg")
+
   constructor(msg: String) : super(msg)
 }

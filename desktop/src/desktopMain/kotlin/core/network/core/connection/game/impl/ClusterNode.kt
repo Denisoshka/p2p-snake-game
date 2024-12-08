@@ -62,8 +62,9 @@ class ClusterNode(
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
     val seq = clusterNodesHandler.nextSeqNum
-    val ping = MessageUtils.getPingMsg(seq)
+    val ping = MessageUtils.MessageProducer.getPingMsg(seq)
 
+    addMessageForAck(ping)
     sendToNode(ping)
 
     lastSend = System.currentTimeMillis()
