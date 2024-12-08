@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
+import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
@@ -31,9 +31,9 @@ class GameEngine(
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
 
-  private val joinBacklog = Channel<Pair<GameNode, String>>(joinInStateQ)
+  private val joinBacklog = Channel<Pair<ClusterNode, String>>(joinInStateQ)
   private val joinedPlayers =
-    ArrayList<Pair<Pair<GameNode, String>, ActiveEntity?>>(joinInStateQ)
+    ArrayList<Pair<Pair<ClusterNode, String>, ActiveEntity?>>(joinInStateQ)
 
   private fun spawnNewSnake(
     id: Int, direction: Direction? = null
@@ -43,7 +43,7 @@ class GameEngine(
     return SnakeEntity(coords.first, coords.second, dir, id)
   }
 
-  private fun offerPlayer(playerInfo: GameNode, name: String): Boolean {
+  private fun offerPlayer(playerInfo: ClusterNode, name: String): Boolean {
     return joinBacklog.trySend(playerInfo to name).isSuccess
   }
 

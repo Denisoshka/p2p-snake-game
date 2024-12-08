@@ -1,11 +1,12 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl
+package core.network.core.connection.game.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.GameNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -18,13 +19,13 @@ private val Logger = KotlinLogging.logger {}
 /**
  * todo fix doc
  */
-class GameNode(
+class ClusterNode(
   nodeState: NodeT.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   @Volatile override var payload: NodePayloadT? = null,
-  private val gameNodesHandler: GameNodesHandler,
-) : GameNodeT {
+  private val clusterNodesHandler: ClusterNodesHandler,
+) : ClusterNodeT {
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
   override val running: Boolean
@@ -34,10 +35,10 @@ class GameNode(
 
   override val nodeState: NodeT.NodeState
     get() = stateHolder.get()
-  private val resendDelay = gameNodesHandler.resendDelay
+  private val resendDelay = clusterNodesHandler.resendDelay
 
 
-  private val thresholdDelay = gameNodesHandler.thresholdDelay
+  private val thresholdDelay = clusterNodesHandler.thresholdDelay
   private val stateHolder = AtomicReference(
     if(nodeState != NodeT.NodeState.Active && nodeState != NodeT.NodeState.Passive) {
       throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
@@ -54,13 +55,13 @@ class GameNode(
     TreeMap(MessageUtils.messageComparator)
 
   override fun sendToNode(msg: SnakesProto.GameMessage) {
-    gameNodesHandler.sendUnicast(msg, ipAddress)
+    clusterNodesHandler.sendUnicast(msg, ipAddress)
   }
 
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
-    val seq = gameNodesHandler.nextSeqNum
+    val seq = clusterNodesHandler.nextSeqNum
     val ping = MessageUtils.getPingMsg(seq)
 
     sendToNode(ping)
@@ -133,7 +134,7 @@ class GameNode(
       var nextDelay = 0L
       var detachedFromCluster = false
       try {
-        Logger.trace { "${this@GameNode} startObservation" }
+        Logger.trace { "${this@ClusterNode} startObservation" }
         while(isActive) {
           delay(nextDelay)
           when(nodeState) {
@@ -143,20 +144,20 @@ class GameNode(
 
             NodeT.NodeState.Disconnected                    -> {
               if(!detachedFromCluster) {
-                Logger.trace { "${this@GameNode} disconnected" }
+                Logger.trace { "${this@ClusterNode} disconnected" }
                 detachedFromCluster = true
-                this@GameNode.payload?.onContextObserverTerminated()
-                this@GameNode.payload = null
-                this@GameNode.gameNodesHandler.handleNodeDetach(this@GameNode)
+                this@ClusterNode.payload?.onContextObserverTerminated()
+                this@ClusterNode.payload = null
+                this@ClusterNode.clusterNodesHandler.handleNodeDetach(this@ClusterNode)
               }
               nextDelay = onDetaching()
             }
 
             NodeT.NodeState.Terminated                      -> {
-              Logger.trace { "${this@GameNode} terminated" }
-              this@GameNode.payload?.onContextObserverTerminated()
-              this@GameNode.payload = null
-              this@GameNode.gameNodesHandler.handleNodeTermination(this@GameNode)
+              Logger.trace { "${this@ClusterNode} terminated" }
+              this@ClusterNode.payload?.onContextObserverTerminated()
+              this@ClusterNode.payload = null
+              this@ClusterNode.clusterNodesHandler.handleNodeTermination(this@ClusterNode)
               break
             }
           }
@@ -168,8 +169,8 @@ class GameNode(
   }
 
   /**
-   * @throws IllegalUnacknowledgedMessagesGetAttempt if [GameNode.nodeState] <
-   * [GameNodeT.NodeState.Disconnected]
+   * @throws IllegalUnacknowledgedMessagesGetAttempt if [ClusterNode.nodeState] <
+   * [ClusterNodeT.NodeState.Disconnected]
    * */
   override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
     if(nodeState < NodeT.NodeState.Disconnected) {

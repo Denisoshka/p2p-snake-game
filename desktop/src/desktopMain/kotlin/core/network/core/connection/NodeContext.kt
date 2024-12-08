@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.node
+package core.network.core.connection
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt

@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
@@ -13,7 +14,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.JoinMsg
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
@@ -21,27 +21,27 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
 
-private val logger = KotlinLogging.logger(MasterState::class.java.name)
+private val Logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val PlayerNameIsBlank = "player name blank"
 private const val JoinInUpdateQ = 10
 
 class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
-  private val gameNodesHandler: GameNodesHandler,
+  private val clusterNodesHandler: ClusterNodesHandler,
   gameConfig: GameConfig,
   playerInfo: GamePlayer,
   state: StateMsg? = null,
-) : NetworkStateT {
+) : MasterStateT {
   @Volatile private var nodesInitScope: CoroutineScope? = null;
   private val gameEngine: GameContext = GameEngine(
     JoinInUpdateQ, ncStateMachine, gameConfig
@@ -90,11 +90,11 @@ class MasterState(
           "$ipAddress invalid node role: ${inMsg.nodeRole}"
         )
       }
-      gameNodesHandler[ipAddress]?.let {
+      clusterNodesHandler[ipAddress]?.let {
         TODO()
       }
     } catch(e: IllegalNodeRegisterAttempt) {
-      logger.trace(e) { }
+      Logger.trace(e) { }
     }
   }
 
@@ -118,26 +118,22 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = gameNodesHandler[ipAddress]?.let {
-      if(!it.running) return
-      it
-    } ?: return
+    if(!MessageUtils.RoleChangeIdentifier.fromNodeNodeLeave(message)) return
+    val node = clusterNodesHandler[ipAddress] ?: return
 
-    val inp2p = MessageTranslator.fromProto(
-      message, MessageType.RoleChangeMsg
+    val ack = MessageUtils.MessageProducer.getAckMsg(
+      message.msgSeq, ncStateMachine.nodeId, node.nodeId
     )
+    netController.sendUnicast(ack, ipAddress)
 
-    (inp2p.msg as RoleChangeMsg).let {
-      if(it.senderRole != NodeRole.VIEWER && it.receiverRole != null) return
-    }
+    if(!node.running) node.detach()
+  }
 
-    val outp2p = ncStateMachine.getP2PAck(message, node)
-    val outmsg = MessageTranslator.toGameMessage(outp2p, MessageType.AckMsg)
-
-    netController.sendUnicast(outmsg, ipAddress)
-    node.addMessageForAck(outmsg)
-    node.shutdown()
-    node.handleEvent(NodeT.NodeEvent.ShutdownFromCluster)
+  override fun errorHandle(
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage,
+    msgT: MessageType
+  ) {
   }
 
   override fun steerHandle(
@@ -145,7 +141,7 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = gameNodesHandler[ipAddress] ?: return
+    val node = clusterNodesHandler[ipAddress] ?: return
     if(!node.running) return
 
     val inp2p = MessageTranslator.fromProto(
@@ -182,24 +178,23 @@ class MasterState(
               )
             }
 
-            val gameNode = GameNode(
-              messageComparator =,
+            val clusterNode = ClusterNode(
               nodeId = it.id,
               ipAddress = InetSocketAddress(it.ipAddress!!, it.port!!),
               payload = null,
-              gameNodesHandler = gameNodesHandler,
+              clusterNodesHandler = clusterNodesHandler,
               nodeState = nodeState
             )
 
-            gameNode.payload = if(it.nodeRole == NodeRole.VIEWER) {
-              ObserverContext(gameNode, it.name)
+            clusterNode.payload = if(it.nodeRole == NodeRole.VIEWER) {
+              ObserverContext(clusterNode, it.name)
             } else {
-              ActiveObserverContext(gameNode, it.name, sn as SnakeEntity)
+              ActiveObserverContext(clusterNode, it.name, sn as SnakeEntity)
             }
 
-            gameNodesHandler.registerNode(gameNode)
+            clusterNodesHandler.registerNode(clusterNode)
           }.recover { e ->
-            logger.error(e) {
+            Logger.error(e) {
               "receive when init node id: ${it.id}, addr :${it.ipAddress}:${it.port}"
             }
 
@@ -221,7 +216,7 @@ class MasterState(
   @Synchronized
   override fun cleanup() {
     gameEngine.shutdown()
-    gameNodesHandler.shutdown()
+    clusterNodesHandler.shutdown()
     nodesInitScope?.cancel()
   }
 }

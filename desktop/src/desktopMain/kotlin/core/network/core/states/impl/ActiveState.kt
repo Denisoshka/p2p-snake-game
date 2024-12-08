@@ -1,23 +1,26 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
+
+private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
 
 class ActiveState(
   private val stateMachine: NetworkStateMachine,
   private val controller: NetworkController,
-  private val gameNodesHandler: GameNodesHandler,
-) : NetworkStateT {
+  private val clusterNodesHandler: ClusterNodesHandler,
+) : ActiveStateT {
   override fun joinHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -51,24 +54,50 @@ class ActiveState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val inp2p = MessageTranslator.fromProto(message)
-    if(inp2p.senderId == null || inp2p.receiverId == null) return
-
-    val msDepInfo = stateMachine.masterDeputy.get() ?: return
-    if(inp2p.senderId != msDepInfo.first.second) return
-
-    val rlchn = inp2p.msg as RoleChangeMsg
-
-    if(rlchn.receiverRole == NodeRole.VIEWER) {
-      TODO("our snake dead, need go to lobby")
-    } else if(rlchn.receiverRole == NodeRole.DEPUTY) {
-      if(msDepInfo.second?.second == stateMachine.nodeId) return;
-      val newDepInfo = EmptyAddress to stateMachine.nodeId
-      val newMsDep = msDepInfo.first to newDepInfo
-      do {
-        val oldMsDepInfo = stateMachine.masterDeputy.get() ?: return
-      } while(stateMachine.masterDeputy.compareAndSet(oldMsDepInfo, newMsDep))
+    if(!MessageUtils.RoleChangeIdentifier.correctRoleChangeMsg(message)) {
+      Logger.debug {
+        "incorrect typeCase ${
+          message.typeCase
+        } has receiverId ${
+          message.hasReceiverId()
+        } has senderId ${
+          message.hasSenderId()
+        } "
+      }
+      return
     }
+
+    if(MessageUtils.RoleChangeIdentifier.fromDeputyDeputyMasterNow(message)) {
+      /**not handle wait master dead*/
+    } else if(MessageUtils.RoleChangeIdentifier.fromMasterPlayerDead(message)) {
+      atFromMasterPlayerDead(message)
+    } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeDeputyNow(message)) {
+      atFromMasterNodeDeputyNow(message)
+    } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeMasterNow(message)) {
+      atFromMasterNodeMasterNow(message)
+    } else {
+      Logger.debug {
+        "irrelevant ${
+          message.typeCase
+        } receiverRole : ${
+          message.roleChange.receiverRole
+        } senderRole : ${
+          message.roleChange.senderRole
+        }"
+      }
+    }
+  }
+
+  private fun atFromMasterNodeDeputyNow(message: SnakesProto.GameMessage) {
+    val (ms, _) = stateMachine.masterDeputy ?: return
+    if(ms.second != message.senderId) return
+
+  }
+
+  private fun atFromMasterPlayerDead(message: SnakesProto.GameMessage) {
+    val (ms, _) = stateMachine.masterDeputy ?: return
+    if(ms.second != message.senderId) return
+    stateMachine.changeState(StateEvents.ControllerEvent.SwitchToLobby)
   }
 
   override fun announcementHandle(
@@ -87,9 +116,9 @@ class ActiveState(
     TODO("Not yet implemented")
   }
 
-  override fun submitSteerMsg(steerMsg: SteerMsg) {
+  fun submitSteerMsg(steerMsg: SteerMsg) {
     val (masterInfo, _) = stateMachine.masterDeputy.get() ?: return
-    gameNodesHandler.getNode(masterInfo.first)?.let {
+    clusterNodesHandler.getNode(masterInfo.first)?.let {
       val p2pmsg = GameMessage(stateMachine.nextSegNum, steerMsg)
       val outMsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.SteerMsg)
       it.addMessageForAck(outMsg)
@@ -100,6 +129,6 @@ class ActiveState(
   private fun initContext() {}
 
   override fun cleanup() {
-    gameNodesHandler.shutdown()
+    clusterNodesHandler.shutdown()
   }
 }

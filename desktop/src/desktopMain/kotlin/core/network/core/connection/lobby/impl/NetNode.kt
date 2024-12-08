@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeContext
+import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging

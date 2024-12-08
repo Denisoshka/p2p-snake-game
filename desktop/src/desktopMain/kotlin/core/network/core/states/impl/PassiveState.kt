@@ -4,14 +4,14 @@ import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
 import java.net.InetSocketAddress
 
 class PassiveState(
   private val ncStateMachine: NetworkStateMachine,
   private val controller: NetworkController,
-  private val gameNodesHandler: GameNodesHandler,
+  private val clusterNodesHandler: ClusterNodesHandler,
 ) : NetworkStateT {
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
@@ -25,7 +25,7 @@ class PassiveState(
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val msg = gameNodesHandler[ipAddress]?.ackMessage(message) ?: return
+    val msg = clusterNodesHandler[ipAddress]?.ackMessage(message) ?: return
 
   }
 
@@ -59,6 +59,6 @@ class PassiveState(
   }
 
   override fun cleanup() {
-    gameNodesHandler.shutdown()
+    clusterNodesHandler.shutdown()
   }
 }

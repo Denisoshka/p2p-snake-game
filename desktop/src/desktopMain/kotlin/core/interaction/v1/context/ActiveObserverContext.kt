@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
+import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
@@ -13,11 +13,11 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import java.net.InetSocketAddress
 
 class ActiveObserverContext(
-  gameNode: GameNode,
+  clusterNode: ClusterNode,
   name: String,
   private val snake: SnakeEntity,
   private var lastUpdateSeq: Long = 0,
-) : Entity by snake, ObserverContext(gameNode, name) {
+) : Entity by snake, ObserverContext(clusterNode, name) {
   override val score: Int
     get() = snake.score
 

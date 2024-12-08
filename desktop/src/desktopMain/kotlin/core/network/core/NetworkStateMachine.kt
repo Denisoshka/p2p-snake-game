@@ -1,47 +1,59 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import core.network.core.connection.game.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AckMsg
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateObserver
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
-import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 
 private val Logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
 private val kPortRange = 1..65535
 
 class NetworkStateMachine(
   private val netController: NetworkController,
-  private val gameController: GameController
+  private val gameController: GameController,
 ) : NetworkStateContext, NetworkStateObserver, StateConsumer {
   private val seqNumProvider = AtomicLong(0)
   private val stateNumProvider = AtomicInteger(0)
-  private val gameNodesHandler: GameNodesHandler = TODO()
+  private val clusterNodesHandler: ClusterNodesHandler = TODO()
   private val netNodesHandler: NetNodeHandler = TODO()
+
+  private val deadNodeChannel = Channel<ClusterNode>(TODO())
+  private val registerNewNode = Channel<ClusterNode>(TODO())
+  private val detachNodeChannel = Channel<ClusterNode>(TODO())
 
   val nextSegNum
     get() = seqNumProvider.incrementAndGet()
@@ -54,41 +66,39 @@ class NetworkStateMachine(
 
   private val networkStateHolder: AtomicReference<NetworkStateT> =
     AtomicReference(
-      LobbyState(
-        ncStateMachine = this,
-        controller = netController,
-        netNodesHandler = netNodesHandler,
-      )
+      LobbyState(this, netController, netNodesHandler)
     )
 
   private val latestGameState = AtomicReference<Pair<StateMsg, Int>?>()
-  val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
+  private val masterDeputyHolder: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
     AtomicReference()
+  val masterDeputy: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?
+    get() = masterDeputyHolder.get()
 
+  override
 
-  override fun submitState(
+  fun submitState(
     state: StateMsg,
-    acceptedPlayers: List<Pair<Pair<GameNode, String>, ActiveEntity?>>
+    acceptedPlayers: List<Pair<Pair<ClusterNode, String>, ActiveEntity?>>
   ) {
     val st = this.networkStateHolder.get();
     if(st !is MasterState) return
-    val msdp = masterDeputy.get() ?: return
+    val msdp = masterDeputyHolder.get() ?: return
 
     val (ms, dp) = msdp
     st.player.shootContextState(state, ms, dp)
 
-    for((_, node) in gameNodesHandler) {
+    for((_, node) in clusterNodesHandler) {
       node.payload?.shootContextState(state, ms, dp)
     }
 
     val stateNum = stateNumProvider.incrementAndGet()
     state.stateOrder = stateNum
 
-    val p2pmsg =
-      GameMessage(nextSegNum, state)
+    val p2pmsg = GameMessage(nextSegNum, state)
     val protomsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.StateMsg)
 
-    for((ipAddr, node) in gameNodesHandler) {
+    for((ipAddr, node) in clusterNodesHandler) {
       if(!node.running) continue
 
       node.addMessageForAck(protomsg)
@@ -101,56 +111,38 @@ class NetworkStateMachine(
   }
 
   override fun sendUnicast(
-    msg: GameMessage, nodeAddress: InetSocketAddress
+    msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = netController.sendUnicast(msg, nodeAddress)
 
   override fun cleanup() {
     TODO("Not yet implemented")
   }
 
-  fun getP2PAck(
-    message: GameMessage, gameNode: GameNode
-  ): d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage {
-    val ack = AckMsg()
-    val p2pmsg =
-      GameMessage(message.msgSeq, ack, nodeId, gameNode.nodeId)
-    return p2pmsg
-  }
-
-  fun getP2PRoleChange(
-    senderRole: NodeRole?,
-    receiverRole: NodeRole?,
-    senderId: Int,
-    receiverId: Int,
-    seq: Long
-  ): d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage {
-    val roleChange = RoleChangeMsg(senderRole, receiverRole)
-    val p2pMsg =
-      GameMessage(seq, roleChange, senderId, receiverId)
-    return p2pMsg
-  }
-
   /**
    * @return `Node<MessageT, InboundMessageTranslatorT, PayloadT>` if new
    * deputy was chosen successfully, else `null`
+   * @throws IllegalChangeStateAttempt
    */
   private fun chooseSetNewDeputy(oldDeputyId: Int): NodeT? {
-    val (masterInfo, _) = masterDeputy.get() ?: return null
+    val (masterInfo, _) = masterDeputyHolder.get()
+                          ?: throw IllegalChangeStateAttempt(
+                            "current master deputy missing "
+                          )
 
-    val deputyCandidate = gameNodesHandler.find {
-      it.value.nodeState == NodeT.NodeState.Active && it.value.nodeId != oldDeputyId
+    val deputyCandidate = clusterNodesHandler.find {
+      it.value.nodeState == NodeT.NodeState.Active && it.value.payload != null && it.value.nodeId != oldDeputyId
     }?.value
 
     val newDeputyInfo = deputyCandidate?.let {
       Pair(it.ipAddress, it.nodeId)
     }
 
-    masterDeputy.set(Pair(masterInfo, newDeputyInfo))
+    masterDeputyHolder.set(Pair(masterInfo, newDeputyInfo))
 
     return deputyCandidate
   }
 
-  override fun handleNodeDetach(node: NodeT) {
+  override suspend fun handleNodeDetach(node: NodeT) {
     try {
       when(val st = networkState) {
         is MasterState  -> masterHandleNodeDetach(st, node)
@@ -163,12 +155,32 @@ class NetworkStateMachine(
     }
   }
 
+  /**
+   * Мы меняем состояние кластера в одной функции так что исполнение линейно
+   */
+  private fun CoroutineScope.nodesWatcherRoutine() = launch {
+    try {
+      while(isActive) {
+        select {
+          detachNodeChannel.onReceive { node ->
+            handleNodeDetach(node)
+          }
+          deadNodeChannel.onReceive { node ->
+            handleNodeDetach(node)
+          }
+        }
+      }
+    } catch(_: CancellationException) {
+    } catch(e: Exception) {
+      Logger.error(e) { "unexpected error" }
+    }
+  }
 
   /**
    * @throws IllegalChangeStateAttempt
    * */
   private fun passiveHandleNodeDetach(st: PassiveState, node: NodeT) {
-    val (msInfo, depInfo) = masterDeputy.get() ?: return
+    val (msInfo, depInfo) = masterDeputyHolder.get() ?: return
     if(msInfo.second != node.nodeId) throw IllegalChangeStateAttempt(
       "non master node $node in passiveHandleNodeDetach"
     )
@@ -180,7 +192,7 @@ class NetworkStateMachine(
   }
 
   private fun activeHandleNodeDetach(st: ActiveState, node: NodeT) {
-    val (msInfo, depInfo) = masterDeputy.get() ?: return
+    val (msInfo, depInfo) = masterDeputyHolder.get() ?: return
     if(depInfo == null) TODO(
       "ну вообще мы не можем сюда зайти в active режиме Deputy"
     )
@@ -196,7 +208,7 @@ class NetworkStateMachine(
   }
 
   private fun masterHandleNodeDetach(st: MasterState, node: NodeT) {
-    val (_, depInfo) = masterDeputy.get() ?: return
+    val (_, depInfo) = masterDeputyHolder.get() ?: return
     if(node.nodeId != depInfo?.second) return
 
     val newDep = chooseSetNewDeputy(node.nodeId) ?: return
@@ -235,63 +247,73 @@ class NetworkStateMachine(
   private fun changeDeputyToMaster(
     depInfo: Pair<InetSocketAddress, Int>, node: NodeT
   ) {
-    masterDeputy.set(Pair(depInfo, null))
+    masterDeputyHolder.set(Pair(depInfo, null))
     val unacknowledgedMessages = node.getUnacknowledgedMessages()
-    val newMasterGameNode = GameNode(
-      messageComparator =,
+    val newMasterClusterNode = ClusterNode(
       nodeState = NodeT.NodeState.Active,
       nodeId = depInfo.second,
       ipAddress = depInfo.first,
       payload = null,
-      gameNodesHandler = gameNodesHandler
+      clusterNodesHandler = clusterNodesHandler
     )
-    gameNodesHandler.registerNode(newMasterGameNode, true)
+    clusterNodesHandler.registerNode(newMasterClusterNode)
     node.addAllMessageForAck(unacknowledgedMessages)
   }
 
   /**
    * @throws IllegalNodeDestination
    * */
-  private fun parseState(state: StateMsg) {
+  private fun nonMasterParseState(state: StateMsg) {
     val depStateInfo = state.players.find { it.nodeRole == NodeRole.DEPUTY }
-    val (msInfo, depInfo) = masterDeputy.get() ?: return
+    val (msInfo, depInfo) = masterDeputyHolder.get() ?: return
     if(depInfo?.second == depStateInfo?.id) return
     val newDepInfo = depStateInfo?.let {
       try {
-        Pair(InetSocketAddress(it.ipAddress, it.port!!), it.id)
+        Pair(InetSocketAddress(it.ipAddress!!, it.port!!), it.id)
       } catch(e: Exception) {
         Logger.error(e) { "deputy destination has dirty info" }
         throw IllegalNodeDestination(e)
       }
-    }/*TODO здесь может быть гонка данных когда мы уже в другом состоянии но
-       эта функция долго работает*/
-    masterDeputy.set(Pair(msInfo, newDepInfo))
+    }
+    masterDeputyHolder.set(Pair(msInfo, newDepInfo))
   }
 
   fun onPingMsg(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    gameNodesHandler[ipAddress]?.let {
+    clusterNodesHandler[ipAddress]?.let {
       val outp2p = getP2PAck(message, it)
       val outmsg = MessageTranslator.toGameMessage(outp2p, MessageType.AckMsg)
       netController.sendUnicast(outmsg, it.ipAddress)
     }
   }
 
-  fun onStateMsg(ipAddress: InetSocketAddress, message: GameMessage) {
-    val (ms, _) = masterDeputy.get() ?: return
+  fun onStateMsg(
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
+  ) {
+    val (ms, _) = masterDeputyHolder.get() ?: return
     if(ms.first != ipAddress) return
 
-    val p2pMsg = MessageTranslator.fromProto(message, MessageType.StateMsg)
-    val stateMsg = p2pMsg.msg as StateMsg
-    val newStateOrder = stateMsg.stateOrder
-    while(true) {
-      val curState = latestGameState.get() ?: return
-      if(newStateOrder <= curState.second) return
-      val newState = stateMsg to newStateOrder
-      if(latestGameState.compareAndSet(curState, newState)) break
+    if(setupNewState(message.state.state.stateOrder, message.state)) {
+      val p2pMsg = MessageTranslator.fromProto(message, MessageType.StateMsg)
+      nonMasterParseState(p2pMsg.msg)
     }
-    parseState(stateMsg)
+  }
+
+  private fun setupNewState(
+    newStateOrder: Int, stateMsg: SnakesProto.GameMessage.StateMsg
+  ): Boolean {
+    while(true) {
+      val curState = latestGameState.get() ?: return true
+      if(newStateOrder <= curState.second) {
+        return false
+      }
+
+      val newState = stateMsg to newStateOrder
+      if(latestGameState.compareAndSet(curState, newState)) {
+        return true
+      }
+    }
   }
 
   fun changeState(event: StateEvents) {
@@ -351,7 +373,7 @@ class NetworkStateMachine(
       MasterState(
         ncStateMachine = this,
         netController = netController,
-        gameNodesHandler = gameNodesHandler,
+        clusterNodesHandler = clusterNodesHandler,
         gameConfig = event.gameConfig,
         playerInfo = plInfo,
         state = null
@@ -398,7 +420,7 @@ class NetworkStateMachine(
       MasterState(
         ncStateMachine = this,
         netController = netController,
-        gameNodesHandler = gameNodesHandler,
+        clusterNodesHandler = clusterNodesHandler,
         playerInfo = event.playerInfo,
         gameConfig = event.gameConfig,
         state = event.gameState,
