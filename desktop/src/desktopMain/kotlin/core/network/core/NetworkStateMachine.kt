@@ -17,9 +17,13 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.NodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.*
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateHandler
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateObserver
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
@@ -38,17 +42,18 @@ class NetworkStateMachine(
   private val stateNumProvider = AtomicInteger(0)
   val nextSegNum
     get() = seqNumProvider.incrementAndGet()
-  private val nodesHandler: NodesHandler = TODO()
+  private val gameNodesHandler: GameNodesHandler = TODO()
 
   @Volatile var nodeId = 0
     private set
-  private val networkStateHolder: AtomicReference<NetworkState> = AtomicReference(
-    LobbyState(
-      ncStateMachine = this,
-      controller = netController,
-      nodesHandler = nodesHandler,
+  private val networkStateHolder: AtomicReference<NetworkState> =
+    AtomicReference(
+      LobbyState(
+        ncStateMachine = this,
+        controller = netController,
+        gameNodesHandler = gameNodesHandler,
+      )
     )
-  )
 
   val networkState: NetworkState
     get() = networkStateHolder.get()
@@ -63,7 +68,7 @@ class NetworkStateMachine(
 
   override fun submitState(
     state: StateMsg,
-    acceptedPlayers: List<Pair<Pair<Node, String>, ActiveEntity?>>
+    acceptedPlayers: List<Pair<Pair<GameNode, String>, ActiveEntity?>>
   ) {
     val st = this.networkStateHolder.get();
     if(st !is MasterState) return
@@ -72,7 +77,7 @@ class NetworkStateMachine(
     val (ms, dp) = msdp
     st.player.shootContextState(state, ms, dp)
 
-    for((_, node) in nodesHandler) {
+    for((_, node) in gameNodesHandler) {
       node.payload?.shootContextState(state, ms, dp)
     }
 
@@ -82,9 +87,8 @@ class NetworkStateMachine(
     val p2pmsg = P2PMessage(nextSegNum, state)
     val protomsg = MessageTranslator.toMessageT(p2pmsg, MessageType.StateMsg)
 
-    for((ipAddr, node) in nodesHandler) {
-      val nodest = node.nodeState
-      if(NodeT.isRunning(nodest)) continue
+    for((ipAddr, node) in gameNodesHandler) {
+      if(!node.running) continue
 
       node.addMessageForAck(protomsg)
       sendUnicast(protomsg, ipAddr)
@@ -142,10 +146,10 @@ class NetworkStateMachine(
   }
 
   fun getP2PAck(
-    message: GameMessage, node: Node
+    message: GameMessage, gameNode: GameNode
   ): P2PMessage {
     val ack = AckMsg()
-    val p2pmsg = P2PMessage(message.msgSeq, ack, nodeId, node.nodeId)
+    val p2pmsg = P2PMessage(message.msgSeq, ack, nodeId, gameNode.nodeId)
     return p2pmsg
   }
 
@@ -168,7 +172,7 @@ class NetworkStateMachine(
   private fun chooseSetNewDeputy(oldDeputyId: Int): NodeT? {
     val (masterInfo, _) = masterDeputy.get() ?: return null
 
-    val deputyCandidate = nodesHandler.find {
+    val deputyCandidate = gameNodesHandler.find {
       it.value.nodeState == NodeT.NodeState.Active && it.value.nodeId != oldDeputyId
     }?.value
 
@@ -187,7 +191,6 @@ class NetworkStateMachine(
         is MasterState  -> masterHandleNodeDetach(st, node)
         is ActiveState  -> activeHandleNodeDetach(st, node)
         is PassiveState -> passiveHandleNodeDetach(st, node)
-        is LobbyState   -> lobbyHandleNodeDetach(st, node)
       }
     } catch(e: Exception) {
       Logger.error(e) { "during node detach" }
@@ -225,10 +228,6 @@ class NetworkStateMachine(
     } else {
       Logger.warn { "non master $node detached from cluster in state $networkState" }
     }
-  }
-
-  private fun lobbyHandleNodeDetach(st: LobbyState, node: NodeT) {
-
   }
 
   private fun masterHandleNodeDetach(st: MasterState, node: NodeT) {
@@ -273,15 +272,15 @@ class NetworkStateMachine(
   ) {
     masterDeputy.set(Pair(depInfo, null))
     val unacknowledgedMessages = node.getUnacknowledgedMessages()
-    val newMasterNode = Node(
+    val newMasterGameNode = GameNode(
       messageComparator =,
       nodeState = NodeT.NodeState.Active,
       nodeId = depInfo.second,
       ipAddress = depInfo.first,
       payload = null,
-      nodesHandler = nodesHandler
+      gameNodesHandler = gameNodesHandler
     )
-    nodesHandler.registerNode(newMasterNode, true)
+    gameNodesHandler.registerNode(newMasterGameNode, true)
     node.addAllMessageForAck(unacknowledgedMessages)
   }
 
@@ -307,7 +306,7 @@ class NetworkStateMachine(
   fun onPingMsg(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val node = nodesHandler[ipAddress] ?: return
+    val node = gameNodesHandler[ipAddress] ?: return
     val outp2p = getP2PAck(message, node)
     val outmsg = MessageTranslator.toMessageT(
       outp2p, MessageType.AckMsg
@@ -320,7 +319,7 @@ class NetworkStateMachine(
    */
   fun onAckMsg(
     ipAddress: InetSocketAddress, message: GameMessage
-  ) = nodesHandler[ipAddress]?.ackMessage(message)
+  ) = gameNodesHandler[ipAddress]?.ackMessage(message)
 
 
   fun onStateMsg(ipAddress: InetSocketAddress, message: GameMessage) {
@@ -370,7 +369,12 @@ class NetworkStateMachine(
   private fun handleJoin(event: StateEvents.ControllerEvent.Join) {
     val state = networkStateHolder.get()
     if(state !is LobbyState) return
+    val node = gameNodesHandler[event.ipAddress]
+    if (node!= null){
 
+    }else{
+
+    }
   }
 
   @Synchronized
@@ -395,7 +399,7 @@ class NetworkStateMachine(
       MasterState(
         ncStateMachine = this,
         netController = netController,
-        nodesHandler = nodesHandler,
+        gameNodesHandler = gameNodesHandler,
         gameConfig = event.gameConfig,
         playerInfo = plInfo,
         state = null
@@ -414,7 +418,7 @@ class NetworkStateMachine(
       LobbyState(
         ncStateMachine = this,
         controller = netController,
-        nodesHandler = nodesHandler,
+        gameNodesHandler = gameNodesHandler,
       )
     )
   }
@@ -442,7 +446,7 @@ class NetworkStateMachine(
       MasterState(
         ncStateMachine = this,
         netController = netController,
-        nodesHandler = nodesHandler,
+        gameNodesHandler = gameNodesHandler,
         playerInfo = event.playerInfo,
         gameConfig = event.gameConfig,
         state = event.gameState,

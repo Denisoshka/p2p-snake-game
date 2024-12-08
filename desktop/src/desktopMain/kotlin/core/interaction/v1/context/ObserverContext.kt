@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import java.net.InetSocketAddress
 
 open class ObserverContext(

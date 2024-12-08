@@ -21,10 +21,10 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.NodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -37,7 +37,7 @@ private const val JoinInUpdateQ = 10
 class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
-  private val nodesHandler: NodesHandler,
+  private val gameNodesHandler: GameNodesHandler,
   gameConfig: GameConfig,
   playerInfo: GamePlayer,
   state: StateMsg? = null,
@@ -90,7 +90,7 @@ class MasterState(
           "$ipAddress invalid node role: ${inMsg.nodeRole}"
         )
       }
-      nodesHandler[ipAddress]?.let {
+      gameNodesHandler[ipAddress]?.let {
         TODO()
       }
     } catch(e: IllegalNodeRegisterAttempt) {
@@ -118,7 +118,7 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = nodesHandler[ipAddress]?.let {
+    val node = gameNodesHandler[ipAddress]?.let {
       if(!it.running) return
       it
     } ?: return
@@ -145,7 +145,7 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = nodesHandler[ipAddress] ?: return
+    val node = gameNodesHandler[ipAddress] ?: return
     if(!node.running) return
 
     val inp2p = MessageTranslator.fromProto(
@@ -182,22 +182,22 @@ class MasterState(
               )
             }
 
-            val node = Node(
+            val gameNode = GameNode(
               messageComparator =,
               nodeId = it.id,
               ipAddress = InetSocketAddress(it.ipAddress!!, it.port!!),
               payload = null,
-              nodesHandler = nodesHandler,
+              gameNodesHandler = gameNodesHandler,
               nodeState = nodeState
             )
 
-            node.payload = if(it.nodeRole == NodeRole.VIEWER) {
-              ObserverContext(node, it.name)
+            gameNode.payload = if(it.nodeRole == NodeRole.VIEWER) {
+              ObserverContext(gameNode, it.name)
             } else {
-              ActiveObserverContext(node, it.name, sn as SnakeEntity)
+              ActiveObserverContext(gameNode, it.name, sn as SnakeEntity)
             }
 
-            nodesHandler.registerNode(node)
+            gameNodesHandler.registerNode(gameNode)
           }.recover { e ->
             logger.error(e) {
               "receive when init node id: ${it.id}, addr :${it.ipAddress}:${it.port}"
@@ -221,7 +221,7 @@ class MasterState(
   @Synchronized
   override fun cleanup() {
     gameEngine.shutdown()
-    nodesHandler.shutdown()
+    gameNodesHandler.shutdown()
     nodesInitScope?.cancel()
   }
 }

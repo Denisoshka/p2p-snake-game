@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
@@ -9,15 +9,15 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import java.net.InetSocketAddress
 
 class ActiveObserverContext(
-  node: Node,
+  gameNode: GameNode,
   name: String,
   private val snake: SnakeEntity,
   private var lastUpdateSeq: Long = 0,
-) : Entity by snake, ObserverContext(node, name) {
+) : Entity by snake, ObserverContext(gameNode, name) {
   override val score: Int
     get() = snake.score
 

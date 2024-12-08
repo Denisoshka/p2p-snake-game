@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.StateConsumer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.Executors
@@ -31,9 +31,9 @@ class GameEngine(
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
 
-  private val joinBacklog = Channel<Pair<Node, String>>(joinInStateQ)
+  private val joinBacklog = Channel<Pair<GameNode, String>>(joinInStateQ)
   private val joinedPlayers =
-    ArrayList<Pair<Pair<Node, String>, ActiveEntity?>>(joinInStateQ)
+    ArrayList<Pair<Pair<GameNode, String>, ActiveEntity?>>(joinInStateQ)
 
   private fun spawnNewSnake(
     id: Int, direction: Direction? = null
@@ -43,7 +43,7 @@ class GameEngine(
     return SnakeEntity(coords.first, coords.second, dir, id)
   }
 
-  private fun offerPlayer(playerInfo: Node, name: String): Boolean {
+  private fun offerPlayer(playerInfo: GameNode, name: String): Boolean {
     return joinBacklog.trySend(playerInfo to name).isSuccess
   }
 

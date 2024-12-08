@@ -8,15 +8,15 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.NodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import java.net.InetSocketAddress
 
 class ActiveState(
   private val stateMachine: NetworkStateMachine,
   private val controller: NetworkController,
-  private val nodesHandler: NodesHandler,
+  private val gameNodesHandler: GameNodesHandler,
 ) : NetworkState {
   override fun joinHandle(
     ipAddress: InetSocketAddress,
@@ -89,7 +89,7 @@ class ActiveState(
 
   override fun submitSteerMsg(steerMsg: SteerMsg) {
     val (masterInfo, _) = stateMachine.masterDeputy.get() ?: return
-    nodesHandler.getNode(masterInfo.first)?.let {
+    gameNodesHandler.getNode(masterInfo.first)?.let {
       val p2pmsg = P2PMessage(stateMachine.nextSegNum, steerMsg)
       val outMsg = MessageTranslator.toMessageT(p2pmsg, MessageType.SteerMsg)
       it.addMessageForAck(outMsg)
@@ -100,6 +100,6 @@ class ActiveState(
   private fun initContext() {}
 
   override fun cleanup() {
-    nodesHandler.shutdown()
+    gameNodesHandler.shutdown()
   }
 }

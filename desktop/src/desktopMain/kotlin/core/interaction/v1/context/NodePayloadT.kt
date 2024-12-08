@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
@@ -32,7 +32,7 @@ interface NodePayloadT {
         }
 
         NodeT.NodeState.Passive -> NodeRole.VIEWER
-        else ->
+        else                    ->
       }
     }
   }

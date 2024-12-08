@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.interfaces
+package d.zhdanov.ccfit.nsu.core.network.interfaces.core
 
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement

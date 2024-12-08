@@ -1,18 +1,18 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.nodes
+package d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeContext
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeContext
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 
-class NodesHandler(
+class GameNodesHandler(
   joinBacklog: Int,
   @Volatile var resendDelay: Long,
   @Volatile var thresholdDelay: Long,
@@ -25,54 +25,49 @@ class NodesHandler(
   private val nodesByIp = ConcurrentHashMap<InetSocketAddress, NodeT>()
   private val deadNodeChannel = Channel<NodeT>(joinBacklog)
   private val registerNewNode = Channel<NodeT>(joinBacklog)
-  private val reconfigureContext = Channel<NodeT>(joinBacklog)
+  private val detachNodeChannel = Channel<NodeT>(joinBacklog)
   val nextSeqNum
     get() = ncStateMachine.nextSegNum
 
   /**
    * @throws IllegalNodeHandlerAlreadyInitialized
    * */
+  @Synchronized
   override fun launch() {
-    synchronized(this) {
-      this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
-      this.nodesScope = CoroutineScope(Dispatchers.Default);
-    }
+    this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
+    CoroutineScope(Dispatchers.Default)
+      .also { nodesScope = it }
+      .launchNodesWatcher()
   }
 
+  @Synchronized
   override fun shutdown() {
-    synchronized(this) {
-      nodesScope?.cancel()
-      nodesByIp.clear()
-    }
+    nodesScope?.cancel()
+    nodesByIp.clear()
   }
 
   /**
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
    */
-  private fun launchNodesWatcher(): Job {
-    return nodesScope?.launch {
-      while(true) {
-        select {
-          registerNewNode.onReceive { node -> TODO() }
-          reconfigureContext.onReceive { node ->
-            ncStateMachine.handleNodeDetach(node)
-          }
-          deadNodeChannel.onReceive { node ->
-            nodesByIp.remove(node.ipAddress)
-            ncStateMachine.handleNodeDetach(node)
-          }
+  private fun CoroutineScope.launchNodesWatcher() = launch {
+    while(true) {
+      select {
+        detachNodeChannel.onReceive { node ->
+          ncStateMachine.handleNodeDetach(node)
+        }
+        deadNodeChannel.onReceive { node ->
+          nodesByIp.remove(node.ipAddress)
+          ncStateMachine.handleNodeDetach(node)
         }
       }
-    } ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
+    }
   }
 
   override fun sendUnicast(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
-  override fun registerNode(
-    node: NodeT, registerInContext: Boolean
-  ): NodeT {
+  override fun registerNode(node: NodeT): NodeT {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
@@ -82,17 +77,13 @@ class NodesHandler(
     } ?: throw IllegalNodeRegisterAttempt("node already registered")
   }
 
-  override suspend fun handleNodeRegistration(
-    node: NodeT
-  ) = registerNewNode.send(node)
-
   override suspend fun handleNodeTermination(
     node: NodeT
   ) = deadNodeChannel.send(node)
 
-  override suspend fun handleNodeDetachPrepare(
+  override suspend fun handleNodeDetach(
     node: NodeT
-  ) = reconfigureContext.send(node)
+  ) = detachNodeChannel.send(node)
 
   override fun iterator(): Iterator<Map.Entry<InetSocketAddress, NodeT>> {
     return nodesByIp.entries.iterator()

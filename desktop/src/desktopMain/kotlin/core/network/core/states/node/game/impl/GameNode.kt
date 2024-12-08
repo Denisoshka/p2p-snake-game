@@ -1,10 +1,11 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.nodes
+package d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
-import d.zhdanov.ccfit.nsu.core.network.interfaces.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.GameNodeT
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
@@ -12,84 +13,89 @@ import java.util.*
 import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
-private const val NodeAlreadyRegisteredMsg =
-  "node already registered in cluster"
-private const val IncorrectRegisterEvent =
-  "registration channel receive wrong event: "
 
 /**
  * todo fix doc
  */
-class Node(
+class GameNode(
   messageComparator: Comparator<SnakesProto.GameMessage>,
-  nodeState: NodeT.NodeState,
+  nodeState: GameNodeT.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   @Volatile override var payload: NodePayloadT? = null,
-  private val nodesHandler: NodesHandler,
-) : NodeT {
+  private val gameNodesHandler: GameNodesHandler,
+) : GameNodeT {
+  @Volatile override var lastReceive = System.currentTimeMillis()
+  @Volatile override var lastSend = System.currentTimeMillis()
   override val running: Boolean
     get() = with(nodeState) {
-      this == NodeT.NodeState.Active || this == NodeT.NodeState.Passive
+      this == GameNodeT.NodeState.Active || this == GameNodeT.NodeState.Passive
     }
 
-  override val nodeState: NodeT.NodeState
+  override val nodeState: GameNodeT.NodeState
     get() = stateHolder.get()
+  private val resendDelay = gameNodesHandler.resendDelay
 
-  private val resendDelay = nodesHandler.resendDelay
-  private val thresholdDelay = nodesHandler.thresholdDelay
+
+  private val thresholdDelay = gameNodesHandler.thresholdDelay
   private val stateHolder = AtomicReference(
-    if(nodeState != NodeT.NodeState.Active && nodeState != NodeT.NodeState.Passive) {
+    if(nodeState != GameNodeT.NodeState.Active && nodeState != GameNodeT.NodeState.Passive) {
       throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
     } else {
       nodeState
     }
   )
-
-  @Volatile private var lastReceive = System.currentTimeMillis()
-  @Volatile private var lastSend = System.currentTimeMillis()
   @Volatile private var observeJob: Job? = null
 
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, Long> =
+  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, NodeT.MsgInfo> =
     TreeMap(
       messageComparator
     )
 
+  @Synchronized
   override fun shutdown() {
     observeJob?.cancel()
+  }
+
+  override fun sendToNode(msg: SnakesProto.GameMessage) {
+    gameNodesHandler.sendUnicast(msg, ipAddress)
   }
 
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
-    val seq = nodesHandler.nextSeqNum
+    val seq = gameNodesHandler.nextSeqNum
 
-    val ping = nodesHandler.msgUtils.getPingMsg(seq)
-    nodesHandler.sendUnicast(ping, ipAddress)
+    val ping = gameNodesHandler.msgUtils.getPingMsg(seq)
+
+    sendToNode(ping)
+
     lastSend = System.currentTimeMillis()
   }
 
   override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
     synchronized(msgForAcknowledge) {
       lastReceive = System.currentTimeMillis()
-      msgForAcknowledge.remove(message) ?: return null
-      return message
+      return msgForAcknowledge.remove(message)?.msg
     }
   }
 
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgForAcknowledge) {
-      msgForAcknowledge[message] = System.currentTimeMillis()
+      msgForAcknowledge[message] =
+        NodeT.MsgInfo(message, System.currentTimeMillis())
       lastSend = System.currentTimeMillis()
     }
   }
 
   override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
     synchronized(msgForAcknowledge) {
-      messages.forEach { msgForAcknowledge[it] = System.currentTimeMillis() }
+      messages.forEach {
+        msgForAcknowledge[it] = NodeT.MsgInfo(it, System.currentTimeMillis())
+      }
 
       lastSend = System.currentTimeMillis()
     }
@@ -101,11 +107,11 @@ class Node(
     val it = msgForAcknowledge.iterator()
     while(it.hasNext()) {
       val entry = it.next()
-      val (msg, time) = entry
-      if(now - time < thresholdDelay) {
-        ret = ret.coerceAtMost(thresholdDelay + time - now)
-        entry.setValue(now)
-        nodesHandler.sendUnicast(msg, ipAddress)
+      val (msg, msgInfo) = entry
+      if(now - msgInfo.lastCheck < thresholdDelay) {
+        ret = ret.coerceAtMost(thresholdDelay + msgInfo.lastCheck - now)
+        msgInfo.lastCheck = now
+        sendToNode(msg)
       } else {
         it.remove()
       }
@@ -113,7 +119,7 @@ class Node(
     return ret
   }
 
-  private fun changeState(newState: NodeT.NodeState): Boolean {
+  private fun changeState(newState: GameNodeT.NodeState): Boolean {
     do {
       val prevState = nodeState
       if(newState <= prevState) return false;
@@ -121,62 +127,56 @@ class Node(
     return true
   }
 
-  fun handleEvent(event: NodeT.NodeEvent) {
-    when(event) {
-      NodeT.NodeEvent.ShutdownFromCluster, NodeT.NodeEvent.ShutdownNowFromCluster -> {
-        changeState(NodeT.NodeState.Disconnected)
-      }
-
-      NodeT.NodeEvent.ShutdownFromUser                                            -> {
-        changeState(NodeT.NodeState.Disconnected)
-      }
-
-      else                                                                        -> {}
-    }
+  override fun detach() {
+    changeState(GameNodeT.NodeState.Disconnected)
   }
 
+  @Synchronized
   override fun CoroutineScope.startObservation(): Job {
-    this@Node.observeJob = launch {
+    return launch {
       var nextDelay = 0L
       var detachedFromCluster = false
       try {
-        logger.trace { "${this@Node} startObservation" }
+        logger.trace { "${this@GameNode} startObservation" }
         while(isActive) {
           delay(nextDelay)
           when(nodeState) {
-            NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
+            GameNodeT.NodeState.Active, GameNodeT.NodeState.Passive -> {
               nextDelay = onProcessing()
             }
 
-            NodeT.NodeState.Disconnected                    -> {
+            GameNodeT.NodeState.Disconnected                        -> {
               if(!detachedFromCluster) {
-                logger.trace { "${this@Node} disconnected" }
+                logger.trace { "${this@GameNode} disconnected" }
                 detachedFromCluster = true
-                this@Node.payload?.onContextObserverTerminated()
-                this@Node.payload = null
-                this@Node.nodesHandler.handleNodeDetachPrepare(this@Node)
+                this@GameNode.payload?.onContextObserverTerminated()
+                this@GameNode.payload = null
+                this@GameNode.gameNodesHandler.handleNodeDetach(this@GameNode)
               }
               nextDelay = onDetaching()
             }
 
-            NodeT.NodeState.Terminated                      -> {
-              logger.trace { "${this@Node} terminated" }
-              this@Node.payload?.onContextObserverTerminated()
-              this@Node.payload = null
+            GameNodeT.NodeState.Terminated                          -> {
+              logger.trace { "${this@GameNode} terminated" }
+              this@GameNode.payload?.onContextObserverTerminated()
+              this@GameNode.payload = null
               TODO("make node detach")
             }
           }
         }
       } catch(e: CancellationException) {
-        this@Node.nodesHandler.handleNodeTermination(this@Node)
+        this@GameNode.gameNodesHandler.handleNodeTermination(this@GameNode)
         this.cancel()
       }
-    }
-    return this@Node.observeJob!!
+    }.also { observeJob = it }
   }
 
+  /**
+   * @throws IllegalUnacknowledgedMessagesGetAttempt if [GameNode.nodeState] <
+   * [GameNodeT.NodeState.Disconnected]
+   * */
   override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
-    if(nodeState < NodeT.NodeState.Disconnected) {
+    if(nodeState < GameNodeT.NodeState.Disconnected) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
     return synchronized(msgForAcknowledge) {
@@ -184,18 +184,15 @@ class Node(
     }
   }
 
-  private fun checkNodeConditions(
-    now: Long
-  ): Long {
+  private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
-      stateHolder.set(NodeT.NodeState.Terminated)
+      stateHolder.set(GameNodeT.NodeState.Terminated)
       return 0
     }
     return checkMessages()
   }
 
-  private fun onProcessing(
-  ): Long {
+  private fun onProcessing(): Long {
     synchronized(msgForAcknowledge) {
       val now = System.currentTimeMillis()
       val nextDelay = checkNodeConditions(now)
@@ -205,13 +202,12 @@ class Node(
     }
   }
 
-  private fun onDetaching(
-  ): Long {
+  private fun onDetaching(): Long {
     synchronized(msgForAcknowledge) {
-      if(nodeState <= NodeT.NodeState.Disconnected) return 0
+      if(nodeState <= GameNodeT.NodeState.Disconnected) return 0
       val ret = checkNodeConditions(System.currentTimeMillis())
       if(msgForAcknowledge.isEmpty()) {
-        stateHolder.set(NodeT.NodeState.Terminated)
+        stateHolder.set(GameNodeT.NodeState.Terminated)
         return 0
       }
       return ret

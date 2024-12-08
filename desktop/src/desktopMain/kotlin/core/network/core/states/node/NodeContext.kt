@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.interfaces
+package d.zhdanov.ccfit.nsu.core.network.core.states.node
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
@@ -15,13 +15,12 @@ interface NodeContext {
   )
 
   /**
-   * @throws IllegalNodeRegisterAttempt if node already in context
+   * @throws IllegalNodeRegisterAttempt
    * */
-  fun registerNode(node: NodeT, registerInContext: Boolean = true): NodeT
+  fun registerNode(node: NodeT): NodeT
 
   operator fun get(ipAddress: InetSocketAddress): NodeT?
 
-  suspend fun handleNodeRegistration(node: NodeT)
   suspend fun handleNodeTermination(node: NodeT)
-  suspend fun handleNodeDetachPrepare(node: NodeT)
+  suspend fun handleNodeDetach(node: NodeT)
 }

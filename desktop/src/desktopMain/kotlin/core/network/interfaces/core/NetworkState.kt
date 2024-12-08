@@ -1,6 +1,5 @@
-package d.zhdanov.ccfit.nsu.core.network.interfaces
+package d.zhdanov.ccfit.nsu.core.network.interfaces.core
 
-import d.zhdanov.ccfit.nsu.core.network.core.states.nodes.Node
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
