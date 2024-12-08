@@ -13,7 +13,6 @@ import kotlin.coroutines.cancellation.CancellationException
 private val Logger = KotlinLogging.logger(NetNode::class.java.name)
 
 class NetNode(
-  messageComparator: Comparator<SnakesProto.GameMessage>,
   val context: NodeContext<NetNode>,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
@@ -31,7 +30,7 @@ class NetNode(
   override val running: Boolean
     get() = nodeStateHolder == NodeT.NodeState.Passive
   private val msgs: TreeMap<SnakesProto.GameMessage, NodeT.MsgInfo> = TreeMap(
-    messageComparator
+    MessageUtils.messageComparator
   )
 
   override fun sendToNode(msg: SnakesProto.GameMessage) {

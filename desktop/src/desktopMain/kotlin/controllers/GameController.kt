@@ -73,11 +73,11 @@ class GameController(
 
   fun openGame(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
     currentScreen = Screen.Game(gameConfig, announcement)
-
+    ncStateHandler.changeState(StateEvents.ControllerEvent.LaunchGame())
   }
 
   fun openLobby() {
     currentScreen = Screen.Lobby
-    ncStateHandler.changeState(StateEvents.SwitchToLobby)
+    ncStateHandler.changeState(StateEvents.ControllerEvent.SwitchToLobby)
   }
 }

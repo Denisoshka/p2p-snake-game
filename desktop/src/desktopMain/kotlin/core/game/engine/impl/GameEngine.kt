@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.Executors

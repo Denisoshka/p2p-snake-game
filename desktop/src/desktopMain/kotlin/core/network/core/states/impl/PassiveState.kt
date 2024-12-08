@@ -2,19 +2,21 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
 import java.net.InetSocketAddress
 
 class PassiveState(
   private val ncStateMachine: NetworkStateMachine,
   private val controller: NetworkController,
   private val gameNodesHandler: GameNodesHandler,
-) : NetworkState {
-  override fun submitSteerMsg(steerMsg: SteerMsg) {}
+) : NetworkStateT {
+  override fun joinHandle(
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+  ) {
+  }
 
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
@@ -23,13 +25,13 @@ class PassiveState(
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    ncStateMachine.onAckMsg(ipAddress, message)
+    val msg = gameNodesHandler[ipAddress]?.ackMessage(message) ?: return
+
   }
 
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    TODO("Not yet implemented")
   }
 
   override fun roleChangeHandle(
@@ -38,7 +40,19 @@ class PassiveState(
     TODO("Not yet implemented")
   }
 
+  override fun announcementHandle(
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+  ) {
+    TODO("Not yet implemented")
+  }
+
   override fun errorHandle(
+    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+  ) {
+    TODO("Not yet implemented")
+  }
+
+  override fun steerHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     TODO("Not yet implemented")

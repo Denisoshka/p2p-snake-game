@@ -29,6 +29,7 @@ interface NodeT {
     Disconnected,
     Terminated,
   }
+
   data class MsgInfo(
     val msg: SnakesProto.GameMessage, var lastCheck: Long
   )

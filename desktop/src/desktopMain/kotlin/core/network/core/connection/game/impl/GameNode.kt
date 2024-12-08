@@ -6,6 +6,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttem
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.GameNodeT
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
@@ -18,7 +19,6 @@ private val Logger = KotlinLogging.logger {}
  * todo fix doc
  */
 class GameNode(
-  messageComparator: Comparator<SnakesProto.GameMessage>,
   nodeState: NodeT.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
@@ -51,9 +51,7 @@ class GameNode(
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
   private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, NodeT.MsgInfo> =
-    TreeMap(
-      messageComparator
-    )
+    TreeMap(MessageUtils.messageComparator)
 
   override fun sendToNode(msg: SnakesProto.GameMessage) {
     gameNodesHandler.sendUnicast(msg, ipAddress)
@@ -63,8 +61,7 @@ class GameNode(
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
     val seq = gameNodesHandler.nextSeqNum
-
-    val ping = gameNodesHandler.msgUtils.getPingMsg(seq)
+    val ping = MessageUtils.getPingMsg(seq)
 
     sendToNode(ping)
 

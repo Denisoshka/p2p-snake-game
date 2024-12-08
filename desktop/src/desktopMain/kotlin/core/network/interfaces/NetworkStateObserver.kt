@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.interfaces.core
+package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 

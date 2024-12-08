@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.NetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -48,15 +49,14 @@ class MulticastNetHandler(
   class MulticastHandler(
     private val context: NetworkController
   ) : SimpleChannelInboundHandler<DatagramPacket>() {
-    private val msgUtils = context.messageUtils
     override fun channelRead0(
       ctx: ChannelHandlerContext, packet: DatagramPacket
     ) {
       try {
-        val message = msgUtils.fromBytes(packet.content().array())
-        context.handleMulticastMessage(message, packet.sender())
+        val msg = SnakesProto.GameMessage.parseFrom(packet.content().array())
+        context.handleMulticastMessage(msg, packet.sender())
       } catch(e: IOException) {
-        logger.error(e) { "invalid packet from " + packet.sender().toString() }
+        logger.error(e) { "invalid packet from ${packet.sender()}" }
       }
     }
   }

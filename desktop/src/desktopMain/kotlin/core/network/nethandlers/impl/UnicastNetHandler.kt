@@ -63,12 +63,10 @@ class UnicastNetHandler(
       ctx: ChannelHandlerContext, packet: DatagramPacket
     ) {
       try {
-        val message = SnakesProto.GameMessage.parseFrom(
-          packet.content().array()
-        )
-        context.handleUnicastMessage(message, packet.sender())
+        val msg = SnakesProto.GameMessage.parseFrom(packet.content().array())
+        context.handleUnicastMessage(msg, packet.sender())
       } catch(e: IOException) {
-        logger.error(e) { "invalid packet from " + packet.sender().toString() }
+        logger.error(e) { "invalid packet from ${packet.sender()}" }
       }
     }
   }

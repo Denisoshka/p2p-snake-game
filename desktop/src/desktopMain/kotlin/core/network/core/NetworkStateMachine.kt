@@ -8,7 +8,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AckMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeDestination
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
@@ -21,10 +20,10 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateObserver
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
+import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateObserver
+import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
@@ -38,17 +37,22 @@ private val kPortRange = 1..65535
 class NetworkStateMachine(
   private val netController: NetworkController,
   private val gameController: GameController
-) : NetworkStateHandler, NetworkStateObserver, StateConsumer {
+) : NetworkStateContext, NetworkStateObserver, StateConsumer {
   private val seqNumProvider = AtomicLong(0)
   private val stateNumProvider = AtomicInteger(0)
-  val nextSegNum
-    get() = seqNumProvider.incrementAndGet()
   private val gameNodesHandler: GameNodesHandler = TODO()
   private val netNodesHandler: NetNodeHandler = TODO()
 
+  val nextSegNum
+    get() = seqNumProvider.incrementAndGet()
+
   @Volatile var nodeId = 0
     private set
-  private val networkStateHolder: AtomicReference<NetworkState> =
+
+  override val networkState: NetworkStateT
+    get() = networkStateHolder.get()
+
+  private val networkStateHolder: AtomicReference<NetworkStateT> =
     AtomicReference(
       LobbyState(
         ncStateMachine = this,
@@ -57,16 +61,10 @@ class NetworkStateMachine(
       )
     )
 
-  val networkState: NetworkState
-    get() = networkStateHolder.get()
   private val latestGameState = AtomicReference<Pair<StateMsg, Int>?>()
   val masterDeputy: AtomicReference<Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?> =
     AtomicReference()
 
-
-  override fun submitSteerMsg(
-    steerMsg: SteerMsg
-  ) = networkStateHolder.get().submitSteerMsg(steerMsg)
 
   override fun submitState(
     state: StateMsg,
@@ -86,8 +84,9 @@ class NetworkStateMachine(
     val stateNum = stateNumProvider.incrementAndGet()
     state.stateOrder = stateNum
 
-    val p2pmsg = P2PMessage(nextSegNum, state)
-    val protomsg = MessageTranslator.toMessageT(p2pmsg, MessageType.StateMsg)
+    val p2pmsg =
+      GameMessage(nextSegNum, state)
+    val protomsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.StateMsg)
 
     for((ipAddr, node) in gameNodesHandler) {
       if(!node.running) continue
@@ -105,53 +104,16 @@ class NetworkStateMachine(
     msg: GameMessage, nodeAddress: InetSocketAddress
   ) = netController.sendUnicast(msg, nodeAddress)
 
-  override fun joinHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().joinHandle(ipAddress, message, msgT)
-
-  override fun pingHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().pingHandle(ipAddress, message, msgT)
-
-
-  override fun ackHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().ackHandle(ipAddress, message, msgT)
-
-
-  override fun stateHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().stateHandle(ipAddress, message, msgT)
-
-
-  override fun roleChangeHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().roleChangeHandle(ipAddress, message, msgT)
-
-
-  override fun announcementHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().announcementHandle(ipAddress, message, msgT)
-
-
-  override fun errorHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().errorHandle(ipAddress, message, msgT)
-
-
-  override fun steerHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = networkStateHolder.get().steerHandle(ipAddress, message, msgT)
-
   override fun cleanup() {
     TODO("Not yet implemented")
   }
 
   fun getP2PAck(
     message: GameMessage, gameNode: GameNode
-  ): P2PMessage {
+  ): d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage {
     val ack = AckMsg()
-    val p2pmsg = P2PMessage(message.msgSeq, ack, nodeId, gameNode.nodeId)
+    val p2pmsg =
+      GameMessage(message.msgSeq, ack, nodeId, gameNode.nodeId)
     return p2pmsg
   }
 
@@ -161,9 +123,10 @@ class NetworkStateMachine(
     senderId: Int,
     receiverId: Int,
     seq: Long
-  ): P2PMessage {
+  ): d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage {
     val roleChange = RoleChangeMsg(senderRole, receiverRole)
-    val p2pMsg = P2PMessage(seq, roleChange, senderId, receiverId)
+    val p2pMsg =
+      GameMessage(seq, roleChange, senderId, receiverId)
     return p2pMsg
   }
 
@@ -242,7 +205,7 @@ class NetworkStateMachine(
       NodeRole.MASTER, NodeRole.DEPUTY, nodeId, newDep.nodeId, nextSegNum
     )
 
-    val outMsg = MessageTranslator.toMessageT(
+    val outMsg = MessageTranslator.toGameMessage(
       outP2PRoleChange, MessageType.RoleChangeMsg
     )
 
@@ -308,12 +271,11 @@ class NetworkStateMachine(
   fun onPingMsg(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    val node = gameNodesHandler[ipAddress] ?: return
-    val outp2p = getP2PAck(message, node)
-    val outmsg = MessageTranslator.toMessageT(
-      outp2p, MessageType.AckMsg
-    )
-    netController.sendUnicast(outmsg, node.ipAddress)
+    gameNodesHandler[ipAddress]?.let {
+      val outp2p = getP2PAck(message, it)
+      val outmsg = MessageTranslator.toGameMessage(outp2p, MessageType.AckMsg)
+      netController.sendUnicast(outmsg, it.ipAddress)
+    }
   }
 
   fun onStateMsg(ipAddress: InetSocketAddress, message: GameMessage) {
@@ -362,12 +324,8 @@ class NetworkStateMachine(
 
   private fun handleJoin(event: StateEvents.ControllerEvent.Join) {
     val state = networkStateHolder.get()
-    if(state !is LobbyState) return
-    val node = gameNodesHandler[event.ipAddress]
-    if(node != null) {
-
-    } else {
-
+    if(state is LobbyState) {
+      state.
     }
   }
 
@@ -412,7 +370,7 @@ class NetworkStateMachine(
       LobbyState(
         ncStateMachine = this,
         controller = netController,
-        gameNodesHandler = gameNodesHandler,
+        netNodesHandler = netNodesHandler,
       )
     )
   }

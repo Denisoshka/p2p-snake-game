@@ -23,7 +23,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttem
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -41,7 +41,7 @@ class MasterState(
   gameConfig: GameConfig,
   playerInfo: GamePlayer,
   state: StateMsg? = null,
-) : NetworkState {
+) : NetworkStateT {
   @Volatile private var nodesInitScope: CoroutineScope? = null;
   private val gameEngine: GameContext = GameEngine(
     JoinInUpdateQ, ncStateMachine, gameConfig
@@ -132,7 +132,7 @@ class MasterState(
     }
 
     val outp2p = ncStateMachine.getP2PAck(message, node)
-    val outmsg = MessageTranslator.toMessageT(outp2p, MessageType.AckMsg)
+    val outmsg = MessageTranslator.toGameMessage(outp2p, MessageType.AckMsg)
 
     netController.sendUnicast(outmsg, ipAddress)
     node.addMessageForAck(outmsg)

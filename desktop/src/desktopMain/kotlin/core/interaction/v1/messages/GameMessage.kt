@@ -12,15 +12,15 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.Msg
  *
  * This contract ensures consistent comparison behavior and correct message ordering in the system.
  */
-open class P2PMessage(
+open class GameMessage(
 	val msgSeq: Long,
 	val msg: Msg,
 	var senderId: Int? = null,
 	var receiverId: Int? = null,
-) : Comparable<P2PMessage> {
+) : Comparable<GameMessage> {
 
 
-	final override fun compareTo(other: P2PMessage): Int {
+	final override fun compareTo(other: GameMessage): Int {
 		return this.msgSeq.compareTo(other.msgSeq)
 	}
 
@@ -28,7 +28,7 @@ open class P2PMessage(
 		if (this === other) return true
 		if (javaClass != other?.javaClass) return false
 
-		other as P2PMessage
+		other as GameMessage
 
 		return msgSeq == other.msgSeq
 	}

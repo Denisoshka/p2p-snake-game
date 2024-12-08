@@ -3,13 +3,13 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.P2PMessage
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
+import d.zhdanov.ccfit.nsu.core.network.interfaces.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import java.net.InetSocketAddress
 
@@ -17,7 +17,7 @@ class ActiveState(
   private val stateMachine: NetworkStateMachine,
   private val controller: NetworkController,
   private val gameNodesHandler: GameNodesHandler,
-) : NetworkState {
+) : NetworkStateT {
   override fun joinHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -90,8 +90,8 @@ class ActiveState(
   override fun submitSteerMsg(steerMsg: SteerMsg) {
     val (masterInfo, _) = stateMachine.masterDeputy.get() ?: return
     gameNodesHandler.getNode(masterInfo.first)?.let {
-      val p2pmsg = P2PMessage(stateMachine.nextSegNum, steerMsg)
-      val outMsg = MessageTranslator.toMessageT(p2pmsg, MessageType.SteerMsg)
+      val p2pmsg = GameMessage(stateMachine.nextSegNum, steerMsg)
+      val outMsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.SteerMsg)
       it.addMessageForAck(outMsg)
       controller.sendUnicast(outMsg, it.ipAddress)
     }
