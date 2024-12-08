@@ -11,6 +11,7 @@ interface NodeT {
   val running: Boolean
   var lastReceive: Long
   var lastSend: Long
+  val nodeState: NodeState
 
   fun sendToNode(msg: SnakesProto.GameMessage)
   fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage?
@@ -22,6 +23,12 @@ interface NodeT {
 
   fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage>
 
+  enum class NodeState {
+    Active,
+    Passive,
+    Disconnected,
+    Terminated,
+  }
   data class MsgInfo(
     val msg: SnakesProto.GameMessage, var lastCheck: Long
   )

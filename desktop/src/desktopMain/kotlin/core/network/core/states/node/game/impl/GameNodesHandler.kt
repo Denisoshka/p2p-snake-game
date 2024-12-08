@@ -6,11 +6,15 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlread
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeContext
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNode
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
+
+private val Logger = KotlinLogging.logger(NetNode::class.java.name)
 
 class GameNodesHandler(
   joinBacklog: Int,
@@ -37,7 +41,7 @@ class GameNodesHandler(
     this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
     CoroutineScope(Dispatchers.Default)
       .also { nodesScope = it }
-      .launchNodesWatcher()
+      .nodesWatcherRoutine()
   }
 
   @Synchronized
@@ -49,17 +53,22 @@ class GameNodesHandler(
   /**
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
    */
-  private fun CoroutineScope.launchNodesWatcher() = launch {
-    while(true) {
-      select {
-        detachNodeChannel.onReceive { node ->
-          ncStateMachine.handleNodeDetach(node)
-        }
-        deadNodeChannel.onReceive { node ->
-          nodesByIp.remove(node.ipAddress)
-          ncStateMachine.handleNodeDetach(node)
+  private fun CoroutineScope.nodesWatcherRoutine() = launch {
+    try {
+      while(isActive) {
+        select {
+          detachNodeChannel.onReceive { node ->
+            ncStateMachine.handleNodeDetach(node)
+          }
+          deadNodeChannel.onReceive { node ->
+            nodesByIp.remove(node.ipAddress)
+            ncStateMachine.handleNodeDetach(node)
+          }
         }
       }
+    } catch(_: CancellationException) {
+    } catch(e: Exception) {
+      Logger.error(e) { "unexpected error" }
     }
   }
 

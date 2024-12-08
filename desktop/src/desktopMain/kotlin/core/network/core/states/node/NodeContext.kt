@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 
 interface NodeContext {
   val launched: Boolean
+  val nextSeqNum: Long
 
   fun launch()
   fun shutdown()

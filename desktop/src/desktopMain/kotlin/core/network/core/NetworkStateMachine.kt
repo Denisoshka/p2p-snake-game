@@ -314,14 +314,6 @@ class NetworkStateMachine(
     netController.sendUnicast(outmsg, node.ipAddress)
   }
 
-  /**
-   * provide base action on ack msg
-   */
-  fun onAckMsg(
-    ipAddress: InetSocketAddress, message: GameMessage
-  ) = gameNodesHandler[ipAddress]?.ackMessage(message)
-
-
   fun onStateMsg(ipAddress: InetSocketAddress, message: GameMessage) {
     val (ms, _) = masterDeputy.get() ?: return
     if(ms.first != ipAddress) return
