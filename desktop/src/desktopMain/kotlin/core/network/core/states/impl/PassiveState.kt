@@ -26,12 +26,12 @@ class PassiveState(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
     val msg = clusterNodesHandler[ipAddress]?.ackMessage(message) ?: return
-
   }
 
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
+
   }
 
   override fun roleChangeHandle(
@@ -43,7 +43,6 @@ class PassiveState(
   override fun announcementHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-    TODO("Not yet implemented")
   }
 
   override fun errorHandle(

@@ -166,16 +166,18 @@ class NetworkStateMachine(
         try {
           select {
             detachNodeChannel.onReceive { node ->
-
               handleNodeDetach(node)
-
             }
+
             deadNodeChannel.onReceive { node ->
               handleNodeDetach(node)
             }
+
             registerNewNode.onReceive { node ->
               handleNodeRegister(node)
             }
+
+
           }
         } catch(e: IllegalChangeStateAttempt) {
           Logger.error(e) { "during cluster state change" }
@@ -197,10 +199,11 @@ class NetworkStateMachine(
     if(msInfo.second != node.nodeId) throw IllegalChangeStateAttempt(
       "non master node $node in passiveHandleNodeDetach"
     )
-    if(depInfo != null) {
-      changeNormalChangeInfoDeputyToMaster(depInfo, node)
+
+    if(depInfo == null) {
+      internalSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
     } else {
-      handleSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
+      normalChangeInfoDeputyToMaster(depInfo, node)
     }
   }
 
@@ -209,16 +212,14 @@ class NetworkStateMachine(
     if(depInfo == null) {
       Logger.warn { "activeHandleNodeDetach depInfo absent" }
 
-      handleSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
+      internalSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
       return
     }
 
-    if(node.nodeId == msInfo.second) {
-      if(nodeId == depInfo.second) {
-        activeDeputyHandleMasterDetach(node, depInfo)
-      } else {
-        activeNormalHandleMasterDetach(node, depInfo)
-      }
+    if(node.nodeId == msInfo.second && nodeId == depInfo.second) {
+      activeDeputyHandleMasterDetach(node, depInfo)
+    } else if(node.nodeId == msInfo.second && nodeId != depInfo.second) {
+      normalChangeInfoDeputyToMaster(depInfo, node)
     } else {
       throw IllegalChangeStateAttempt(
         "non master $node detached from cluster in state $networkState"
@@ -229,11 +230,13 @@ class NetworkStateMachine(
   private suspend fun masterHandleNodeDetach(st: MasterState, node: NodeT) {
     val (_, depInfo) = masterDeputyHolder.get() ?: return
     if(node.nodeId != depInfo?.second) return
+
     val newDep = chooseSetNewDeputy(node.nodeId) ?: return
 
     /**
      * choose new deputy
      */
+
     val outMsg = MessageUtils.MessageProducer.getRoleChangeMsg(
       msgSeq = nextSegNum,
       senderId = nodeId,
@@ -245,9 +248,9 @@ class NetworkStateMachine(
     netController.sendUnicast(outMsg, newDep.ipAddress)
   }
 
+
   private suspend fun activeDeputyHandleMasterDetach(
-    node: NodeT,
-    depInfo: Pair<InetSocketAddress, Int>
+    node: NodeT, depInfo: Pair<InetSocketAddress, Int>
   ) {
     when(val state = latestGameState.get()) {
       null -> {
@@ -258,7 +261,7 @@ class NetworkStateMachine(
             MasterState::class
           } latestGameState is null"
         }
-        handleSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
+        internalSwitchToLobby(StateEvents.ControllerEvent.SwitchToLobby)
       }
 
       else -> {
@@ -275,17 +278,17 @@ class NetworkStateMachine(
     }
   }
 
-  private fun activeNormalHandleMasterDetach(
+  /*private fun activeNormalHandleMasterDetach(
     node: NodeT, depInfo: Pair<InetSocketAddress, Int>
   ) {
-    changeNormalChangeInfoDeputyToMaster(depInfo, node)
-  }
+    normalChangeInfoDeputyToMaster(depInfo, node)
+  }*/
 
-  private fun changeNormalChangeInfoDeputyToMaster(
-    depInfo: Pair<InetSocketAddress, Int>, node: NodeT
+  private fun normalChangeInfoDeputyToMaster(
+    depInfo: Pair<InetSocketAddress, Int>, masterNode: NodeT
   ) {
     masterDeputyHolder.set(Pair(depInfo, null))
-    val unacknowledgedMessages = node.getUnacknowledgedMessages()
+    val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
     val newMasterClusterNode = ClusterNode(
       nodeState = NodeT.NodeState.Active,
       nodeId = depInfo.second,
@@ -294,7 +297,7 @@ class NetworkStateMachine(
       clusterNodesHandler = clusterNodesHandler
     )
     clusterNodesHandler.registerNode(newMasterClusterNode)
-    node.addAllMessageForAck(unacknowledgedMessages)
+    masterNode.addAllMessageForAck(unacknowledgedMessages)
   }
 
   /**
@@ -367,15 +370,15 @@ class NetworkStateMachine(
         }
 
         is StateEvents.ControllerEvent.SwitchToLobby -> {
-          handleSwitchToLobby(event)
+          throw RuntimeException("xyi")
         }
 
         is StateEvents.InternalEvent.JoinAck         -> {
           handleJoinAck(event)
         }
 
-        is StateEvents.InternalEvent.MasterNow       -> {
-          handleMasterNowEvent(event)
+        is StateEvents.InternalEvent.MasterNow       -> {/*handleMasterNowEvent(event)*/
+          throw RuntimeException("xyi")
         }
       }
     } catch(e: Exception) {
@@ -420,12 +423,26 @@ class NetworkStateMachine(
     )
   }
 
-  private suspend fun handleSwitchToLobby(
+  private suspend fun switchToLobbyGracefully(
+    event: StateEvents.ControllerEvent.SwitchToLobby
+  ) {
+    val state = networkState
+    if(state is LobbyState) return
+
+    if(state is MasterState) {
+
+    } else if(state is ActiveState || state is PassiveState) {
+
+    }
+  }
+
+  private suspend fun internalSwitchToLobby(
     event: StateEvents.ControllerEvent.SwitchToLobby
   ) {
     val curState = networkStateHolder.get()
     if(curState is LobbyState) return
 
+    masterDeputyHolder.set(null)
     curState.cleanup()
 
     networkStateHolder.set(
@@ -436,6 +453,7 @@ class NetworkStateMachine(
       )
     )
   }
+
 
   private fun handleJoinAck(event: StateEvents.InternalEvent.JoinAck) {
     val curState = networkStateHolder.get()
