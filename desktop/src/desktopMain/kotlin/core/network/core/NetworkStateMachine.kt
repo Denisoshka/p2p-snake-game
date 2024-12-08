@@ -17,13 +17,14 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.GameNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkStateObserver
 import d.zhdanov.ccfit.nsu.core.network.interfaces.core.StateConsumer
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
@@ -43,6 +44,7 @@ class NetworkStateMachine(
   val nextSegNum
     get() = seqNumProvider.incrementAndGet()
   private val gameNodesHandler: GameNodesHandler = TODO()
+  private val netNodesHandler: NetNodeHandler = TODO()
 
   @Volatile var nodeId = 0
     private set
@@ -51,7 +53,7 @@ class NetworkStateMachine(
       LobbyState(
         ncStateMachine = this,
         controller = netController,
-        gameNodesHandler = gameNodesHandler,
+        netNodesHandler = netNodesHandler,
       )
     )
 
@@ -362,9 +364,9 @@ class NetworkStateMachine(
     val state = networkStateHolder.get()
     if(state !is LobbyState) return
     val node = gameNodesHandler[event.ipAddress]
-    if (node!= null){
+    if(node != null) {
 
-    }else{
+    } else {
 
     }
   }

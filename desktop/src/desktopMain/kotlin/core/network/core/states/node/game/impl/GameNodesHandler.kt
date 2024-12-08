@@ -21,16 +21,16 @@ class GameNodesHandler(
   @Volatile var resendDelay: Long,
   @Volatile var thresholdDelay: Long,
   private val ncStateMachine: NetworkStateMachine,
-) : NodeContext, Iterable<Map.Entry<InetSocketAddress, NodeT>> {
+) : NodeContext<GameNode>, Iterable<Map.Entry<InetSocketAddress, GameNode>> {
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
 
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, NodeT>()
-  private val deadNodeChannel = Channel<NodeT>(joinBacklog)
-  private val registerNewNode = Channel<NodeT>(joinBacklog)
-  private val detachNodeChannel = Channel<NodeT>(joinBacklog)
-  val nextSeqNum
+  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, GameNode>()
+  private val deadNodeChannel = Channel<GameNode>(joinBacklog)
+  private val registerNewNode = Channel<GameNode>(joinBacklog)
+  private val detachNodeChannel = Channel<GameNode>(joinBacklog)
+  override val nextSeqNum
     get() = ncStateMachine.nextSegNum
 
   /**
@@ -76,7 +76,7 @@ class GameNodesHandler(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
-  override fun registerNode(node: NodeT): NodeT {
+  override fun registerNode(node: GameNode): GameNode {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
@@ -87,18 +87,18 @@ class GameNodesHandler(
   }
 
   override suspend fun handleNodeTermination(
-    node: NodeT
+    node: GameNode
   ) = deadNodeChannel.send(node)
 
   override suspend fun handleNodeDetach(
-    node: NodeT
+    node: GameNode
   ) = detachNodeChannel.send(node)
 
-  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, NodeT>> {
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, GameNode>> {
     return nodesByIp.entries.iterator()
   }
 
-  override operator fun get(ipAddress: InetSocketAddress): NodeT? {
+  override operator fun get(ipAddress: InetSocketAddress): GameNode? {
     return nodesByIp[ipAddress]
   }
 }

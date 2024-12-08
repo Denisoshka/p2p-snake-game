@@ -3,6 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeContext
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.net.InetSocketAddress
@@ -13,7 +14,7 @@ private val Logger = KotlinLogging.logger(NetNode::class.java.name)
 
 class NetNode(
   messageComparator: Comparator<SnakesProto.GameMessage>,
-  val context: NodeContext,
+  val context: NodeContext<NetNode>,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   private val resendDelay: Long,
@@ -114,7 +115,7 @@ class NetNode(
 
   private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
-      nodeStateHolder = true
+      nodeStateHolder = NodeT.NodeState.Terminated
       return 0
     }
     return checkMessages()
@@ -124,7 +125,7 @@ class NetNode(
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
 
     val seq = context.nextSeqNum
-    val ping = context.msgUtils.getPingMsg(seq)
+    val ping = MessageUtils.getPingMsg(seq)
 
     sendToNode(ping)
     lastSend = System.currentTimeMillis()
@@ -135,6 +136,7 @@ class NetNode(
   }
 
   override fun detach() {
+    Logger.info { "${this@NetNode} detached " }
     nodeStateHolder = NodeT.NodeState.Terminated;
   }
 

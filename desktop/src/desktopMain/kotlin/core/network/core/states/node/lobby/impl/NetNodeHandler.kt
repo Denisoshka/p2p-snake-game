@@ -13,13 +13,13 @@ import kotlinx.coroutines.isActive
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 
-class NetNodeContext(
+class NetNodeHandler(
   private val ncStateMachine: NetworkStateMachine,
-) : Iterable<Map.Entry<InetSocketAddress, NodeT>>, NodeContext {
+) : Iterable<Map.Entry<InetSocketAddress, NetNode>>, NodeContext<NetNode> {
   @Volatile private var joinWaitScope: CoroutineScope? = null
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, NodeT>()
-  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, NodeT>> {
+  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, NetNode>()
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, NetNode>> {
     return nodesByIp.entries.iterator()
   }
 
@@ -47,7 +47,7 @@ class NetNodeContext(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
 
-  override fun registerNode(node: NodeT): NodeT {
+  override fun registerNode(node: NetNode): NetNode {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
@@ -57,15 +57,15 @@ class NetNodeContext(
     } ?: throw IllegalNodeRegisterAttempt("node already registered")
   }
 
-  override fun get(ipAddress: InetSocketAddress): NodeT? {
+  override fun get(ipAddress: InetSocketAddress): NetNode? {
     return nodesByIp[ipAddress]
   }
 
-  override suspend fun handleNodeTermination(node: NodeT) {
+  override suspend fun handleNodeTermination(node: NetNode) {
     nodesByIp.remove(node.ipAddress)
   }
 
-  override suspend fun handleNodeDetach(node: NodeT) {
+  override suspend fun handleNodeDetach(node: NetNode) {
     TODO("Not yet implemented")
   }
 }

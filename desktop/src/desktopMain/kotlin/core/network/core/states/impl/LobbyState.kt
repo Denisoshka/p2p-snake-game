@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeContext
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.core.NetworkState
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import java.net.InetSocketAddress
@@ -14,7 +14,7 @@ import java.net.InetSocketAddress
 class LobbyState(
   private val ncStateMachine: NetworkStateMachine,
   private val controller: NetworkController,
-  private val netNodesHandler: NetNodeContext,
+  private val netNodesHandler: NetNodeHandler,
 ) : NetworkState {
   private val waitToJoin = HashMap<SnakesProto.GameMessage, GameConfig>()
 

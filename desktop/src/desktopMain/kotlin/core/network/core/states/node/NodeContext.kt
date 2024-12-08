@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import java.net.InetSocketAddress
 
-interface NodeContext {
+interface NodeContext<NodeT> {
   val launched: Boolean
   val nextSeqNum: Long
 
