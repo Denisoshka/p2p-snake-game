@@ -27,15 +27,4 @@ enum class NodeRole {
    * The main node, the center of a star topology.
    */
   MASTER;
-
-  @Throws(IllegalNodeRoleException::class)
-  fun fromProto(role: SnakesProto.NodeRole): NodeRole {
-    return when (role) {
-      SnakesProto.NodeRole.NORMAL -> NORMAL
-      SnakesProto.NodeRole.MASTER -> MASTER
-      SnakesProto.NodeRole.DEPUTY -> DEPUTY
-      SnakesProto.NodeRole.VIEWER -> VIEWER
-      else -> throw IllegalNodeRoleException(role.toString())
-    }
-  }
 }

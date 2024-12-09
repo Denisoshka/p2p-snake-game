@@ -2,6 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.core
 
 import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
+import core.network.core.connection.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
@@ -20,8 +21,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.GameSessionHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
@@ -44,6 +44,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val Logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
 private val kPortRange = 1..65535
+private const val kChannelSize = 10
 
 class NetworkStateMachine(
   private val netController: NetworkController,
@@ -64,15 +65,15 @@ class NetworkStateMachine(
     private set
   
   private val nodeHandlers = NodeHandlers(
-    clusterNodesHandler = ClusterNodesHandler(TODO(), TODO(), TODO()),
-    netNodesHandler = NetNodeHandler(TODO())
+    netNodesHandler = NetNodeHandler(this),
+    clusterNodesHandler = ClusterNodesHandler(TODO(), TODO(), TODO())
   )
   
   private val nodeChannels = NodeChannels(
-    deadNodeChannel = Channel(TODO()),
-    registerNewNodeChannel = Channel(TODO()),
-    detachNodeChannel = Channel(TODO()),
-    reconfigureContextChannel = Channel(TODO())
+    deadNodeChannel = Channel(kChannelSize),
+    registerNewNodeChannel = Channel(kChannelSize),
+    detachNodeChannel = Channel(kChannelSize),
+    reconfigureContextChannel = Channel(kChannelSize)
   )
   
   
@@ -90,20 +91,26 @@ class NetworkStateMachine(
   val masterDeputy: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?
     get() = masterDeputyHolder.get()
   
-  override fun joinToGame(joinReq: StateEvent.ControllerEvent.JoinReq) {
+  override fun CoroutineScope.joinToGame(joinReq: StateEvent.ControllerEvent.JoinReq) {
     when(val curState = networkState) {
-      is LobbyState -> {
-        curState.sendJoinMsg()
+      is LobbyState -> launch {
+        with(curState) {
+          sendJoinMsg(joinReq)
+        }
       }
     }
   }
   
-  override fun launchGame(launchGameReq: StateEvent.ControllerEvent.LaunchGame) {
-    TODO("Not yet implemented")
+  override fun CoroutineScope.launchGame(launchGameReq: StateEvent.ControllerEvent.LaunchGame) {
+    launch {
+      reconfigureContext(launchGameReq)
+    }
   }
   
-  override fun switchToLobby(switchToLobbyReq: StateEvent.ControllerEvent.SwitchToLobby) {
-    TODO("Not yet implemented")
+  override fun CoroutineScope.switchToLobby(switchToLobbyReq: StateEvent.ControllerEvent.SwitchToLobby) {
+    launch {
+      reconfigureContext(switchToLobbyReq)
+    }
   }
   
   override fun submitState(

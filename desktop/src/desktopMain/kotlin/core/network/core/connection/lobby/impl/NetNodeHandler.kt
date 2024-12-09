@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
+package core.network.core.connection.lobby.impl
 
 import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -36,7 +36,8 @@ class NetNodeHandler(
     this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
     this.nodesScope = CoroutineScope(Dispatchers.IO);
   }
-
+  
+  @Synchronized
   override fun shutdown() {
     nodesScope?.cancel()
     nodesByIp.clear()

@@ -1,12 +1,16 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.lobby.impl.NetNode
+import core.network.core.connection.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import java.net.InetSocketAddress
 
 class LobbyState(
@@ -14,17 +18,49 @@ class LobbyState(
   private val controller: NetworkController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
-  override fun sendJoinMsg(event: StateEvent.ControllerEvent.JoinReq) {
+  override fun CoroutineScope.sendJoinMsg(
+    event: StateEvent.ControllerEvent.JoinReq
+  ) {
+    val addr = InetSocketAddress(
+      event.gameAnnouncement.host, event.gameAnnouncement.port
+    )
+    
+    val node = netNodesHandler[addr] ?: run {
+      val resendDelay = getResendDelay(
+        event.gameAnnouncement.announcement.gameConfig.stateDelayMs
+      )
+      val thresholdDelay = getThresholdDelay(
+        event.gameAnnouncement.announcement.gameConfig.stateDelayMs
+      )
+      val newNode = NetNode(
+        context = netNodesHandler,
+        ipAddress = addr,
+        resendDelay = resendDelay.toLong(),
+        thresholdDelay = thresholdDelay.toLong(),
+      )
+      netNodesHandler.registerNode(newNode)
+    }
+    val msg = MessageUtils.MessageProducer.getJoinMsg(
+      msgSeq = ncStateMachine.nextSeqNum,
+      playerType = SnakesProto.PlayerType.HUMAN,
+      playerName = event.playerName,
+      gameName = event.gameAnnouncement.announcement.gameName,
+      nodeRole = MessageUtils.MessageProducer.nodeRoleToProto(
+        event.playerRole
+      )
+    )
+    node.sendToNode(msg)
+    node.addMessageForAck(msg)
   }
-
+  
   override fun pingHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    TODO("Not yet implemented")
+  
   }
-
+  
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -34,22 +70,33 @@ class LobbyState(
     val node = netNodesHandler[ipAddress] ?: return
     val msg = node.ackMessage(message) ?: return
   }
-
+  
   override fun announcementHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
   }
-
+  
   override fun errorHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
   }
-
+  
   override fun cleanup() {
-    TODO("implement me please")
+  }
+  
+  companion object LobbyStateDelayProvider {
+    private const val MAX_THRESHOLD_COEF = 3.0
+    private const val MAX_RESEND_DELAY_COEF = 0.1
+    fun getResendDelay(stateDelay: Int): Double {
+      return stateDelay * MAX_RESEND_DELAY_COEF
+    }
+    
+    fun getThresholdDelay(stateDelay: Int): Double {
+      return stateDelay * MAX_THRESHOLD_COEF
+    }
   }
 }

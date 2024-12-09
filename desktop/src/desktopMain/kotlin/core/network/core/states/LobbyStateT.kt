@@ -3,10 +3,11 @@ package d.zhdanov.ccfit.nsu.core.network.core.states
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
+import kotlinx.coroutines.CoroutineScope
 import java.net.InetSocketAddress
 
 interface LobbyStateT : NetworkStateT {
-  fun sendJoinMsg(
+  fun CoroutineScope.sendJoinMsg(
     event: StateEvent.ControllerEvent.JoinReq
   )
 

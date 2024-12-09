@@ -21,7 +21,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttem
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging

@@ -9,7 +9,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging

@@ -1,7 +1,7 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
+package core.network.core.connection.lobby.impl
 
-import d.zhdanov.ccfit.nsu.SnakesProto
 import core.network.core.connection.NodeContext
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -14,15 +14,15 @@ private val Logger = KotlinLogging.logger(NetNode::class.java.name)
 
 class NetNode(
   val context: NodeContext<NetNode>,
-  override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
 ) : Node {
+  override val nodeId: Int = 0;
   @Volatile private var observeJob: Job? = null
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
-
+  
   @Volatile private var nodeStateHolder: Node.NodeState =
     Node.NodeState.Passive
   override val nodeState: Node.NodeState
@@ -32,11 +32,11 @@ class NetNode(
   private val msgs: TreeMap<SnakesProto.GameMessage, Node.MsgInfo> = TreeMap(
     MessageUtils.messageComparator
   )
-
+  
   override fun sendToNode(msg: SnakesProto.GameMessage) {
     context.sendUnicast(msg, ipAddress)
   }
-
+  
   private fun checkMessages(): Long {
     var ret = resendDelay
     val now = System.currentTimeMillis()
@@ -54,14 +54,14 @@ class NetNode(
     }
     return ret
   }
-
+  
   override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
     synchronized(msgs) {
       lastReceive = System.currentTimeMillis()
       return msgs.remove(message)?.msg
     }
   }
-
+  
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgs) {
       msgs[message] = Node.MsgInfo(
@@ -70,7 +70,7 @@ class NetNode(
     }
     lastSend = System.currentTimeMillis()
   }
-
+  
   override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
     synchronized(msgs) {
       messages.forEach {
@@ -79,7 +79,7 @@ class NetNode(
       lastSend = System.currentTimeMillis()
     }
   }
-
+  
   @Synchronized
   override fun CoroutineScope.startObservation(): Job {
     return launch {
@@ -87,9 +87,9 @@ class NetNode(
       try {
         while(coroutineContext.isActive) {
           if(!running) break
-
+          
           val nextDelay = onProcessing()
-
+          
           delay(nextDelay)
         }
         context.handleNodeTermination(this@NetNode)
@@ -101,17 +101,17 @@ class NetNode(
       Logger.info { "${this@NetNode} finished " }
     }.also { observeJob = it }
   }
-
+  
   private fun onProcessing(): Long {
     synchronized(msgs) {
       val now = System.currentTimeMillis()
       val nextDelay = checkNodeConditions(now)
       sendPingIfNecessary(nextDelay, now)
-
+      
       return nextDelay
     }
   }
-
+  
   private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
       nodeStateHolder = Node.NodeState.Terminated
@@ -119,37 +119,37 @@ class NetNode(
     }
     return checkMessages()
   }
-
+  
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
-
+    
     val seq = context.nextSeqNum
     val ping = MessageUtils.getPingMsg(seq)
-
+    
     sendToNode(ping)
     lastSend = System.currentTimeMillis()
   }
-
+  
   fun messageReceived(message: SnakesProto.GameMessage) {
     lastReceive = System.currentTimeMillis()
   }
-
+  
   override fun detach() {
     Logger.info { "${this@NetNode} detached " }
     nodeStateHolder = Node.NodeState.Terminated;
   }
-
+  
   override fun shutdown() {
     Logger.info { "${this@NetNode} shutdown " }
     Node.NodeState.Terminated
   }
-
+  
   override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
     synchronized(msgs) {
       return msgs.keys.toList()
     }
   }
-
+  
   override fun toString(): String {
     return "NetNode(nodeId=$nodeId, ipAddress=$ipAddress)"
   }

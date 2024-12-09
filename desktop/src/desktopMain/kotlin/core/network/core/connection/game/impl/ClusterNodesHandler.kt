@@ -1,7 +1,6 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl
+package core.network.core.connection.game.impl
 
 import core.network.core.connection.NodeContext
-import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
@@ -17,14 +16,24 @@ import java.util.concurrent.ConcurrentHashMap
 private val Logger = KotlinLogging.logger(ClusterNodesHandler::class.java.name)
 
 class ClusterNodesHandler(
-  @Volatile var resendDelay: Long,
-  @Volatile var thresholdDelay: Long,
+  stateDelayMs: Int,
   private val ncStateMachine: NetworkStateMachine,
 ) : NodeContext<ClusterNode>,
     Iterable<Map.Entry<InetSocketAddress, ClusterNode>> {
+  var stateDelayMs: Int = stateDelayMs
+    set(value) {
+      resendDelay = getResendDelay(value)
+      thresholdDelay = getThresholdDelay(value)
+      field = value
+    }
+  
+  @Volatile var resendDelay = getResendDelay(stateDelayMs)
+    private set
+  @Volatile var thresholdDelay = getThresholdDelay(stateDelayMs)
+    private set
+  
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
-  
   @Volatile private var nodesScope: CoroutineScope? = null
   private val nodesByIp = ConcurrentHashMap<InetSocketAddress, ClusterNode>()
   override val nextSeqNum
@@ -78,5 +87,17 @@ class ClusterNodesHandler(
   
   override operator fun get(ipAddress: InetSocketAddress): ClusterNode? {
     return nodesByIp[ipAddress]
+  }
+  
+  companion object LobbyStateDelayProvider {
+    private const val MAX_THRESHOLD_COEF = 0.8
+    private const val MAX_RESEND_DELAY_COEF = 0.1
+    fun getResendDelay(stateDelay: Int): Double {
+      return stateDelay * MAX_RESEND_DELAY_COEF
+    }
+    
+    fun getThresholdDelay(stateDelay: Int): Double {
+      return stateDelay * MAX_THRESHOLD_COEF
+    }
   }
 }

@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.PassiveStateT
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import java.net.InetSocketAddress
 
 class PassiveState(

@@ -14,7 +14,7 @@ sealed class StateEvent {
     data class JoinReq(
       val gameAnnouncement: GameAnnouncement,
       val playerName: String,
-      val playerRole : NodeRole,
+      val playerRole: NodeRole,
       val playerType: PlayerType
     ) : ControllerEvent()
     
