@@ -4,7 +4,6 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
 interface GameContext {
@@ -18,6 +17,6 @@ interface GameContext {
   ): List<ActiveEntity>
 
   fun initGameFromState(
-    config: GameConfig, state: StateMsg, playerInfo: GamePlayer
+    config: GameConfig, state: StateMsg, playerInfo: GamePlayerInfo
   ): List<ActiveEntity>
 }

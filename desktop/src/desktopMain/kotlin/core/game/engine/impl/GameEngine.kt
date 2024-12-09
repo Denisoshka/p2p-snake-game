@@ -117,12 +117,12 @@ class GameEngine(
   }
   
   override fun shutdown() {
-    Logger.info { "${GameEngine::class.java.name} shutdowned" }
+    Logger.info { "${GameEngine::class.java.name} ${this::shutdown.name}" }
     executor.shutdownNow()
   }
   
   override fun initGameFromState(
-    config: GameConfig, state: StateMsg, playerInfo: GamePlayer
+    config: GameConfig, state: StateMsg, playerInfo: GamePlayerInfo
   ): List<ActiveEntity> {
     val ret = ArrayList<ActiveEntity>()
     
@@ -190,9 +190,5 @@ class GameEngine(
       val snake = spawnNewSnake(plInfo.first.nodeId)
       joinedPlayers.add(plInfo to snake)
     }
-  }
-  
-  fun shutdown() {
-    executor.shutdownNow()
   }
 }

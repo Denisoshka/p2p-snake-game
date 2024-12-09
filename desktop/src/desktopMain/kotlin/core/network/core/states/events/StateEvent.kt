@@ -3,6 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.events
 import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 
@@ -13,7 +14,7 @@ sealed class StateEvent {
     data class JoinReq(
       val gameAnnouncement: GameAnnouncement,
       val playerName: String,
-//      val ipAddress: InetSocketAddress,
+      val playerRole : NodeRole,
       val playerType: PlayerType
     ) : ControllerEvent()
     

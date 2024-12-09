@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.ClusterNodeT
+import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging

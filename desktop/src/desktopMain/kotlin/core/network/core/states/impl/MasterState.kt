@@ -55,15 +55,19 @@ class MasterState(
     Logger.info { "$this init" }
     
     val entities = if(state != null) {
-      gameEngine.initGameFromState(gameConfig.gameSettings, state, playerInfo)
+      gameEngine.initGameFromState(
+        gameConfig.gameSettings,
+        state,
+        gamePlayerInfo
+      )
     } else {
-      gameEngine.initGame(gameConfig.gameSettings, playerInfo)
+      gameEngine.initGame(gameConfig.gameSettings, gamePlayerInfo)
     }
     
-    val localSnake = entities.find { it.id == playerInfo.id }
+    val localSnake = entities.find { it.id == gamePlayerInfo.playerId }
     if(localSnake != null) {
       player = LocalObserverContext(
-        name = playerInfo.name,
+        name = gamePlayerInfo.playerName,
         snake = localSnake as SnakeEntity,
         lastUpdateSeq = 0,
         ncStateMachine = ncStateMachine,
@@ -198,9 +202,9 @@ class MasterState(
             )
             
             val nodeState = when(it.nodeRole) {
-              NodeRole.VIEWER                  -> Node.NodeState.Passive
+              NodeRole.VIEWER -> Node.NodeState.Passive
               NodeRole.NORMAL, NodeRole.DEPUTY -> Node.NodeState.Active
-              NodeRole.MASTER                  -> throw IllegalNodeRegisterAttempt(
+              NodeRole.MASTER -> throw IllegalNodeRegisterAttempt(
                 "illegal initial node state ${it.nodeRole}" + " during master state initialize"
               )
             }
@@ -237,7 +241,6 @@ class MasterState(
   override fun cleanup() {
     Logger.info { "$this cleanup" }
     gameEngine.shutdown()
-    clusterNodesHandler.shutdown()
     nodesInitScope.cancel()
   }
 }
