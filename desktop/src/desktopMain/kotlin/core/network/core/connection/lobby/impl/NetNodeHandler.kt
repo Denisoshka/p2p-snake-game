@@ -25,7 +25,7 @@ class NetNodeHandler(
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
   override val nextSeqNum: Long
-    get() = ncStateMachine.nextSegNum
+    get() = ncStateMachine.nextSeqNum
 
 
   /**

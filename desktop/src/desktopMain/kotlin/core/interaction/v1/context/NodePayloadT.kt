@@ -3,13 +3,13 @@ package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
   val name: String
   val score: Int
-  val node: NodeT
+  val node: Node
   fun handleEvent(event: SteerMsg, seq: Long)
   fun onContextObserverTerminated()
   fun shootContextState(
@@ -26,9 +26,9 @@ interface NodePayloadT {
     deputyAddrId?.second -> NodeRole.DEPUTY
     else                 -> {
       when(node.nodeState) {
-        NodeT.NodeState.Active  -> NodeRole.NORMAL
-        NodeT.NodeState.Passive -> NodeRole.VIEWER
-        else                    -> null
+        Node.NodeState.Active  -> NodeRole.NORMAL
+        Node.NodeState.Passive -> NodeRole.VIEWER
+        else                   -> null
       }
     }
   }

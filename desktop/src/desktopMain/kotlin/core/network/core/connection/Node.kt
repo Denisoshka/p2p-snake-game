@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import java.net.InetSocketAddress
 
-interface NodeT {
+interface Node {
   val nodeId: Int
   val ipAddress: InetSocketAddress
   val running: Boolean

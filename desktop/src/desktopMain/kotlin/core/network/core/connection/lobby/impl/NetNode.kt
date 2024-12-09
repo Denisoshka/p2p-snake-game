@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import core.network.core.connection.NodeContext
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
@@ -18,18 +18,18 @@ class NetNode(
   override val ipAddress: InetSocketAddress,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
-) : NodeT {
+) : Node {
   @Volatile private var observeJob: Job? = null
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
 
-  @Volatile private var nodeStateHolder: NodeT.NodeState =
-    NodeT.NodeState.Passive
-  override val nodeState: NodeT.NodeState
+  @Volatile private var nodeStateHolder: Node.NodeState =
+    Node.NodeState.Passive
+  override val nodeState: Node.NodeState
     get() = nodeStateHolder
   override val running: Boolean
-    get() = nodeStateHolder == NodeT.NodeState.Passive
-  private val msgs: TreeMap<SnakesProto.GameMessage, NodeT.MsgInfo> = TreeMap(
+    get() = nodeStateHolder == Node.NodeState.Passive
+  private val msgs: TreeMap<SnakesProto.GameMessage, Node.MsgInfo> = TreeMap(
     MessageUtils.messageComparator
   )
 
@@ -64,7 +64,7 @@ class NetNode(
 
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgs) {
-      msgs[message] = NodeT.MsgInfo(
+      msgs[message] = Node.MsgInfo(
         message, System.currentTimeMillis()
       )
     }
@@ -74,7 +74,7 @@ class NetNode(
   override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
     synchronized(msgs) {
       messages.forEach {
-        msgs[it] = NodeT.MsgInfo(it, System.currentTimeMillis())
+        msgs[it] = Node.MsgInfo(it, System.currentTimeMillis())
       }
       lastSend = System.currentTimeMillis()
     }
@@ -114,7 +114,7 @@ class NetNode(
 
   private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
-      nodeStateHolder = NodeT.NodeState.Terminated
+      nodeStateHolder = Node.NodeState.Terminated
       return 0
     }
     return checkMessages()
@@ -136,12 +136,12 @@ class NetNode(
 
   override fun detach() {
     Logger.info { "${this@NetNode} detached " }
-    nodeStateHolder = NodeT.NodeState.Terminated;
+    nodeStateHolder = Node.NodeState.Terminated;
   }
 
   override fun shutdown() {
     Logger.info { "${this@NetNode} shutdown " }
-    NodeT.NodeState.Terminated
+    Node.NodeState.Terminated
   }
 
   override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {

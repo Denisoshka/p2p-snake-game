@@ -5,6 +5,7 @@ import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import java.net.InetSocketAddress
 
@@ -15,6 +16,9 @@ interface NetworkStateContext : NetworkStateT {
   fun joinToGame(announcement: GameAnnouncement)
   fun launchGame(gameConfig: GameConfig)
 
+  suspend fun detachNode(node: ClusterNodeT)
+  suspend fun terminateNode(node: ClusterNodeT)
+  suspend fun joinNode(node: ClusterNodeT)
 
   fun sendUnicast(
     msg: GameMessage, nodeAddress: InetSocketAddress

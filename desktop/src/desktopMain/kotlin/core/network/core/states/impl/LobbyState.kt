@@ -5,6 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.lobby.impl.NetNodeHandler
 import java.net.InetSocketAddress
 
@@ -13,6 +14,9 @@ class LobbyState(
   private val controller: NetworkController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
+  override fun sendJoinMsg(event: StateEvent.ControllerEvent.Join) {
+  }
+
   override fun pingHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -43,7 +47,6 @@ class LobbyState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-
   }
 
   override fun cleanup() {

@@ -28,7 +28,7 @@ class ClusterNodesHandler(
   @Volatile private var nodesScope: CoroutineScope? = null
   private val nodesByIp = ConcurrentHashMap<InetSocketAddress, ClusterNode>()
   override val nextSeqNum
-    get() = ncStateMachine.nextSegNum
+    get() = ncStateMachine.nextSeqNum
 
   /**
    * @throws IllegalNodeHandlerAlreadyInitialized
@@ -63,13 +63,13 @@ class ClusterNodesHandler(
     node: ClusterNode
   ) {
     nodesByIp.remove(node.ipAddress)
-    ncStateMachine.handleNodeDetach(node)
+    ncStateMachine.terminateNode(node)
   }
 
   override suspend fun handleNodeDetach(
     node: ClusterNode
   ) {
-    ncStateMachine.handleNodeDetach(node)
+    ncStateMachine.detachNode(node)
   }
 
   override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNode>> {

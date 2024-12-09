@@ -33,20 +33,18 @@ object MessageUtils {
 
   object MessageProducer {
     fun getErrorMsg(
-      message: SnakesProto.GameMessage, errorMsg: String?
+      msgSeq: Long, errorMsg: String
     ): SnakesProto.GameMessage {
-      return SnakesProto.GameMessage.newBuilder().setMsgSeq(message.msgSeq)
-        .setError(
-          SnakesProto.GameMessage.ErrorMsg.newBuilder()
-            .setErrorMessage(errorMsg)
-            .build()
-        ).build()
+      val error =
+        SnakesProto.GameMessage.ErrorMsg.newBuilder().setErrorMessage(errorMsg)
+          .build()
+      return SnakesProto.GameMessage.newBuilder().setMsgSeq(msgSeq)
+        .setError(error).build()
     }
 
     fun getPingMsg(seq: Long): SnakesProto.GameMessage {
       return SnakesProto.GameMessage.newBuilder().setMsgSeq(seq)
-        .setPing(pingMsg)
-        .build()
+        .setPing(pingMsg).build()
     }
 
     fun getAckMsg(

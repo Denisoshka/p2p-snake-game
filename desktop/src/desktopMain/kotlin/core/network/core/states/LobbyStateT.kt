@@ -2,12 +2,12 @@ package d.zhdanov.ccfit.nsu.core.network.core.states
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
 import java.net.InetSocketAddress
 
 interface LobbyStateT : NetworkStateT {
   fun sendJoinMsg(
-    event: StateEvents.ControllerEvent.Join
+    event: StateEvent.ControllerEvent.Join
   )
 
   override fun joinHandle(

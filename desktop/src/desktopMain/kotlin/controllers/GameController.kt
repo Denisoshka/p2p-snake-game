@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AnnouncementMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvents
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -73,7 +73,7 @@ class GameController(
 
   fun openGame(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
     currentScreen = Screen.Game(gameConfig, announcement)
-    ncStateHandler.changeState(StateEvents.ControllerEvent.LaunchGame(
+    ncStateHandler.changeState(StateEvent.ControllerEvent.LaunchGame(
       playerName = TODO(),
       gameConfig = TODO()
     ))
@@ -81,6 +81,6 @@ class GameController(
 
   fun openLobby() {
     currentScreen = Screen.Lobby
-    ncStateHandler.changeState(StateEvents.ControllerEvent.SwitchToLobby)
+    ncStateHandler.changeState(StateEvent.ControllerEvent.SwitchToLobby)
   }
 }

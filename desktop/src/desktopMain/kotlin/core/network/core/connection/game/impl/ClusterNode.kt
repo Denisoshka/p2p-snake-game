@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -20,7 +20,7 @@ private val Logger = KotlinLogging.logger {}
  * todo fix doc
  */
 class ClusterNode(
-  nodeState: NodeT.NodeState,
+  nodeState: Node.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   @Volatile override var payload: NodePayloadT? = null,
@@ -30,17 +30,17 @@ class ClusterNode(
   @Volatile override var lastSend = System.currentTimeMillis()
   override val running: Boolean
     get() = with(nodeState) {
-      this == NodeT.NodeState.Active || this == NodeT.NodeState.Passive
+      this == Node.NodeState.Active || this == Node.NodeState.Passive
     }
 
-  override val nodeState: NodeT.NodeState
+  override val nodeState: Node.NodeState
     get() = stateHolder.get()
   private val resendDelay = clusterNodesHandler.resendDelay
 
 
   private val thresholdDelay = clusterNodesHandler.thresholdDelay
   private val stateHolder = AtomicReference(
-    if(nodeState != NodeT.NodeState.Active && nodeState != NodeT.NodeState.Passive) {
+    if(nodeState != Node.NodeState.Active && nodeState != Node.NodeState.Passive) {
       throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
     } else {
       nodeState
@@ -51,7 +51,7 @@ class ClusterNode(
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, NodeT.MsgInfo> =
+  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT.ClusterNode.MsgInfo> =
     TreeMap(MessageUtils.messageComparator)
 
   override fun sendToNode(msg: SnakesProto.GameMessage) {
@@ -72,15 +72,17 @@ class ClusterNode(
 
   override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
     synchronized(msgForAcknowledge) {
-      lastReceive = System.currentTimeMillis()
-      return msgForAcknowledge.remove(message)?.msg
+      return msgForAcknowledge.remove(message)?.let {
+        lastReceive = System.currentTimeMillis()
+        it.msg
+      }
     }
   }
 
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgForAcknowledge) {
       msgForAcknowledge[message] =
-        NodeT.MsgInfo(message, System.currentTimeMillis())
+        Node.MsgInfo(message, System.currentTimeMillis())
       lastSend = System.currentTimeMillis()
     }
   }
@@ -88,9 +90,8 @@ class ClusterNode(
   override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
     synchronized(msgForAcknowledge) {
       messages.forEach {
-        msgForAcknowledge[it] = NodeT.MsgInfo(it, System.currentTimeMillis())
+        msgForAcknowledge[it] = Node.MsgInfo(it, System.currentTimeMillis())
       }
-
       lastSend = System.currentTimeMillis()
     }
   }
@@ -113,7 +114,7 @@ class ClusterNode(
     return ret
   }
 
-  private fun changeState(newState: NodeT.NodeState): Boolean {
+  private fun changeState(newState: Node.NodeState): Boolean {
     do {
       val prevState = nodeState
       if(newState <= prevState) return false;
@@ -122,11 +123,11 @@ class ClusterNode(
   }
 
   override fun detach() {
-    changeState(NodeT.NodeState.Disconnected)
+    changeState(Node.NodeState.Disconnected)
   }
 
   override fun shutdown() {
-    changeState(NodeT.NodeState.Terminated)
+    changeState(Node.NodeState.Terminated)
   }
 
   @Synchronized
@@ -139,11 +140,11 @@ class ClusterNode(
         while(isActive) {
           delay(nextDelay)
           when(nodeState) {
-            NodeT.NodeState.Active, NodeT.NodeState.Passive -> {
+            Node.NodeState.Active, Node.NodeState.Passive -> {
               nextDelay = onProcessing()
             }
 
-            NodeT.NodeState.Disconnected                    -> {
+            Node.NodeState.Disconnected                   -> {
               if(!detachedFromCluster) {
                 Logger.trace { "${this@ClusterNode} disconnected" }
                 detachedFromCluster = true
@@ -154,7 +155,7 @@ class ClusterNode(
               nextDelay = onDetaching()
             }
 
-            NodeT.NodeState.Terminated                      -> {
+            Node.NodeState.Terminated                     -> {
               Logger.trace { "${this@ClusterNode} terminated" }
               this@ClusterNode.payload?.onContextObserverTerminated()
               this@ClusterNode.payload = null
@@ -170,11 +171,11 @@ class ClusterNode(
   }
 
   /**
-   * @throws IllegalUnacknowledgedMessagesGetAttempt if [ClusterNode.nodeState] <
+   * @throws IllegalUnacknowledgedMessagesGetAttempt if [Node.nodeState] <
    * [ClusterNodeT.NodeState.Disconnected]
    * */
   override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
-    if(nodeState < NodeT.NodeState.Disconnected) {
+    if(nodeState < Node.NodeState.Disconnected) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
     return synchronized(msgForAcknowledge) {
@@ -184,7 +185,7 @@ class ClusterNode(
 
   private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
-      stateHolder.set(NodeT.NodeState.Terminated)
+      stateHolder.set(Node.NodeState.Terminated)
       return 0
     }
     return checkMessages()
@@ -202,10 +203,10 @@ class ClusterNode(
 
   private fun onDetaching(): Long {
     synchronized(msgForAcknowledge) {
-      if(nodeState <= NodeT.NodeState.Disconnected) return 0
+      if(nodeState <= Node.NodeState.Disconnected) return 0
       val ret = checkNodeConditions(System.currentTimeMillis())
       if(msgForAcknowledge.isEmpty()) {
-        stateHolder.set(NodeT.NodeState.Terminated)
+        stateHolder.set(Node.NodeState.Terminated)
         return 0
       }
       return ret
