@@ -8,6 +8,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
@@ -24,17 +25,17 @@ class GameEngine(
   private val gameConfig: GameConfig,
 ) : GameContext {
   val map: GameMap = ArrayGameMap(gameConfig.width, gameConfig.height)
-
+  
   private val sideEffectEntity: MutableList<Entity> = ArrayList()
   private val entities: MutableList<Entity> = ArrayList()
-
+  
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
-
+  
   private val joinBacklog = Channel<Pair<ClusterNode, String>>(joinInStateQ)
   private val joinedPlayers =
     ArrayList<Pair<Pair<ClusterNode, String>, ActiveEntity?>>(joinInStateQ)
-
+  
   private fun spawnNewSnake(
     id: Int, direction: Direction? = null
   ): SnakeEntity? {
@@ -42,28 +43,28 @@ class GameEngine(
     val dir = direction ?: directions[Random.nextInt(directions.size)]
     return SnakeEntity(coords.first, coords.second, dir, id)
   }
-
+  
   private fun offerPlayer(playerInfo: ClusterNode, name: String): Boolean {
     return joinBacklog.trySend(playerInfo to name).isSuccess
   }
-
+  
   private fun gameLoop() {
     try {
       while(Thread.currentThread().isAlive) {
         val startTime = System.currentTimeMillis()
-
-        preprocess(gameConfig)
+        
+        preprocess()
         update()
         checkCollision()
-
+        
         val state = shootState()
         val joinedPlayersInfo = joinedPlayers
         stateConsumer.submitState(state, joinedPlayersInfo);
-
+        
         val endTime = System.currentTimeMillis()
         val timeTaken = endTime - startTime
         val sleepTime = gameConfig.stateDelayMs - timeTaken
-
+        
         if(sleepTime > 0) {
           Thread.sleep(sleepTime)
         }
@@ -73,20 +74,20 @@ class GameEngine(
       Thread.currentThread().interrupt()
     }
   }
-
+  
   private fun update() {
     for(entity in entities) {
       entity.update(this, sideEffectEntity)
     }
   }
-
+  
   private fun checkCollision() {
     for(x in entities) {
       for(y in entities) {
         x.checkCollisions(y, this);
       }
     }
-
+    
     val entrIt = entities.iterator()
     while(entrIt.hasNext()) {
       val ent = entrIt.next()
@@ -96,7 +97,7 @@ class GameEngine(
       }
     }
   }
-
+  
   private fun shootState(): StateMsg {
     val snakeSnapshot = ArrayList<Snake>()
     val foodSnapshot = ArrayList<Coord>()
@@ -108,52 +109,50 @@ class GameEngine(
     }
     return state
   }
-
-  private fun preprocess(
-    gameConfig: GameConfig
-  ) {
-    sideEffectEntityPreprocess(gameConfig);
-    joinedPlayersPreprocess(gameConfig)
-    checkUpdateApplesPreprocess(gameConfig)
+  
+  private fun preprocess() {
+    sideEffectEntityPreprocess()
+    joinedPlayersPreprocess()
+    checkUpdateApplesPreprocess()
   }
-
+  
   override fun shutdown() {
     Logger.info { "${GameEngine::class.java.name} shutdowned" }
     executor.shutdownNow()
   }
-
+  
   override fun initGameFromState(
     config: GameConfig, state: StateMsg, playerInfo: GamePlayer
   ): List<ActiveEntity> {
     val ret = ArrayList<ActiveEntity>()
-
+    
     state.snakes.forEach {
       val sn = restoreSnake(it)
       ret.add(sn)
     }
-
+    
     state.foods.forEach(
       this::restoreApples
     )
-
+    
     return ret
   }
-
+  
   override fun initGame(
-    config: GameConfig, playerInfo: GamePlayer
+    config: GameConfig, playerInfo: GamePlayerInfo
   ): List<ActiveEntity> {
-    val sn = spawnNewSnake(playerInfo.id) ?: throw RuntimeException(
+    val sn = spawnNewSnake(playerInfo.playerId) ?: throw RuntimeException(
       "snake not found"
     )
     return listOf(sn);
   }
-
+  
   @Synchronized
   override fun launch() {
     Logger.info { "${GameEngine::class.java.name} launched with config $gameConfig" }
     executor.submit(this::gameLoop)
   }
-
+  
   private fun restoreSnake(snakeInfo: Snake): SnakeEntity {
     val snake = SnakeEntity(snakeInfo.direction, snakeInfo.playerId)
 //    TODO(а если змея уже готова то что делать нам, вообще она должна себя
@@ -162,28 +161,28 @@ class GameEngine(
     entities.add(snake)
     return snake
   }
-
+  
   private fun restoreApples(foodInfo: Coord): AppleEntity {
     val apple = AppleEntity(foodInfo.x, foodInfo.y)
     entities.add(apple);
     return apple
   }
-
+  
   override fun addSideEntity(entity: Entity) {
     sideEffectEntity.add(entity)
   }
-
+  
   private fun checkUpdateApplesPreprocess() {
     val applesQ = entities.count { it.type == GameType.Apple }
     gameConfig.foodStatic - applesQ
   }
-
+  
   private fun sideEffectEntityPreprocess() {
     entities.addAll(sideEffectEntity)
     sideEffectEntity.forEach { map.addEntity(it) }
     sideEffectEntity.clear()
   }
-
+  
   private fun joinedPlayersPreprocess() {
     joinedPlayers.clear()
     repeat(joinInStateQ) {
@@ -192,7 +191,7 @@ class GameEngine(
       joinedPlayers.add(plInfo to snake)
     }
   }
-
+  
   fun shutdown() {
     executor.shutdownNow()
   }

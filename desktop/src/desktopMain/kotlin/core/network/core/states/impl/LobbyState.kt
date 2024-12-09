@@ -14,7 +14,7 @@ class LobbyState(
   private val controller: NetworkController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
-  override fun sendJoinMsg(event: StateEvent.ControllerEvent.Join) {
+  override fun sendJoinMsg(event: StateEvent.ControllerEvent.JoinReq) {
   }
 
   override fun pingHandle(

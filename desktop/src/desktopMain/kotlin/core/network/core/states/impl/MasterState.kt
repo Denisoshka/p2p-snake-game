@@ -8,16 +8,15 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
@@ -41,16 +40,20 @@ class MasterState(
   private val ncStateMachine: NetworkStateMachine,
   private val netController: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
-  playerInfo: GamePlayer,
+  gamePlayerInfo: GamePlayerInfo,
   state: StateMsg? = null,
 ) : MasterStateT {
-  @Volatile private var nodesInitScope: CoroutineScope? = null;
+  private val nodesInitScope: CoroutineScope = CoroutineScope(
+    Dispatchers.Default
+  )
   private val gameEngine: GameContext = GameEngine(
     JoinInUpdateQ, ncStateMachine, gameConfig.gameSettings
   )
   val player: LocalObserverContext
   
   init {
+    Logger.info { "$this init" }
+    
     val entities = if(state != null) {
       gameEngine.initGameFromState(gameConfig.gameSettings, state, playerInfo)
     } else {
@@ -69,7 +72,9 @@ class MasterState(
       throw IllegalMasterLaunchAttempt("local snake absent in state message")
     }
     
-    state?.let { initContextFromState(state, entities) }
+    state?.let {
+      initSubscriberNodes(state, entities)
+    }
     
     gameEngine.launch()
   }
@@ -179,14 +184,12 @@ class MasterState(
     )
   }
   
-  @Synchronized
   private fun initSubscriberNodes(
     state: StateMsg, entities: List<ActiveEntity>
   ) {
-    Logger.info { "init subscriber nodes" }
+    Logger.info { "$this init subscriber nodes" }
     val entMap = entities.associateBy { it.id }
-    nodesInitScope ?: throw IllegalChangeStateAttempt("nodesInitScope non null")
-    nodesInitScope = CoroutineScope(Dispatchers.Default).also { scope ->
+    nodesInitScope.also { scope ->
       state.players.map {
         scope.async {
           kotlin.runCatching {
@@ -231,16 +234,10 @@ class MasterState(
     }
   }
   
-  private fun initContextFromState(
-    state: StateMsg, entities: List<ActiveEntity>
-  ) {
-    initSubscriberNodes(state, entities)
-  }
-  
-  @Synchronized
   override fun cleanup() {
+    Logger.info { "$this cleanup" }
     gameEngine.shutdown()
     clusterNodesHandler.shutdown()
-    nodesInitScope?.cancel()
+    nodesInitScope.cancel()
   }
 }

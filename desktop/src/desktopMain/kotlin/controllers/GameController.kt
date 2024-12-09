@@ -75,7 +75,7 @@ class GameController(
     currentScreen = Screen.Game(gameConfig, announcement)
     ncStateHandler.changeState(StateEvent.ControllerEvent.LaunchGame(
       playerName = TODO(),
-      gameConfig = TODO()
+      internalGameConfig = TODO()
     ))
   }
 

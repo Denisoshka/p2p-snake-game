@@ -7,7 +7,7 @@ import java.net.InetSocketAddress
 
 interface LobbyStateT : NetworkStateT {
   fun sendJoinMsg(
-    event: StateEvent.ControllerEvent.Join
+    event: StateEvent.ControllerEvent.JoinReq
   )
 
   override fun joinHandle(

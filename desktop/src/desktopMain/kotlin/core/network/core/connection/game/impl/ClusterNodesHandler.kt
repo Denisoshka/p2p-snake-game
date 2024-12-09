@@ -24,12 +24,12 @@ class ClusterNodesHandler(
     Iterable<Map.Entry<InetSocketAddress, ClusterNode>> {
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
-
+  
   @Volatile private var nodesScope: CoroutineScope? = null
   private val nodesByIp = ConcurrentHashMap<InetSocketAddress, ClusterNode>()
   override val nextSeqNum
     get() = ncStateMachine.nextSeqNum
-
+  
   /**
    * @throws IllegalNodeHandlerAlreadyInitialized
    * */
@@ -38,44 +38,44 @@ class ClusterNodesHandler(
     this.nodesScope ?: throw IllegalNodeHandlerAlreadyInitialized()
     CoroutineScope(Dispatchers.IO).also { nodesScope = it }
   }
-
+  
   @Synchronized
   override fun shutdown() {
     nodesScope?.cancel()
     nodesByIp.clear()
   }
-
+  
   override fun sendUnicast(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
-
+  
   override fun registerNode(node: ClusterNode): ClusterNode {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
-        ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
+          ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
       }
       return it
     } ?: throw IllegalNodeRegisterAttempt("node already registered")
   }
-
+  
   override suspend fun handleNodeTermination(
     node: ClusterNode
   ) {
     nodesByIp.remove(node.ipAddress)
     ncStateMachine.terminateNode(node)
   }
-
+  
   override suspend fun handleNodeDetach(
     node: ClusterNode
   ) {
     ncStateMachine.detachNode(node)
   }
-
+  
   override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNode>> {
     return nodesByIp.entries.iterator()
   }
-
+  
   override operator fun get(ipAddress: InetSocketAddress): ClusterNode? {
     return nodesByIp[ipAddress]
   }

@@ -165,16 +165,6 @@ class NetworkStateMachine(
     }
   }
   
-  private suspend fun reconfigureContext(
-    event: StateEvent, node: ClusterNodeT?
-  ) {
-    when(event) {
-      is StateEvent.ControllerEvent.LaunchGame -> TODO()
-      is StateEvent.InternalEvent.JoinAck      -> TODO()
-      is StateEvent.InternalEvent.MasterNow    ->
-      else                                     -> Logger.error { "wtf $event" }
-    }
-  }
   
   /**
    * @throws IllegalChangeStateAttempt
@@ -188,7 +178,7 @@ class NetworkStateMachine(
     )
     
     if(depInfo == null) {
-      internalSwitchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
+      switchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
     } else {
       normalChangeInfoDeputyToMaster(depInfo, node)
     }
@@ -201,7 +191,7 @@ class NetworkStateMachine(
     if(depInfo == null) {
       Logger.warn { "activeHandleNodeDetach depInfo absent" }
       
-      internalSwitchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
+      switchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
       return
     }
     
@@ -252,7 +242,7 @@ class NetworkStateMachine(
             MasterState::class
           } latestGameState is null"
         }
-        internalSwitchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
+        switchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
       }
       
       else -> {
@@ -275,8 +265,8 @@ class NetworkStateMachine(
         switchToMaster(
           StateEvent.InternalEvent.MasterNow(
             gameState = state.first,
-            playerInfo = plInfo,
-            gameConfig = config,
+            gamePlayerInfo = plInfo,
+            internalGameConfig = config,
           )
         )
       }
@@ -366,7 +356,7 @@ class NetworkStateMachine(
     }
   }
   
-  private fun handleJoin(event: StateEvent.ControllerEvent.Join) {
+  private fun handleJoin(event: StateEvent.ControllerEvent.JoinReq) {
     val state = networkStateHolder.get()
     if(state is LobbyState) {
       state.sendJoinMsg(event)
@@ -383,12 +373,12 @@ class NetworkStateMachine(
     if(state is MasterState) {
       val (ms, dp)
     } else if(state is ActiveState || state is PassiveState) {
-    
+      
     }
   }
   
   
-  private fun handleJoinAck(event: StateEvent.InternalEvent.JoinAck) {
+  private fun handleJoinAck(event: StateEvent.InternalEvent.JoinReqAck) {
     val curState = networkStateHolder.get()
     if(curState !is LobbyState) {
       throw IllegalChangeStateAttempt(
@@ -437,7 +427,27 @@ class NetworkStateMachine(
                 Logger.trace {
                   "$node $event received in registerNewNode ${stateMachine.registerNewNode}"
                 }
-                stateMachine.reconfigureContext(event, node)
+                when(event) {
+                  is StateEvent.ControllerEvent.LaunchGame    -> {
+                    launchGame(stateMachine, event)
+                  }
+                  
+                  is StateEvent.InternalEvent.JoinReqAck      -> {
+                    joinGame(stateMachine, event)
+                  }
+                  
+                  is StateEvent.ControllerEvent.SwitchToLobby -> {
+                    switchToLobby(stateMachine, event)
+                  }
+                  
+                  is StateEvent.InternalEvent.MasterNow       -> {
+                    switchToMaster(stateMachine, event)
+                  }
+                  
+                  else                                        -> {
+                    Logger.error { "unsupported event by reconfigureContext $event" }
+                  }
+                }
               }
             }
           } catch(e: IllegalChangeStateAttempt) {
@@ -453,8 +463,91 @@ class NetworkStateMachine(
       }
     }
     
+    private suspend fun joinGame(
+      stateMachine: NetworkStateMachine,
+      event: StateEvent.InternalEvent.JoinReqAck
+    ) {
+      if(event.gamePlayerInfo.nodeRole == NodeRole.VIEWER) {
+        joinAsViewer(stateMachine, event)
+      } else {
+        joinAsActive(stateMachine, event)
+      }
+    }
     
-    private suspend fun handleLaunchGame(
+    private fun joinAsActive(
+      stateMachine: NetworkStateMachine,
+      event: StateEvent.InternalEvent.JoinReqAck
+    ) {
+      when(val curState = stateMachine.networkState) {
+        !is LobbyState -> IllegalChangeStateAttempt(
+          fromState = curState.javaClass.name,
+          toState = ActiveState::class.java.name,
+          msg = "in ${this::joinAsViewer.name}"
+        )
+      }
+      val destAddr = InetSocketAddress(
+        event.onEventAck.gameAnnouncement.host,
+        event.onEventAck.gameAnnouncement.port
+      )
+      stateMachine.apply {
+        clusterNodesHandler.launch()
+        val masterNode = ClusterNode(
+          nodeState = Node.NodeState.Active,
+          nodeId = event.senderId,
+          ipAddress = destAddr,
+          payload = null,
+          clusterNodesHandler = clusterNodesHandler
+        )
+        clusterNodesHandler.registerNode(masterNode)
+        networkStateHolder.set(
+          ActiveState(
+            gameConfig = event.internalGameConfig,
+            stateMachine = this@apply,
+            controller = netController,
+            clusterNodesHandler = clusterNodesHandler
+          )
+        )
+      }
+    }
+    
+    private fun joinAsViewer(
+      stateMachine: NetworkStateMachine,
+      event: StateEvent.InternalEvent.JoinReqAck
+    ) {
+      when(val curState = stateMachine.networkState) {
+        !is LobbyState -> IllegalChangeStateAttempt(
+          fromState = curState.javaClass.name,
+          toState = ActiveState::class.java.name,
+          msg = "in ${this::joinAsViewer.name}"
+        )
+      }
+      val destAddr = InetSocketAddress(
+        event.onEventAck.gameAnnouncement.host,
+        event.onEventAck.gameAnnouncement.port
+      )
+      stateMachine.apply {
+        clusterNodesHandler.launch()
+        val masterNode = ClusterNode(
+          nodeState = Node.NodeState.Active,
+          nodeId = event.senderId,
+          ipAddress = destAddr,
+          payload = null,
+          clusterNodesHandler = clusterNodesHandler
+        )
+        clusterNodesHandler.registerNode(masterNode)
+        networkStateHolder.set(
+          PassiveState(
+            gameConfig = event.internalGameConfig,
+            ncStateMachine = this@apply,
+            controller = netController,
+            clusterNodesHandler = clusterNodesHandler
+          )
+        )
+      }
+      Logger.info { "joined as ${NodeRole.VIEWER} to ${event.onEventAck.gameAnnouncement}" }
+    }
+    
+    private suspend fun launchGame(
       stateMachine: NetworkStateMachine,
       event: StateEvent.ControllerEvent.LaunchGame,
     ) {
@@ -465,7 +558,7 @@ class NetworkStateMachine(
       )
       
       val plInfo = GamePlayer(
-        name = event.gameConfig.playerName,
+        name = event.internalGameConfig.playerName,
         id = stateMachine.nodeId,
         nodeRole = NodeRole.MASTER,
         playerType = PlayerType.HUMAN,
@@ -480,7 +573,7 @@ class NetworkStateMachine(
             ncStateMachine = this,
             netController = netController,
             clusterNodesHandler = clusterNodesHandler,
-            gameConfig = event.gameConfig,
+            gameConfig = event.internalGameConfig,
             playerInfo = plInfo,
             state = null
           )
@@ -488,7 +581,7 @@ class NetworkStateMachine(
       }
     }
     
-    suspend fun switchToMaster(
+    private suspend fun switchToMaster(
       stateMachine: NetworkStateMachine,
       event: StateEvent.InternalEvent.MasterNow
     ) {
@@ -504,15 +597,15 @@ class NetworkStateMachine(
             ncStateMachine = this@apply,
             netController = netController,
             clusterNodesHandler = clusterNodesHandler,
-            playerInfo = event.playerInfo,
-            gameConfig = event.gameConfig,
+            playerInfo = event.gamePlayerInfo,
+            gameConfig = event.internalGameConfig,
             state = event.gameState,
           )
         )
       }
     }
     
-    suspend fun internalSwitchToLobby(
+    private suspend fun switchToLobby(
       stateMachine: NetworkStateMachine,
       event: StateEvent.ControllerEvent.SwitchToLobby,
     ) {
