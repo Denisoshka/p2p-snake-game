@@ -22,14 +22,14 @@ class ClusterNodesHandler(
     Iterable<Map.Entry<InetSocketAddress, ClusterNode>> {
   var stateDelayMs: Int = stateDelayMs
     set(value) {
-      resendDelay = getResendDelay(value)
-      thresholdDelay = getThresholdDelay(value)
+      resendDelay = getResendDelay(value).toLong()
+      thresholdDelay = getThresholdDelay(value).toLong()
       field = value
     }
   
-  @Volatile var resendDelay = getResendDelay(stateDelayMs)
+  @Volatile var resendDelay = getResendDelay(stateDelayMs).toLong()
     private set
-  @Volatile var thresholdDelay = getThresholdDelay(stateDelayMs)
+  @Volatile var thresholdDelay = getThresholdDelay(stateDelayMs).toLong()
     private set
   
   override val launched: Boolean

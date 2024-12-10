@@ -3,22 +3,24 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 import core.network.core.connection.lobby.impl.NetNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
-import kotlinx.coroutines.CoroutineScope
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
+
+private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
   private val ncStateMachine: NetworkStateMachine,
-  private val controller: NetworkController,
+  private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
-  override fun CoroutineScope.sendJoinMsg(
-    event: Event.ControllerEvent.JoinReq
+  override fun requestJoinToGame(
+    event: Event.State.ByController.JoinReq
   ) {
     val addr = InetSocketAddress(
       event.gameAnnouncement.host, event.gameAnnouncement.port
@@ -26,10 +28,10 @@ class LobbyState(
     
     val node = netNodesHandler[addr] ?: run {
       val resendDelay = getResendDelay(
-        event.gameAnnouncement.announcement.gameConfig.stateDelayMs
+        event.gameAnnouncement.announcement.config.stateDelayMs
       )
       val thresholdDelay = getThresholdDelay(
-        event.gameAnnouncement.announcement.gameConfig.stateDelayMs
+        event.gameAnnouncement.announcement.config.stateDelayMs
       )
       val newNode = NetNode(
         context = netNodesHandler,
@@ -63,11 +65,13 @@ class LobbyState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    if(ncStateMachine.networkState !is LobbyState) return
     val node = netNodesHandler[ipAddress] ?: return
     val onAckMsg = node.ackMessage(message) ?: return
-    if(onAckMsg.typeCase == SnakesProto.GameMessage.TypeCase.JOIN){
-    
+    if(onAckMsg.req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN) {
+      Logger.trace {
+        "receive join ack from $ipAddress with id ${message.receiverId}"
+      }
+      
     }
   }
   
@@ -83,6 +87,13 @@ class LobbyState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
+    val node = netNodesHandler[ipAddress] ?: return
+    val onAckMsg = node.ackMessage(message) ?: return
+    if(onAckMsg.req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN) {
+      Logger.trace {
+        "receive join error from $ipAddress with cause ${message.error.errorMessage}"
+      }
+    }
   }
   
   override fun cleanup() {

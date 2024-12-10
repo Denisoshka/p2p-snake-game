@@ -1,8 +1,8 @@
 package core.network.core.connection.game
 
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
+import core.network.core.connection.Node
 
-interface ClusterNodeT : Node {
+interface ClusterNodeT<T> : Node<T> {
   var payload: NodePayloadT?
 }

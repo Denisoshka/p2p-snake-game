@@ -20,7 +20,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
+import core.network.core.connection.Node
 import d.zhdanov.ccfit.nsu.core.network.interfaces.GameSessionHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
@@ -28,6 +28,7 @@ import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
@@ -48,6 +49,7 @@ class NetworkStateMachine(
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
+  private val stateContextDistacherScope = CoroutineScope(Dispatchers.Default)
   
   private val seqNumProvider = AtomicLong(0)
   private val stateNumProvider = AtomicInteger(0)
@@ -88,29 +90,35 @@ class NetworkStateMachine(
   val masterDeputy: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?
     get() = masterDeputyHolder.get()
   
-  override fun CoroutineScope.joinToGame(joinReq: Event.State.ByController.JoinReq) {
+  override fun handleJoinToGameReq(joinReq: Event.State.ByController.JoinReq) {
     when(val curState = networkState) {
-      is LobbyState -> launch {
-        with(curState) {
-          sendJoinMsg(joinReq)
-        }
-      }
+      is LobbyState -> curState.requestJoinToGame(joinReq)
     }
   }
   
-  override fun CoroutineScope.launchGame(launchGameReq: Event.State.ByController.LaunchGame) {
-    launch {
+  override fun handleLaunchGame(
+    launchGameReq: Event.State.ByController.LaunchGame
+  ) {
+    stateContextDistacherScope.launch {
       reconfigureContext(launchGameReq)
     }
   }
   
-  override fun CoroutineScope.switchToLobby(switchToLobbyReq: Event.State.ByController.SwitchToLobby) {
-    launch {
+  override fun handleConnectToGame() {
+    stateContextDistacherScope.launch {
+      reconfigureContext()
+    }
+  }
+  
+  override fun handleSwitchToLobby(
+    switchToLobbyReq: Event.State.ByController.SwitchToLobby
+  ) {
+    stateContextDistacherScope.launch {
       reconfigureContext(switchToLobbyReq)
     }
   }
   
-  override fun sendStateToController(state: SnakesProto.GameState) {
+  override fun handleSendStateToController(state: SnakesProto.GameState) {
     gameController.acceptNewState(state)
   }
   
@@ -272,7 +280,7 @@ class NetworkStateMachine(
                 }
                 
                 is Event.State.ByController.SwitchToLobby -> {
-                  switchToLobby(stateMachine, event)
+                  switchToLobby(event)
                 }
                 
                 is Event.State.ByInternal.MasterNow       -> {
@@ -300,17 +308,16 @@ class NetworkStateMachine(
   }
   
   private suspend fun onJoinGameAck(
-    stateMachine: NetworkStateMachine,
-    event: Event.State.ByInternal.JoinReqAck
+    stateMachine: NetworkStateMachine, event: Event.State.ByInternal.JoinReqAck
   ) {
     Logger.trace { "join to game with $event" }
     when(event.onEventAck.playerRole) {
       NodeRole.VIEWER -> {
-        joinAsViewer(stateMachine, event)
+        joinAsViewer(event)
       }
       
       NodeRole.NORMAL -> {
-        joinAsActive(stateMachine, event)
+        joinAsActive(event)
       }
       
       else            -> {
@@ -441,10 +448,9 @@ class NetworkStateMachine(
   }
   
   fun reconfigureMasterDeputy(
-    stateMachine: NetworkStateMachine,
     masterDeputyInfo: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>
   ) {
-    stateMachine.masterDeputyHolder.set(masterDeputyInfo)
+    masterDeputyHolder.set(masterDeputyInfo)
   }
   
   suspend fun switchToLobby(
@@ -452,8 +458,7 @@ class NetworkStateMachine(
   ) {
     val curState = networkState
     if(curState is LobbyState) throw IllegalChangeStateAttempt(
-      fromState = curState.javaClass.name,
-      toState = LobbyState::class.java.name
+      fromState = curState.javaClass.name, toState = LobbyState::class.java.name
     )
     
     masterDeputyHolder.set(null)
@@ -471,19 +476,16 @@ class NetworkStateMachine(
   }
   
   private suspend fun setupNewState(
-    stateMachine: NetworkStateMachine,
     newStateMsg: SnakesProto.GameMessage.StateMsg
   ) {
-    stateMachine.apply {
-      val oldState = latestGameState?.state ?: return
-      val newState = newStateMsg.state
-      if(oldState.stateOrder >= newState.stateOrder) return
-      latestGameStateHolder.set(newStateMsg)
-      val curMsDp = stateMachine.masterDeputy ?: return
-      checkMsInfoInState(curMsDp, newState)
-      checkDpInfoInState(curMsDp, newState)
-      stateMachine.sendStateToController(newState)
-    }
+    val oldState = latestGameState?.state ?: return
+    val newState = newStateMsg.state
+    if(oldState.stateOrder >= newState.stateOrder) return
+    latestGameStateHolder.set(newStateMsg)
+    val curMsDp = masterDeputy ?: return
+    checkMsInfoInState(curMsDp, newState)
+    checkDpInfoInState(curMsDp, newState)
+    handleSendStateToController(newState)
   }
   
   private suspend fun checkMsInfoInState(

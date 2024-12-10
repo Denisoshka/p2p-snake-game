@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
+import core.network.core.connection.Node
 import java.net.InetSocketAddress
 
 interface NodePayloadT {

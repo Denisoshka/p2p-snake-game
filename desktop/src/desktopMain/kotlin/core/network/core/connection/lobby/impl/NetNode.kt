@@ -1,11 +1,16 @@
 package core.network.core.connection.lobby.impl
 
+import core.network.core.connection.Node
 import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.util.*
 import kotlin.coroutines.cancellation.CancellationException
@@ -17,7 +22,7 @@ class NetNode(
   override val ipAddress: InetSocketAddress,
   private val resendDelay: Long,
   private val thresholdDelay: Long,
-) : Node {
+) : Node<Node.MsgInfoWithPayload> {
   override val nodeId: Int = 0;
   @Volatile private var observeJob: Job? = null
   @Volatile override var lastReceive = System.currentTimeMillis()
@@ -29,9 +34,10 @@ class NetNode(
     get() = nodeStateHolder
   override val running: Boolean
     get() = nodeStateHolder == Node.NodeState.Passive
-  private val msgs: TreeMap<SnakesProto.GameMessage, Node.MsgInfo> = TreeMap(
-    MessageUtils.messageComparator
-  )
+  private val msgs: TreeMap<SnakesProto.GameMessage, Node.MsgInfoWithPayload> =
+    TreeMap(
+      MessageUtils.messageComparator
+    )
   
   override fun sendToNode(msg: SnakesProto.GameMessage) {
     context.sendUnicast(msg, ipAddress)
@@ -55,29 +61,41 @@ class NetNode(
     return ret
   }
   
-  override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
+  override fun ackMessage(message: SnakesProto.GameMessage): Node.MsgInfoWithPayload? {
     synchronized(msgs) {
       lastReceive = System.currentTimeMillis()
-      return msgs.remove(message)?.msg
+      return msgs.remove(message)
     }
   }
   
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
     synchronized(msgs) {
-      msgs[message] = Node.MsgInfo(
-        message, System.currentTimeMillis()
+      msgs[message] = Node.MsgInfoWithPayload(
+        message, System.currentTimeMillis(), null
       )
+      lastSend = System.currentTimeMillis()
     }
-    lastSend = System.currentTimeMillis()
   }
   
-  override fun addAllMessageForAck(messages: List<SnakesProto.GameMessage>) {
+  fun addMessageForAck(
+    message: SnakesProto.GameMessage, irritant: SnakesProto.GameMessage
+  ) {
     synchronized(msgs) {
+      msgs[message] = Node.MsgInfoWithPayload(
+        message, System.currentTimeMillis(), irritant
+      )
+      lastSend = System.currentTimeMillis()
+    }
+  }
+  
+  override fun addAllMessageForAck(messages: List<Node.MsgInfoWithPayload>) {
+    /*synchronized(msgs) {
       messages.forEach {
         msgs[it] = Node.MsgInfo(it, System.currentTimeMillis())
       }
       lastSend = System.currentTimeMillis()
-    }
+    }*/
+    TODO()
   }
   
   @Synchronized
@@ -124,7 +142,7 @@ class NetNode(
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
     
     val seq = context.nextSeqNum
-    val ping = MessageUtils.getPingMsg(seq)
+    val ping = MessageUtils.MessageProducer.getPingMsg(seq)
     
     sendToNode(ping)
     lastSend = System.currentTimeMillis()
@@ -144,9 +162,9 @@ class NetNode(
     Node.NodeState.Terminated
   }
   
-  override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
+  override fun getUnacknowledgedMessages(): List<Node.MsgInfoWithPayload> {
     synchronized(msgs) {
-      return msgs.keys.toList()
+      return msgs.values.toList()
     }
   }
   

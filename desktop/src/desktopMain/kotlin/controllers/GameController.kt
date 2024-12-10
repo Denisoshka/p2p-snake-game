@@ -82,10 +82,22 @@ class GameController(
   
   }
   
+  fun onAckDelivered(
+    req: SnakesProto.GameMessage, announcementInfo: AnnouncementInfo
+  ) {
+    if (req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN){
+      mainScope.launch {
+      
+      }
+    }
+  }
   
   fun openGame(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
     currentScreen = Screen.Game(gameConfig, announcement)
     
+    val launchGameConf = Event.State.ByController.LaunchGame(
+      internalGameConfig = TODO()
+    )
     ncStateHandler.changeState(
       Event.ControllerEvent.LaunchGame(
         playerName = TODO(),
@@ -99,7 +111,9 @@ class GameController(
     ncStateHandler.changeState(Event.ControllerEvent.SwitchToLobby)
   }
   
-  fun acceptNewState(state: SnakesProto.GameState){
-  
+  fun acceptNewState(state: SnakesProto.GameState) {
+    mainScope.launch {
+    
+    }
   }
 }

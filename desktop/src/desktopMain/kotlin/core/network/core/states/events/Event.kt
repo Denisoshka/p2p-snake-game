@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.events
 
+import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage.RoleChangeMsg
@@ -51,7 +52,7 @@ sealed class Event {
     ) : State()
     
     data class NewNodeRegistered(
-      val clusterNodeT: ClusterNodeT,
+      val clusterNodeT: ClusterNodeT<Node.MsgInfo>,
     ) : State()
     
     data class RoleChanged(

@@ -81,7 +81,7 @@ object MessageUtils {
         setRoleChange(roleCng)
       }.build()
     }
-    
+
     fun getAckMsg(
       msgSeq: SnakesProto.GameMessage, senderId: Int, receiverId: Int
     ): SnakesProto.GameMessage {

@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
@@ -15,7 +16,6 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttemp
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -25,11 +25,11 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
 
 class ActiveState(
-  override val gameConfig: InternalGameConfig,
   val nodeId: Int,
   private val stateMachine: NetworkStateMachine,
   private val controller: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
+  override val gameConfig: InternalGameConfig,
 ) : ActiveStateT, GameStateT {
   override fun pingHandle(
     ipAddress: InetSocketAddress,
@@ -104,7 +104,7 @@ class ActiveState(
     
     runBlocking {
       with(stateMachine) {
-        switchToLobby(Event.ControllerEvent.SwitchToLobby)
+        switchToLobby(Event.State.ByController.SwitchToLobby)
       }
     }
   }
@@ -132,14 +132,13 @@ class ActiveState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNodeT
+    node: ClusterNodeT<Node.MsgInfo>
   ) {
     stateMachine.apply {
       val (msInfo, depInfo) = masterDeputy ?: return
       if(depInfo == null) {
         Logger.warn { "activeHandleNodeDetach depInfo absent" }
-        
-        reconfigureContext(Event.ControllerEvent.SwitchToLobby)
+        reconfigureContext(Event.State.ByController.SwitchToLobby)
         return
       }
       
@@ -169,7 +168,7 @@ class ActiveState(
     depInfo: Pair<InetSocketAddress, Int>
   ) {
     stateMachine.apply {
-      reconfigureMasterDeputy(this, depInfo to null)
+      reconfigureMasterDeputy(depInfo to null)
       
       val config = this@ActiveState.gameConfig
       val gamePlayerInfo = GamePlayerInfo(config.playerName, nodeId)
