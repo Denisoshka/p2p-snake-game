@@ -10,8 +10,6 @@ plugins {
 group = "d.zhdanov.ccfit.nsu"
 version = "1.0-SNAPSHOT"
 
-val protobufVersion = "4.28.2"
-
 repositories {
   gradlePluginPortal()
   mavenCentral()

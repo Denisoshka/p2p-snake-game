@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
@@ -9,10 +10,10 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
-import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
@@ -28,20 +29,20 @@ class ActiveState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) = stateMachine.onPingMsg(ipAddress, message, msgT)
-
+  
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) = stateMachine.nonLobbyOnAck(ipAddress, message, msgT)
-
-
+  
+  
   override fun stateHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) = stateMachine.onStateMsg(ipAddress, message)
-
+  
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -59,7 +60,7 @@ class ActiveState(
       }
       return
     }
-
+    
     if(MessageUtils.RoleChangeIdentifier.fromDeputyDeputyMasterNow(message)) {
       /**not handle wait master dead*/
     } else if(MessageUtils.RoleChangeIdentifier.fromMasterPlayerDead(message)) {
@@ -80,44 +81,46 @@ class ActiveState(
       }
     }
   }
-
+  
   private fun atFromMasterNodeMasterNow(message: SnakesProto.GameMessage) {
-
+  
   }
-
+  
   private fun atFromMasterNodeDeputyNow(message: SnakesProto.GameMessage) {
     val (ms, _) = stateMachine.masterDeputy ?: return
     if(ms.second != message.senderId) return
-
+    
   }
-
+  
   private fun atFromMasterPlayerDead(message: SnakesProto.GameMessage) {
     val (ms, _) = stateMachine.masterDeputy ?: return
     if(ms.second != message.senderId) return
-
-    stateMachine.changeState(StateEvent.ControllerEvent.SwitchToLobby)
+    
+    runBlocking {
+      with(stateMachine) {
+        switchToLobby(StateEvent.ControllerEvent.SwitchToLobby)
+      }
+    }
   }
-
+  
   override fun errorHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    TODO("Not yet implemented")
   }
-
+  
   fun submitSteerMsg(steerMsg: SteerMsg) {
-    val (masterInfo, _) = stateMachine.masterDeputy.get() ?: return
-    clusterNodesHandler.getNode(masterInfo.first)?.let {
+    val (masterInfo, _) = stateMachine.masterDeputy ?: return
+    clusterNodesHandler[masterInfo.first]?.let {
       val p2pmsg = GameMessage(stateMachine.nextSeqNum, steerMsg)
       val outMsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.SteerMsg)
       it.addMessageForAck(outMsg)
       controller.sendUnicast(outMsg, it.ipAddress)
     }
   }
-
-  private fun initContext() {}
-
+  
+  
   override fun cleanup() {
     clusterNodesHandler.shutdown()
   }
