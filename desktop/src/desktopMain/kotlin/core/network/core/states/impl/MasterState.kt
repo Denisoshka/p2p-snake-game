@@ -1,6 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
@@ -19,9 +21,9 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.node.Node
-import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -37,17 +39,18 @@ private const val JoinInUpdateQ = 10
 
 class MasterState(
   override val gameConfig: InternalGameConfig,
-  private val ncStateMachine: NetworkStateMachine,
+  private val stateMachine: NetworkStateMachine,
   private val netController: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
   gamePlayerInfo: GamePlayerInfo,
-  state: StateMsg? = null,
-) : MasterStateT {
+  state: SnakesProto.GameMessage.StateMsg? = null,
+) : MasterStateT, GameStateT {
+   val nodeId: Int
   private val nodesInitScope: CoroutineScope = CoroutineScope(
     Dispatchers.Default
   )
   private val gameEngine: GameContext = GameEngine(
-    JoinInUpdateQ, ncStateMachine, gameConfig.gameSettings
+    JoinInUpdateQ, stateMachine, gameConfig.gameSettings
   )
   val player: LocalObserverContext
   
@@ -64,13 +67,19 @@ class MasterState(
       gameEngine.initGame(gameConfig.gameSettings, gamePlayerInfo)
     }
     
+    nodeId = if(state != null) {
+      gamePlayerInfo.playerId
+    } else {
+      0
+    }
+    
     val localSnake = entities.find { it.id == gamePlayerInfo.playerId }
     if(localSnake != null) {
       player = LocalObserverContext(
         name = gamePlayerInfo.playerName,
         snake = localSnake as SnakeEntity,
         lastUpdateSeq = 0,
-        ncStateMachine = ncStateMachine,
+        ncStateMachine = stateMachine,
       )
     } else {
       throw IllegalMasterLaunchAttempt("local snake absent in state message")
@@ -108,16 +117,18 @@ class MasterState(
       
       val node = ClusterNode(
         nodeState = initialNodeState,
-        nodeId = ncStateMachine.nextNodeId,
+        nodeId = stateMachine.nextNodeId,
         ipAddress = ipAddress,
         payload = null,
         clusterNodesHandler = clusterNodesHandler,
       )
+      
       if(node.nodeState == Node.NodeState.Passive) {
         node.payload = ObserverContext(node, joinMsg.playerName)
       } else {
         TODO()
       }
+      
       try {
         clusterNodesHandler.registerNode(node)
       } catch(e: IllegalNodeRegisterAttempt) {
@@ -125,9 +136,9 @@ class MasterState(
       }
     } catch(e: IllegalNodeRegisterAttempt) {
       val err = MessageUtils.MessageProducer.getErrorMsg(
-        ncStateMachine.nextSeqNum, e.message ?: ""
+        stateMachine.nextSeqNum, e.message ?: ""
       )
-      ncStateMachine.sendUnicast(err, ipAddress)
+      stateMachine.sendUnicast(err, ipAddress)
       Logger.error(e) { "during joinHandle" }
     }
   }
@@ -136,13 +147,13 @@ class MasterState(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = ncStateMachine.onPingMsg(ipAddress, message, msgT)
+  ) = stateMachine.onPingMsg(ipAddress, message, nodeId)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = ncStateMachine.nonLobbyOnAck(ipAddress, message, msgT)
+  ) = stateMachine.nonLobbyOnAck(ipAddress, message, msgT)
   
   
   override fun roleChangeHandle(
@@ -154,7 +165,7 @@ class MasterState(
     val node = clusterNodesHandler[ipAddress] ?: return
     
     val ack = MessageUtils.MessageProducer.getAckMsg(
-      message.msgSeq, ncStateMachine.nodeId, node.nodeId
+      message.msgSeq, stateMachine.internalNodeId, node.nodeId
     )
     netController.sendUnicast(ack, ipAddress)
     
@@ -184,7 +195,7 @@ class MasterState(
   
   fun submitSteerMsg(steerMsg: SteerMsg) {
     player.handleEvent(
-      steerMsg, ncStateMachine.nextSeqNum
+      steerMsg, stateMachine.nextSeqNum
     )
   }
   
@@ -202,9 +213,9 @@ class MasterState(
             )
             
             val nodeState = when(it.nodeRole) {
-              NodeRole.VIEWER -> Node.NodeState.Passive
+              NodeRole.VIEWER                  -> Node.NodeState.Passive
               NodeRole.NORMAL, NodeRole.DEPUTY -> Node.NodeState.Active
-              NodeRole.MASTER -> throw IllegalNodeRegisterAttempt(
+              NodeRole.MASTER                  -> throw IllegalNodeRegisterAttempt(
                 "illegal initial node state ${it.nodeRole}" + " during master state initialize"
               )
             }
@@ -242,5 +253,28 @@ class MasterState(
     Logger.info { "$this cleanup" }
     gameEngine.shutdown()
     nodesInitScope.cancel()
+  }
+  
+  override suspend fun handleNodeDetach(
+    node: ClusterNodeT
+  ) {
+    stateMachine.apply {
+      val (_, depInfo) = masterDeputy ?: return
+      if(node.nodeId != depInfo?.second && node.ipAddress == depInfo?.first) return
+      val newDep = chooseSetNewDeputy(node.nodeId) ?: return
+      
+      /**
+       * choose new deputy
+       */
+      val outMsg = MessageUtils.MessageProducer.getRoleChangeMsg(
+        msgSeq = nextSeqNum,
+        senderId = internalNodeId,
+        receiverId = newDep.nodeId,
+        senderRole = SnakesProto.NodeRole.MASTER,
+        receiverRole = SnakesProto.NodeRole.DEPUTY
+      )
+      
+      netController.sendUnicast(outMsg, newDep.ipAddress)
+    }
   }
 }

@@ -2,13 +2,13 @@ package d.zhdanov.ccfit.nsu.core.network.core.states
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.StateEvent
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import kotlinx.coroutines.CoroutineScope
 import java.net.InetSocketAddress
 
 interface LobbyStateT : NetworkStateT {
   fun CoroutineScope.sendJoinMsg(
-    event: StateEvent.ControllerEvent.JoinReq
+    event: Event.ControllerEvent.JoinReq
   )
 
   override fun joinHandle(

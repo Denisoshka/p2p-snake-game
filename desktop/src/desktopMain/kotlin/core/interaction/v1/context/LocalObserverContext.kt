@@ -32,7 +32,7 @@ class LocalObserverContext(
   override fun shootContextState(state: StateMsg) {
     val pl = GamePlayer(
       name,
-      ncStateMachine.nodeId,
+      ncStateMachine.internalNodeId,
       null,
       null,
       NodeRole.MASTER,
