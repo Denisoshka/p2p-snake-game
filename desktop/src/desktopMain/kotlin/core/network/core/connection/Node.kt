@@ -18,14 +18,15 @@ interface Node<T> {
   fun addMessageForAck(message: SnakesProto.GameMessage)
   fun addAllMessageForAck(messages: List<T>)
   fun CoroutineScope.startObservation(): Job
+  fun markAsPassive()
   fun detach()
   fun shutdown()
   
   fun getUnacknowledgedMessages(): List<T>
   
   enum class NodeState {
-    Active,
     Passive,
+    Active,
     Disconnected,
     Terminated,
   }
@@ -34,6 +35,7 @@ interface Node<T> {
     val req: SnakesProto.GameMessage,
     var lastCheck: Long
   )
+  
   data class MsgInfoWithPayload(
     val req: SnakesProto.GameMessage,
     var lastCheck: Long,

@@ -1,15 +1,16 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
+import core.network.core.connection.Node
+import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import core.network.core.connection.Node
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
-  val name: String
+//  val name: String
   val score: Int
-  val node: Node
+  val node: ClusterNode
   fun handleEvent(event: SteerMsg, seq: Long)
   fun onContextObserverTerminated()
   fun shootContextState(
@@ -17,7 +18,7 @@ interface NodePayloadT {
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?
   )
-
+  
   fun getNodeRole(
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?

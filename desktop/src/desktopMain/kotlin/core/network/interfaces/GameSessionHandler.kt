@@ -8,8 +8,9 @@ interface GameSessionHandler {
   fun handleLaunchGame(
     launchGameReq: Event.State.ByController.LaunchGame
   )
-  fun handleConnectToGame(
   
+  fun handleConnectToGame(
+    joinReqAck: Event.State.ByInternal.JoinReqAck
   )
   
   fun handleSwitchToLobby(

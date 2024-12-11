@@ -9,13 +9,13 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 
 class LocalObserverContext(
-  override val name: String,
+  val name: String,
   private val snake: SnakeEntity,
   private var lastUpdateSeq: Long = 0L,
-  private val ncStateMachine: NetworkStateMachine
+  private val ncStateMachine: NetworkStateHolder
 ) : NodePayloadT, Entity by snake {
   @Synchronized
   override fun handleEvent(event: SteerMsg, seq: Long) {

@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
 import core.network.core.connection.game.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
@@ -121,8 +122,8 @@ class GameEngine(
     executor.shutdownNow()
   }
   
-  override fun initGameFromState(
-    config: GameConfig, state: StateMsg, playerInfo: GamePlayerInfo
+  override fun initGame(
+    config: GameConfig, playerInfo: GamePlayerInfo, state: SnakesProto.GameMessage.StateMsg?
   ): List<ActiveEntity> {
     val ret = ArrayList<ActiveEntity>()
     
@@ -139,7 +140,9 @@ class GameEngine(
   }
   
   override fun initGame(
-    config: GameConfig, playerInfo: GamePlayerInfo
+    config: GameConfig,
+    playerInfo: SnakesProto.GameMessage.StateMsg?,
+    gamePlayerInfo: GamePlayerInfo
   ): List<ActiveEntity> {
     val sn = spawnNewSnake(playerInfo.playerId) ?: throw RuntimeException(
       "snake not found"

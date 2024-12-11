@@ -5,7 +5,7 @@ import core.network.core.connection.lobby.impl.NetNodeHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -15,7 +15,7 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
-  private val ncStateMachine: NetworkStateMachine,
+  private val ncStateMachine: NetworkStateHolder,
   private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {

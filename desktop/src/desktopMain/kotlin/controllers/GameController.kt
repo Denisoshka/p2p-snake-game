@@ -6,14 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.dto.AnnouncementInfo
+import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AnnouncementMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import d.zhdanov.ccfit.nsu.view.screens.GameScreen
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -22,10 +21,8 @@ import java.time.Duration
 import java.time.Instant
 
 class GameController(
-  private val ncStateHandler: NetworkStateMachine = TODO()
+  private val ncStateHandler: NetworkStateHolder = TODO()
 ) {
-  private val gameSessionScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
-  
   private val upSteer = SteerMsg(Direction.UP)
   private val rightSteer = SteerMsg(Direction.RIGHT)
   private val leftSteer = SteerMsg(Direction.LEFT)
@@ -37,7 +34,7 @@ class GameController(
   var announcementMsgsState = mutableStateListOf<AnnouncementInfo>()
     private set
   var currentScreen by mutableStateOf<Screen>(Screen.Lobby)
-  var gameState by mutableStateOf<SnakesProto.GameState?>(null)
+  private var gameState by mutableStateOf<SnakesProto.GameState?>(null)
   
   private val mainScope = MainScope()
   private var cleanupJob: Job? = null
@@ -77,43 +74,99 @@ class GameController(
     cleanupJob = null
   }
   
+  fun launchGame()
   
-  fun launchGame() {
-  
-  }
-  
-  fun onAckDelivered(
-    req: SnakesProto.GameMessage, announcementInfo: AnnouncementInfo
+  fun openGameScreen(
+    conf: InternalGameConfig
   ) {
-    if (req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN){
-      mainScope.launch {
-      
-      }
+    mainScope.launch {
+      currentScreen = GameScreen(
+        conf,
+        null,
+        { ncStateHandler.handleSwitchToLobby(Event.State.ByController.SwitchToLobby) },
+      )
     }
   }
   
-  fun openGame(gameConfig: GameConfig, announcement: AnnouncementMsg?) {
-    currentScreen = Screen.Game(gameConfig, announcement)
-    
-    val launchGameConf = Event.State.ByController.LaunchGame(
-      internalGameConfig = TODO()
-    )
-    ncStateHandler.changeState(
-      Event.ControllerEvent.LaunchGame(
-        playerName = TODO(),
-        internalGameConfig = TODO()
-      )
-    )
-  }
-  
   fun openLobby() {
-    currentScreen = Screen.Lobby
-    ncStateHandler.changeState(Event.ControllerEvent.SwitchToLobby)
+    mainScope.launch {
+      currentScreen = Screen.Lobby
+    }
   }
   
   fun acceptNewState(state: SnakesProto.GameState) {
     mainScope.launch {
-    
+      gameState = state
     }
+  }
+}
+class GameController : ViewModel() {
+  // Список анонсов игр
+  private val _announcements = MutableStateFlow<List<AnnouncementInfo>>(emptyList())
+  val announcements: StateFlow<List<AnnouncementInfo>> = _announcements
+  
+  // Состояние экрана (лобби или игра)
+  private val _screenState = MutableStateFlow<ScreenState>(ScreenState.Lobby)
+  val screenState: StateFlow<ScreenState> = _screenState
+  
+  // Состояние показа диалога конфигурации
+  private val _showConfigDialog = MutableStateFlow(false)
+  val showConfigDialog: StateFlow<Boolean> = _showConfigDialog
+  
+  private var selectedAnnouncement: AnnouncementInfo? = null
+  
+  // Обновление списка анонсов (с удалением старых)
+  fun updateAnnouncements(newAnnouncements: List<AnnouncementInfo>) {
+    val currentTime = Instant.now()
+    _announcements.value = (newAnnouncements + _announcements.value)
+      .distinctBy { it.msg.gameName }
+      .filter { Duration.between(it.timestamp, currentTime).toMinutes() < 5 }
+  }
+  
+  // Открыть конфигурацию для присоединения
+  fun openConfigDialogForJoinGame(announcement: AnnouncementInfo) {
+    selectedAnnouncement = announcement
+    _showConfigDialog.value = true
+  }
+  
+  // Закрыть конфигурацию
+  fun closeConfigDialog() {
+    _showConfigDialog.value = false
+    selectedAnnouncement = null
+  }
+  
+  // Подтвердить конфигурацию
+  fun submitConfig(config: InternalGameConfig) {
+    _showConfigDialog.value = false
+    selectedAnnouncement?.let {
+      // Пробуем присоединиться к игре
+      sendJoinRequest(it, config)
+    } ?: run {
+      // Запуск игры локально
+      startLocalGame(config)
+    }
+  }
+  
+  private fun startLocalGame(config: InternalGameConfig) {
+    // Запуск локальной игры
+    _screenState.value = ScreenState.Game(config)
+  }
+  
+  private fun sendJoinRequest(announcement: AnnouncementInfo, config: InternalGameConfig) {
+    // Просто отправляем запрос на присоединение
+    // Мы не блокируем UI, просто отправляем запрос
+    
+    // Пример отправки запроса
+    GameService.sendJoinRequest(announcement, config)
+    
+    // Модель, получив ответ, обновит состояние экрана
+    // Переход в игру произойдет, когда ответ будет получен
+    // Обработчик ответа будет в модели, и он переключит экран на игровой
+  }
+  
+  // Уведомление об ошибке при попытке присоединиться
+  private fun showError(message: String) {
+    // Показать ошибку, например, через Toast или какой-либо другой UI элемент
+    println("Error: $message")
   }
 }

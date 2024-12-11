@@ -2,7 +2,7 @@ package core.network.core.connection.game.impl
 
 import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -17,7 +17,7 @@ private val Logger = KotlinLogging.logger(ClusterNodesHandler::class.java.name)
 
 class ClusterNodesHandler(
   stateDelayMs: Int,
-  private val ncStateMachine: NetworkStateMachine,
+  private val ncStateMachine: NetworkStateHolder,
 ) : NodeContext<ClusterNode>,
     Iterable<Map.Entry<InetSocketAddress, ClusterNode>> {
   var stateDelayMs: Int = stateDelayMs

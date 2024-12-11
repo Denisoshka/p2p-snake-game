@@ -3,7 +3,7 @@ package core.network.core.connection.game.impl
 import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -20,31 +20,43 @@ private val Logger = KotlinLogging.logger {}
  */
 class ClusterNode(
   nodeState: Node.NodeState,
+  initialState: ObserverContext?,
+  override val name: String,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
-  @Volatile override var payload: NodePayloadT? = null,
-  private val clusterNodesHandler: ClusterNodesHandler,
+  private val clusterNodesHandler: ClusterNodesHandler
 ) : ClusterNodeT<Node.MsgInfo> {
+  private val thresholdDelay = clusterNodesHandler.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
+  
   override val running: Boolean
     get() = with(nodeState) {
       this == Node.NodeState.Active || this == Node.NodeState.Passive
     }
   
+  override val payload: ObserverContext?
+    get() = stateHolder.get().second
   override val nodeState: Node.NodeState
-    get() = stateHolder.get()
+    get() = stateHolder.get().first
   private val resendDelay = clusterNodesHandler.resendDelay
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>>
   
+  init {
+    stateHolder =
+      if(nodeState == Node.NodeState.Passive && initialState!!.javaClass == Object::class.java) {
+        AtomicReference(
+          Pair(Node.NodeState.Passive, initialState)
+        )
+      } else if(nodeState == Node.NodeState.Active) {
+        AtomicReference(
+          Pair(Node.NodeState.Active, initialState)
+        )
+      } else {
+        throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
+      }
+  }
   
-  private val thresholdDelay = clusterNodesHandler.thresholdDelay
-  private val stateHolder = AtomicReference(
-    if(nodeState != Node.NodeState.Active && nodeState != Node.NodeState.Passive) {
-      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
-    } else {
-      nodeState
-    }
-  )
   @Volatile private var observeJob: Job? = null
   
   /**
@@ -114,20 +126,27 @@ class ClusterNode(
     return ret
   }
   
-  private fun changeState(newState: Node.NodeState): Boolean {
+  private fun changeState(newState: Pair<Node.NodeState, ObserverContext?>): Boolean {
     do {
       val prevState = nodeState
-      if(newState <= prevState) return false;
+      if(newState.first <= prevState) return false;
     } while(stateHolder.compareAndSet(prevState, newState))
     return true
   }
   
+  
+  override fun markAsPassive() {
+    changeState(Node.NodeState.Passive to ObserverContext(this))
+  }
+  
   override fun detach() {
-    changeState(Node.NodeState.Disconnected)
+    payload?.onContextObserverTerminated()
+    changeState(Node.NodeState.Disconnected to null)
   }
   
   override fun shutdown() {
-    changeState(Node.NodeState.Terminated)
+    payload?.onContextObserverTerminated()
+    changeState(Node.NodeState.Terminated to null)
   }
   
   @Synchronized
@@ -148,8 +167,6 @@ class ClusterNode(
               if(!detachedFromCluster) {
                 Logger.trace { "${this@ClusterNode} disconnected" }
                 detachedFromCluster = true
-                this@ClusterNode.payload?.onContextObserverTerminated()
-                this@ClusterNode.payload = null
                 this@ClusterNode.clusterNodesHandler.handleNodeDetach(this@ClusterNode)
               }
               nextDelay = onDetaching()
@@ -157,8 +174,6 @@ class ClusterNode(
             
             Node.NodeState.Terminated                     -> {
               Logger.trace { "${this@ClusterNode} terminated" }
-              this@ClusterNode.payload?.onContextObserverTerminated()
-              this@ClusterNode.payload = null
               this@ClusterNode.clusterNodesHandler.handleNodeTermination(this@ClusterNode)
               break
             }
@@ -185,7 +200,7 @@ class ClusterNode(
   
   private fun checkNodeConditions(now: Long): Long {
     if(now - lastReceive > thresholdDelay) {
-      stateHolder.set(Node.NodeState.Terminated)
+      shutdown()
       return 0
     }
     return checkMessages()
@@ -206,7 +221,7 @@ class ClusterNode(
       if(nodeState <= Node.NodeState.Disconnected) return 0
       val ret = checkNodeConditions(System.currentTimeMillis())
       if(msgForAcknowledge.isEmpty()) {
-        stateHolder.set(Node.NodeState.Terminated)
+        shutdown()
         return 0
       }
       return ret

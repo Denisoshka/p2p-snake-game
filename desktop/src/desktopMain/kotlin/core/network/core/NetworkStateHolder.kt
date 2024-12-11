@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
+import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
@@ -20,7 +21,6 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
-import core.network.core.connection.Node
 import d.zhdanov.ccfit.nsu.core.network.interfaces.GameSessionHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
@@ -40,11 +40,11 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
-private val Logger = KotlinLogging.logger(NetworkStateMachine::class.java.name)
+private val Logger = KotlinLogging.logger(NetworkStateHolder::class.java.name)
 private val kPortRange = 1..65535
 private const val kChannelSize = 10
 
-class NetworkStateMachine(
+class NetworkStateHolder(
   private val netController: NetworkController,
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
@@ -78,7 +78,7 @@ class NetworkStateMachine(
   
   private val networkStateHolder: AtomicReference<NetworkStateT> =
     AtomicReference(
-      LobbyState(this, netController, nodeHandlers.netNodesHandler)
+      LobbyState(this, gameController, nodeHandlers.netNodesHandler)
     )
   
   private val latestGameStateHolder =
@@ -104,9 +104,9 @@ class NetworkStateMachine(
     }
   }
   
-  override fun handleConnectToGame() {
+  override fun handleConnectToGame(joinReqAck: Event.State.ByInternal.JoinReqAck) {
     stateContextDistacherScope.launch {
-      reconfigureContext()
+      reconfigureContext(joinReqAck)
     }
   }
   
@@ -114,6 +114,7 @@ class NetworkStateMachine(
     switchToLobbyReq: Event.State.ByController.SwitchToLobby
   ) {
     stateContextDistacherScope.launch {
+      
       reconfigureContext(switchToLobbyReq)
     }
   }
@@ -239,7 +240,7 @@ class NetworkStateMachine(
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
    */
   private fun CoroutineScope.nodesNonLobbyWatcherRoutine(
-    stateMachine: NetworkStateMachine
+    stateMachine: NetworkStateHolder
   ) = launch {
     try {
       Logger.info { "nodesNonLobbyWatcherRoutine launched" }
@@ -308,7 +309,7 @@ class NetworkStateMachine(
   }
   
   private suspend fun onJoinGameAck(
-    stateMachine: NetworkStateMachine, event: Event.State.ByInternal.JoinReqAck
+    stateMachine: NetworkStateHolder, event: Event.State.ByInternal.JoinReqAck
   ) {
     Logger.trace { "join to game with $event" }
     when(event.onEventAck.playerRole) {
@@ -398,7 +399,7 @@ class NetworkStateMachine(
   }
   
   private suspend fun launchGame(
-    stateMachine: NetworkStateMachine,
+    stateMachine: NetworkStateHolder,
     event: Event.State.ByController.LaunchGame,
   ) {
     val curState = stateMachine.networkStateHolder.get()
@@ -422,10 +423,11 @@ class NetworkStateMachine(
         )
       )
     }
+    gameController.openGameScreen()
   }
   
   fun switchToMaster(
-    stateMachine: NetworkStateMachine, event: Event.State.ByInternal.MasterNow
+    stateMachine: NetworkStateHolder, event: Event.State.ByInternal.MasterNow
   ) {
     val curState = stateMachine.networkStateHolder.get()
     if(curState !is ActiveState) throw IllegalChangeStateAttempt(
@@ -468,11 +470,12 @@ class NetworkStateMachine(
     networkStateHolder.set(
       LobbyState(
         ncStateMachine = this,
-        controller = netController,
+        gameController = gameController,
         netNodesHandler = nodeHandlers.netNodesHandler,
       )
     )
     Logger.trace { "switchToLobby $event" }
+    gameController.openLobby()
   }
   
   private suspend fun setupNewState(
@@ -538,4 +541,5 @@ class NetworkStateMachine(
     val clusterNodesHandler: ClusterNodesHandler,
     val netNodesHandler: NetNodeHandler
   )
+  private object ChangeStateContextToken(){}
 }

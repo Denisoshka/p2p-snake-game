@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.PassiveStateT
@@ -14,11 +14,11 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import java.net.InetSocketAddress
 
 class PassiveState(
-  val nodeId: Int,
-  override val gameConfig: InternalGameConfig,
-  private val stateMachine: NetworkStateMachine,
-  private val controller: NetworkController,
-  private val clusterNodesHandler: ClusterNodesHandler,
+	val nodeId: Int,
+	override val gameConfig: InternalGameConfig,
+	private val stateMachine: NetworkStateHolder,
+	private val controller: NetworkController,
+	private val clusterNodesHandler: ClusterNodesHandler,
 ) : PassiveStateT, GameStateT {
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType

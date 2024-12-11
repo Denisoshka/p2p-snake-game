@@ -13,7 +13,9 @@ fun app(gameController: GameController) {
   MaterialTheme {
     when(val currentScreen = gameController.currentScreen) {
       is Screen.Lobby -> {
+        
         lobbyRoutine(gameController)
+        
         lobbyScreen(
           announcements = gameController.announcementMsgsState,
           onStartGame = gameController::openGame,
@@ -22,9 +24,10 @@ fun app(gameController: GameController) {
 
       is Screen.Game  -> GameScreen(
         gameConfig = currentScreen.gameConfig,
-        onBackToLobby = gameController::openLobby
+        onBackToLobby =
       )
     }
+    
   }
 }
 

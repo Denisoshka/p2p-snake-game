@@ -2,7 +2,7 @@ package core.network.core.connection.lobby.impl
 
 import core.network.core.connection.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import kotlinx.coroutines.CoroutineScope
@@ -13,7 +13,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 
 class NetNodeHandler(
-  private val ncStateMachine: NetworkStateMachine,
+  private val ncStateMachine: NetworkStateHolder,
 ) : Iterable<Map.Entry<InetSocketAddress, NetNode>>, NodeContext<NetNode> {
   @Volatile private var joinWaitScope: CoroutineScope? = null
   @Volatile private var nodesScope: CoroutineScope? = null

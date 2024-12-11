@@ -11,7 +11,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
@@ -26,7 +26,7 @@ private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
 
 class ActiveState(
   val nodeId: Int,
-  private val stateMachine: NetworkStateMachine,
+  private val stateMachine: NetworkStateHolder,
   private val controller: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
   override val gameConfig: InternalGameConfig,

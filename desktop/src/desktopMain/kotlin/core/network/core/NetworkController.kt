@@ -15,7 +15,7 @@ class NetworkController(
 ) : AutoCloseable {
   private val unicastNetHandler = UnicastNetHandler(this)
   private val multicastNetHandler = MulticastNetHandler(TODO(), this)
-  private val messageHandler: NetworkStateMachine
+  private val messageHandler: NetworkStateHolder
 
   fun handleUnicastMessage(
     message: GameMessage, ipAddress: InetSocketAddress

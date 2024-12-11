@@ -18,7 +18,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateMachine
+import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
@@ -39,21 +39,19 @@ private const val JoinInUpdateQ = 10
 
 class MasterState(
   override val gameConfig: InternalGameConfig,
-  private val stateMachine: NetworkStateMachine,
+  private val stateMachine: NetworkStateHolder,
   private val netController: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
-  gamePlayerInfo: GamePlayerInfo,
-  state: SnakesProto.GameMessage.StateMsg? = null,
+  val player: LocalObserverContext,
+//  gamePlayerInfo: GamePlayerInfo,
+//  state: SnakesProto.GameMessage.StateMsg? = null,
 ) : MasterStateT, GameStateT {
    val nodeId: Int
   private val nodesInitScope: CoroutineScope = CoroutineScope(
     Dispatchers.Default
   )
-  private val gameEngine: GameContext = GameEngine(
-    JoinInUpdateQ, stateMachine, gameConfig.gameSettings
-  )
-  val player: LocalObserverContext
   
+
   init {
     Logger.info { "$this init" }
     
@@ -256,7 +254,7 @@ class MasterState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNodeT
+    node: ClusterNode
   ) {
     stateMachine.apply {
       val (_, depInfo) = masterDeputy ?: return
