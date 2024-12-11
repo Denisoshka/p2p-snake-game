@@ -33,7 +33,6 @@ class MasterState(
   gamePlayerInfo: GamePlayerInfo,
   private val gameEngine: GameContext,
   private val stateMachine: NetworkStateHolder,
-  private val netController: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
   val player: LocalObserverContext,
 //  gamePlayerInfo: GamePlayerInfo,
@@ -124,7 +123,7 @@ class MasterState(
     val ack = MessageUtils.MessageProducer.getAckMsg(
       message.msgSeq, stateMachine.internalNodeId, node.nodeId
     )
-    netController.sendUnicast(ack, ipAddress)
+    stateMachine.sendUnicast(ack, ipAddress)
     
     if(!node.running) node.detach()
   }
@@ -181,7 +180,7 @@ class MasterState(
         receiverRole = SnakesProto.NodeRole.DEPUTY
       )
       
-      netController.sendUnicast(outMsg, newDep.ipAddress)
+      stateMachine.sendUnicast(outMsg, newDep.ipAddress)
     }
   }
 }

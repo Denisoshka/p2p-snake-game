@@ -26,8 +26,8 @@ private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
 
 class ActiveState(
   val nodeId: Int,
-  private val stateMachine: NetworkStateHolder,
-  private val controller: NetworkController,
+  private val stateHolder: NetworkStateHolder,
+//  private val controller: NetworkController,
   private val clusterNodesHandler: ClusterNodesHandler,
   override val gameConfig: InternalGameConfig,
 ) : ActiveStateT, GameStateT {
@@ -35,20 +35,20 @@ class ActiveState(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = stateMachine.onPingMsg(ipAddress, message, nodeId)
+  ) = stateHolder.onPingMsg(ipAddress, message, nodeId)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = stateMachine.nonLobbyOnAck(ipAddress, message, msgT)
+  ) = stateHolder.nonLobbyOnAck(ipAddress, message, msgT)
   
   
   override fun stateHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = stateMachine.onStateMsg(ipAddress, message)
+  ) = stateHolder.onStateMsg(ipAddress, message)
   
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress,
@@ -94,16 +94,16 @@ class ActiveState(
   }
   
   private fun atFromMasterNodeDeputyNow(message: SnakesProto.GameMessage) {
-    val (ms, _) = stateMachine.masterDeputy ?: return
+    val (ms, _) = stateHolder.masterDeputy ?: return
     if(ms.second != message.senderId) return
   }
   
   private fun atFromMasterPlayerDead(message: SnakesProto.GameMessage) {
-    val (ms, _) = stateMachine.masterDeputy ?: return
+    val (ms, _) = stateHolder.masterDeputy ?: return
     if(ms.second != message.senderId) return
     
     runBlocking {
-      with(stateMachine) {
+      with(stateHolder) {
         switchToLobby(Event.State.ByController.SwitchToLobby)
       }
     }
@@ -117,12 +117,12 @@ class ActiveState(
   }
   
   fun submitSteerMsg(steerMsg: SteerMsg) {
-    val (masterInfo, _) = stateMachine.masterDeputy ?: return
+    val (masterInfo, _) = stateHolder.masterDeputy ?: return
     clusterNodesHandler[masterInfo.first]?.let {
-      val p2pmsg = GameMessage(stateMachine.nextSeqNum, steerMsg)
+      val p2pmsg = GameMessage(stateHolder.nextSeqNum, steerMsg)
       val outMsg = MessageTranslator.toGameMessage(p2pmsg, MessageType.SteerMsg)
       it.addMessageForAck(outMsg)
-      controller.sendUnicast(outMsg, it.ipAddress)
+      stateHolder.sendUnicast(outMsg, it.ipAddress)
     }
   }
   
@@ -134,7 +134,7 @@ class ActiveState(
   override suspend fun handleNodeDetach(
     node: ClusterNodeT<Node.MsgInfo>
   ) {
-    stateMachine.apply {
+    stateHolder.apply {
       val (msInfo, depInfo) = masterDeputy ?: return
       if(depInfo == null) {
         Logger.warn { "activeHandleNodeDetach depInfo absent" }
@@ -144,7 +144,7 @@ class ActiveState(
       
       if(node.nodeId == msInfo.second && nodeId == depInfo.second && node.ipAddress == msInfo.first) {
         when(val state = latestGameState) {
-          null -> stateMachine.apply {
+          null -> stateHolder.apply {
             Logger.warn {
               "during activeDeputyHandleMasterDetach from :${ActiveState::class} to ${MasterState::class} latestGameState is null"
             }
@@ -167,7 +167,7 @@ class ActiveState(
     state: SnakesProto.GameMessage.StateMsg,
     depInfo: Pair<InetSocketAddress, Int>
   ) {
-    stateMachine.apply {
+    stateHolder.apply {
       reconfigureMasterDeputy(depInfo to null)
       
       val config = this@ActiveState.gameConfig
@@ -184,14 +184,14 @@ class ActiveState(
       }
       Logger.trace { "switch to master by event $event" }
       
-      switchToMaster(stateMachine, event)
+      switchToMaster(stateHolder, event)
     }
   }
   
   private fun normalChangeInfoDeputyToMaster(
     depInfo: Pair<InetSocketAddress, Int>, masterNode: Node
   ) {
-    stateMachine.apply {
+    stateHolder.apply {
       reconfigureMasterDeputy(depInfo to null)
       val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
       
@@ -199,8 +199,8 @@ class ActiveState(
         nodeState = Node.NodeState.Active,
         nodeId = depInfo.second,
         ipAddress = depInfo.first,
-        payload = null,
-        clusterNodesHandler = clusterNodesHandler
+        clusterNodesHandler = clusterNodesHandler,
+        name = "да и хуй с ним, нам его имя нахуй не нужно"
       )
       
       clusterNodesHandler.registerNode(newMasterClusterNode)

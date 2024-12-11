@@ -8,13 +8,10 @@ import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
-import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
@@ -27,57 +24,78 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(
   MasterStateInitializer::class.java.name
 )
-const val joinPerUpdateQ: Int = 10
+private const val joinPerUpdateQ: Int = 10
 
 object MasterStateInitializer {
-  fun initMasterState(
-    clusterNodesHandler: ClusterNodesHandler,
-    stateMachine: NetworkStateHolder,
-    netController: NetworkController,
-    gamePlayerInfo: GamePlayerInfo,
+  fun prepareMasterContext(
+    gameEngine: GameContext,
     gameConfig: InternalGameConfig,
+    gamePlayerInfo: GamePlayerInfo,
+    stateHolder: NetworkStateHolder,
+    clusterNodesHandler: ClusterNodesHandler,
+  ): MasterState {
+    val entities = init(
+      gameEngine,
+      gameConfig,
+      gamePlayerInfo
+    )
+    val player = createLocalObserverContext(
+      entities, gamePlayerInfo, stateHolder
+    )
+    Logger.info { "master inited" }
+    return MasterState(
+      gameConfig = gameConfig,
+      gameEngine = gameEngine,
+      stateMachine = stateHolder,
+      clusterNodesHandler = clusterNodesHandler,
+      gamePlayerInfo = gamePlayerInfo,
+      player = player
+    )
+  }
+  
+  fun createMasterWithState(
+    gameEngine: GameContext,
+    state: SnakesProto.GameMessage.StateMsg,
+    clusterNodesHandler: ClusterNodesHandler,
+    gameConfig: InternalGameConfig,
+    gamePlayerInfo: GamePlayerInfo,
     initScope: CoroutineScope,
     stateHolder: NetworkStateHolder,
-    state: SnakesProto.GameMessage.StateMsg?
-  ): MasterStateT {
-    val gameEngine: GameContext = GameEngine(
-      joinPerUpdateQ, stateMachine, gameConfig.gameSettings
+  ): MasterState {
+    val entities = initFromState(
+      gameEngine,
+      gameConfig,
+      gamePlayerInfo,
+      clusterNodesHandler,
+      initScope,
+      state
     )
-    
-    val entities = if(state == null) {
-      init(
-        gameEngine,
-        gameConfig,
-        gamePlayerInfo
-      )
-    } else {
-      initFromState(
-        gameEngine,
-        gameConfig,
-        gamePlayerInfo,
-        clusterNodesHandler,
-        initScope,
-        state
-      )
-    }
-    
-    val localSnake = entities[gamePlayerInfo.playerId]
-      ?: throw IllegalMasterLaunchAttempt("local snake absent in state message")
-    
-    val player = createlocalObserverContext(
-      gamePlayerInfo, localSnake, stateHolder
+    val player = createLocalObserverContext(
+      entities, gamePlayerInfo, stateHolder
     )
     
     Logger.info { "master inited" }
     return MasterState(
       gameConfig = gameConfig,
       gameEngine = gameEngine,
-      stateMachine = stateMachine,
-      netController = netController,
+      stateMachine = stateHolder,
       clusterNodesHandler = clusterNodesHandler,
       gamePlayerInfo = gamePlayerInfo,
       player = player
     )
+  }
+  
+  private fun createLocalObserverContext(
+    entities: Map<Int, ActiveEntity>,
+    gamePlayerInfo: GamePlayerInfo,
+    stateHolder: NetworkStateHolder
+  ): LocalObserverContext {
+    val localSnake = entities[gamePlayerInfo.playerId]
+      ?: throw IllegalMasterLaunchAttempt("local snake absent in state message")
+    val player = createlocalObserverContext(
+      gamePlayerInfo, localSnake, stateHolder
+    )
+    return player
   }
   
   private fun initNodes(

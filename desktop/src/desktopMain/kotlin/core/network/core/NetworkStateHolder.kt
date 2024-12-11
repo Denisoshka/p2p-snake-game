@@ -5,6 +5,7 @@ import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import core.network.core.connection.lobby.impl.NetNodeHandler
+import core.network.core.states.initializers.ActiveStateInitializer
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
@@ -343,22 +344,16 @@ class NetworkStateHolder(
     )
     apply {
       nodeHandlers.clusterNodesHandler.launch()
-      val masterNode = ClusterNode(
-        nodeState = Node.NodeState.Active,
-        nodeId = event.senderId,
-        ipAddress = destAddr,
-        payload = null,
-        clusterNodesHandler = nodeHandlers.clusterNodesHandler
+      ActiveStateInitializer.createActiveState(
+        nodeHandlers.clusterNodesHandler,
+        this@NetworkStateHolder,
+        destAddr,
+        event.internalGameConfig,
+        event.senderId,
+        event.gamePlayerInfo.playerId
       )
-      nodeHandlers.clusterNodesHandler.registerNode(masterNode)
       networkStateHolder.set(
-        ActiveState(
-          gameConfig = event.internalGameConfig,
-          stateMachine = this@apply,
-          controller = netController,
-          clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-          nodeId = event.gamePlayerInfo.playerId
-        )
+      
       )
     }
     Logger.trace { "joined as ${NodeRole.NORMAL} to $event" }
@@ -415,7 +410,6 @@ class NetworkStateHolder(
       networkStateHolder.set(
         MasterState(
           stateMachine = this,
-          netController = netController,
           clusterNodesHandler = nodeHandlers.clusterNodesHandler,
           gameConfig = event.internalGameConfig,
           gamePlayerInfo = playerInfo,
