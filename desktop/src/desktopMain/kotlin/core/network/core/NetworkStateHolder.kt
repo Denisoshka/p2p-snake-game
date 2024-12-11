@@ -59,7 +59,7 @@ class NetworkStateHolder(
   val nextNodeId
     get() = nextNodeIdProvider.incrementAndGet()
   
-  @Volatile private var internalNodeId = 0
+  @Volatile var internalNodeId = 0
   
   private val nodeHandlers = NodeHandlers(
     netNodesHandler = NetNodeHandler(this),
@@ -531,8 +531,8 @@ class NetworkStateHolder(
   }
   
   private data class NodeChannels(
-    val deadNodeChannel: Channel<ClusterNodeT>,
-    val detachNodeChannel: Channel<ClusterNodeT>,
+    val deadNodeChannel: Channel<ClusterNode>,
+    val detachNodeChannel: Channel<ClusterNode>,
     val updateNodesInfo: Channel<Event.InternalGameEvent>,
     val reconfigureContextChannel: Channel<Event.State>
   )
@@ -541,5 +541,5 @@ class NetworkStateHolder(
     val clusterNodesHandler: ClusterNodesHandler,
     val netNodesHandler: NetNodeHandler
   )
-  private object ChangeStateContextToken(){}
+//  private object ChangeStateContextToken(){}
 }

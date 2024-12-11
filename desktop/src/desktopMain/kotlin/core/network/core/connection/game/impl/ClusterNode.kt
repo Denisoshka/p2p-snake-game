@@ -20,7 +20,6 @@ private val Logger = KotlinLogging.logger {}
  */
 class ClusterNode(
   nodeState: Node.NodeState,
-  initialState: ObserverContext?,
   override val name: String,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
@@ -29,7 +28,7 @@ class ClusterNode(
   private val thresholdDelay = clusterNodesHandler.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
-  
+  @Volatile var markedAsPassive = false
   override val running: Boolean
     get() = with(nodeState) {
       this == Node.NodeState.Active || this == Node.NodeState.Passive
@@ -40,29 +39,27 @@ class ClusterNode(
   override val nodeState: Node.NodeState
     get() = stateHolder.get().first
   private val resendDelay = clusterNodesHandler.resendDelay
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>>
-  
-  init {
-    stateHolder =
-      if(nodeState == Node.NodeState.Passive && initialState!!.javaClass == Object::class.java) {
-        AtomicReference(
-          Pair(Node.NodeState.Passive, initialState)
-        )
-      } else if(nodeState == Node.NodeState.Active) {
-        AtomicReference(
-          Pair(Node.NodeState.Active, initialState)
-        )
-      } else {
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>> =
+    when(nodeState) {
+      Node.NodeState.Passive -> {
+        AtomicReference(Pair(Node.NodeState.Passive, ObserverContext(this)))
+      }
+      
+      Node.NodeState.Active  -> {
+        AtomicReference(Pair(Node.NodeState.Active, null))
+      }
+      
+      else                   -> {
         throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
       }
-  }
+    }
   
   @Volatile private var observeJob: Job? = null
   
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
    */
-  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, d.zhdanov.ccfit.nsu.core.network.core.states.node.NodeT.ClusterNode.MsgInfo> =
+  private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, Node.MsgInfo> =
     TreeMap(MessageUtils.messageComparator)
   
   override fun sendToNode(msg: SnakesProto.GameMessage) {
@@ -83,9 +80,9 @@ class ClusterNode(
   
   override fun ackMessage(message: SnakesProto.GameMessage): Node.MsgInfo? {
     synchronized(msgForAcknowledge) {
-      return msgForAcknowledge.remove(message)?.let {
-        lastReceive = System.currentTimeMillis()
-      }
+      val ret = msgForAcknowledge.remove(message)
+      lastReceive = System.currentTimeMillis()
+      return ret
     }
   }
   
@@ -118,6 +115,7 @@ class ClusterNode(
       if(now - msgInfo.lastCheck < thresholdDelay) {
         ret = ret.coerceAtMost(thresholdDelay + msgInfo.lastCheck - now)
         msgInfo.lastCheck = now
+        
         sendToNode(msg)
       } else {
         it.remove()
@@ -128,16 +126,17 @@ class ClusterNode(
   
   private fun changeState(newState: Pair<Node.NodeState, ObserverContext?>): Boolean {
     do {
-      val prevState = nodeState
-      if(newState.first <= prevState) return false;
+      val prevState = stateHolder.get()
+      if(newState.first <= prevState.first) return false;
     } while(stateHolder.compareAndSet(prevState, newState))
     return true
   }
   
-  
-  override fun markAsPassive() {
-    changeState(Node.NodeState.Passive to ObserverContext(this))
-  }
+  /*override fun markAsPassive() {
+    if(changeState(Node.NodeState.Passive to ObserverContext(this))) {
+    
+    }
+  }*/
   
   override fun detach() {
     payload?.onContextObserverTerminated()

@@ -18,7 +18,7 @@ interface Node<T> {
   fun addMessageForAck(message: SnakesProto.GameMessage)
   fun addAllMessageForAck(messages: List<T>)
   fun CoroutineScope.startObservation(): Job
-  fun markAsPassive()
+//  fun markAsPassive()
   fun detach()
   fun shutdown()
   
