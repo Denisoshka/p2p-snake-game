@@ -1,7 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
-import core.network.core.connection.game.impl.ClusterNode
+import core.network.core.connection.Node
+import core.network.core.connection.game.ClusterNodeT
 
 interface GameStateT {
-  suspend fun handleNodeDetach(node: ClusterNode, changeAccessToken: Any)
+   fun handleNodeDetach(node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any)
 }

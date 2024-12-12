@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
@@ -35,7 +36,6 @@ class PassiveState(
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
   ) {
-  
   }
   
   override fun roleChangeHandle(
@@ -66,29 +66,9 @@ class PassiveState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNode,
-    token: NetworkStateHolder.ChangeToken
+    node: ClusterNodeT<Node.MsgInfo>,
+    changeAccessToken: Any
   ) {
     TODO("Not yet implemented")
-  }
-  
-  /**
-   * @throws IllegalChangeStateAttempt
-   * */
-  private suspend fun passiveHandleNodeDetach(
-    st: PassiveState, node: ClusterNodeT
-  ) {
-    stateHolder.apply {
-      val (msInfo, depInfo) = stateHolder.masterDeputy ?: return
-      if(msInfo.second != node.nodeId) throw IllegalChangeStateAttempt(
-        "non master node $node in passiveHandleNodeDetach"
-      )
-      
-      if(depInfo == null) {
-        reconfigureContext(Event.ControllerEvent.SwitchToLobby)
-      } else {
-        normalChangeInfoDeputyToMaster(depInfo, node)
-      }
-    }
   }
 }

@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.initializers
+package core.network.core.states.utils
 
 import core.network.core.connection.Node
 import core.network.core.connection.game.impl.ClusterNode
@@ -8,8 +8,8 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import java.net.InetSocketAddress
 
-object PassiveStateInitializer {
-  fun createActiveState(
+object PassiveStateUtils {
+  fun createPassiveState(
     clusterNodesHandler: ClusterNodesHandler,
     stateHolder: NetworkStateHolder,
     destAddr: InetSocketAddress,

@@ -7,7 +7,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -20,7 +19,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
-private val Logger = KotlinLogging.logger {}
+private val Logger = KotlinLogging.logger { LocalNode::class.java }
 
 class LocalNode(
   nodeState: Node.NodeState,
@@ -50,6 +49,9 @@ class LocalNode(
   override val nodeState: Node.NodeState
     get() = TODO("Not yet implemented")
   private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>>
+    get() {
+      TODO()
+    }
   
   
   override fun sendToNode(msg: SnakesProto.GameMessage) {
@@ -63,7 +65,6 @@ class LocalNode(
     TODO("Not yet implemented")
   }
   
-  @OptIn(ExperimentalCoroutinesApi::class)
   @Synchronized
   override fun CoroutineScope.startObservation(): Job {
     return launch {

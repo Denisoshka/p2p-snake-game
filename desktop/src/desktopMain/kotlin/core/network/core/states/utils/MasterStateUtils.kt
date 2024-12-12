@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.initializers
+package core.network.core.states.utils
 
 import core.network.core.connection.Node
 import core.network.core.connection.game.impl.ClusterNode
@@ -17,17 +17,22 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger(
-  MasterStateInitializer::class.java.name
+  MasterStateUtils::class.java.name
 )
 
-object MasterStateInitializer {
+object MasterStateUtils {
   const val JoinPerUpdateQ: Int = 10
+  
+  private fun getScope() = CoroutineScope(Dispatchers.Default)
+  
   fun prepareMasterContext(
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
@@ -43,15 +48,22 @@ object MasterStateInitializer {
     val player = createLocalObserverContext(
       entities, gamePlayerInfo, stateHolder
     )
-    Logger.info { "master inited" }
-    return MasterState(
-      gameConfig = gameConfig,
-      gameEngine = eng,
-      stateHandler = stateHolder,
-      clusterNodesHandler = clusterNodesHandler,
-      gamePlayerInfo = gamePlayerInfo,
-      player = player
-    )
+    val scope = getScope()
+    try {
+      Logger.info { "master inited" }
+      return MasterState(
+        gameConfig = gameConfig,
+        gameEngine = eng,
+        stateHandler = stateHolder,
+        clusterNodesHandler = clusterNodesHandler,
+        gamePlayerInfo = gamePlayerInfo,
+        player = player,
+        nodesInitScope = scope
+      )
+    } catch(e: Exception) {
+      scope.cancel()
+      throw e
+    }
   }
   
   fun prepareMasterFromState(
@@ -62,30 +74,33 @@ object MasterStateInitializer {
     stateHolder: NetworkStateHolder,
   ): MasterState {
     val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
-    try{
-      
+    val scope = getScope()
+    try {
       val entities = initFromState(
-        eng,
-        gameConfig,
-        gamePlayerInfo,
-        clusterNodesHandler,
-        initScope,
-        state
+        gameEngine = eng,
+        gameConfig = gameConfig,
+        gamePlayerInfo = gamePlayerInfo,
+        clusterNodesHandler = clusterNodesHandler,
+        initScope = scope,
+        state = state
       )
+      val player = createLocalObserverContext(
+        entities, gamePlayerInfo, stateHolder
+      )
+      Logger.info { "master inited" }
+      return MasterState(
+        gameConfig = gameConfig,
+        gameEngine = eng,
+        stateHandler = stateHolder,
+        clusterNodesHandler = clusterNodesHandler,
+        gamePlayerInfo = gamePlayerInfo,
+        player = player,
+        nodesInitScope = scope
+      )
+    } catch(e: Exception) {
+      scope.cancel()
+      throw e
     }
-    val player = createLocalObserverContext(
-      entities, gamePlayerInfo, stateHolder
-    )
-    
-    Logger.info { "master inited" }
-    return MasterState(
-      gameConfig = gameConfig,
-      gameEngine = eng,
-      stateHandler = stateHolder,
-      clusterNodesHandler = clusterNodesHandler,
-      gamePlayerInfo = gamePlayerInfo,
-      player = player
-    )
   }
   
   private fun createLocalObserverContext(
@@ -106,7 +121,7 @@ object MasterStateInitializer {
     initScope: CoroutineScope,
     clusterNodesHandler: ClusterNodesHandler,
   ) = state.let {
-    with(MasterStateInitializer) {
+    with(MasterStateUtils) {
       initScope.restoreNodes(
         it, clusterNodesHandler
       )

@@ -8,7 +8,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import java.net.InetSocketAddress
 
-object ActiveStateInitializer {
+object ActiveStateUtils {
   fun prepareActiveState(
     clusterNodesHandler: ClusterNodesHandler,
     stateHolder: NetworkStateHolder,
@@ -28,7 +28,7 @@ object ActiveStateInitializer {
     return ActiveState(
       gameConfig = internalGameConfig,
       stateHolder = stateHolder,
-      clusterNodesHandler = clusterNodesHandler,
+      nodesHolder = clusterNodesHandler,
       nodeId = playerId
     )
   }

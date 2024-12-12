@@ -61,7 +61,7 @@ class ClusterNodesHandler(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
   
-  override fun registerNode(node: ClusterNodeT<Node.MsgInfo>): ClusterNode {
+  override fun registerNode(node: ClusterNodeT<Node.MsgInfo>): ClusterNodeT<Node.MsgInfo> {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()

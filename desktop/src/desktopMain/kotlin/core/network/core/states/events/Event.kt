@@ -48,6 +48,7 @@ sealed class Event {
   
   sealed class InternalGameEvent : Event() {
     data class NewState(
+      val
       val state: StateMsg,
     ) : State()
     
@@ -56,7 +57,7 @@ sealed class Event {
     ) : State()
     
     data class RoleChanged(
-      val roleChangeMsg: RoleChangeMsg
+      val from: Pair<InetSocketAddress, Int>, val roleChangeMsg: RoleChangeMsg,
     )
     
     data class DeputyMasterNow(

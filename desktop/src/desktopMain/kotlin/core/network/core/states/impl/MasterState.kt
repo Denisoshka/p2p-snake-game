@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.connection.Node
+import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -98,7 +99,7 @@ class MasterState(
     if(!MessageUtils.RoleChangeIdentifier.fromNodeNodeLeave(message)) return
     clusterNodesHandler[ipAddress]?.apply {
       val ack = MessageUtils.MessageProducer.getAckMsg(
-        message.msgSeq, nodeId, it.nodeId
+        message.msgSeq, nodeId, this.nodeId
       )
       sendToNode(ack)
       detach()
@@ -135,7 +136,9 @@ class MasterState(
   }
   
   
-  private fun findNewMasterDeputyPair(oldDeputyId: Int): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
+  private fun findNewDeputy(
+    oldDeputyId: Int
+  ): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
     val (masterInfo, _) = stateHandler.masterDeputy
       ?: throw IllegalChangeStateAttempt("current master deputy absent")
     
@@ -149,13 +152,13 @@ class MasterState(
     return (masterInfo to newDeputyInfo)
   }
   
-  override suspend fun handleNodeDetach(
-    node: ClusterNode, changeAccessToken: Any
+  override fun handleNodeDetach(
+    node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
   ) {
     stateHandler.apply {
       val (_, depInfo) = masterDeputy ?: return
       if(node.nodeId != depInfo?.second && node.ipAddress == depInfo?.first) return
-      val (ms, newDep) = findNewMasterDeputyPair(node.nodeId)
+      val (ms, newDep) = findNewDeputy(node.nodeId)
       
       /**
        * choose new deputy

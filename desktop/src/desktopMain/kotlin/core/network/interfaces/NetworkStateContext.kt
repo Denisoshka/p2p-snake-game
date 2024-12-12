@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
+import core.network.core.connection.Node
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
@@ -11,8 +12,8 @@ interface NetworkStateContext : NetworkStateT {
   val networkState: NetworkStateT
   val unicastNetHandler: UnicastNetHandler
   
-  suspend fun detachNode(node: ClusterNodeT)
-  suspend fun terminateNode(node: ClusterNodeT)
+  suspend fun detachNode(node: ClusterNodeT<Node.MsgInfo>)
+  suspend fun terminateNode(node: ClusterNodeT<Node.MsgInfo>)
   suspend fun joinNode(node: ClusterNodeT)
   
   fun sendUnicast(

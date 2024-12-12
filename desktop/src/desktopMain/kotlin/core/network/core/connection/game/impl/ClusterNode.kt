@@ -23,8 +23,7 @@ import java.net.InetSocketAddress
 import java.util.TreeMap
 import java.util.concurrent.atomic.AtomicReference
 
-private val Logger = KotlinLogging.logger {}
-
+private val Logger = KotlinLogging.logger { ClusterNode::class.java }
 
 class ClusterNode(
   nodeState: Node.NodeState,
