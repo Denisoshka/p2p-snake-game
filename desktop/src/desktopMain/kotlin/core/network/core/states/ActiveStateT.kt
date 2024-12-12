@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import java.net.InetSocketAddress
 
 interface ActiveStateT : NetworkStateT {
-  val gameConfig: InternalGameConfig
+  val internalGameConfig: InternalGameConfig
   override fun joinHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,

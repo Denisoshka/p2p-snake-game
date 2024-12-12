@@ -6,19 +6,16 @@ import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import core.network.core.connection.game.impl.LocalNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
-import core.network.core.states.utils.ActiveStateUtils
-import core.network.core.states.utils.MasterStateUtils
-import core.network.core.states.utils.PassiveStateUtils
 import core.network.core.states.utils.StateUtils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
@@ -165,6 +162,11 @@ class NetworkStateHolder(
     nodeChannels.reconfigureContextChannel.send(event)
   }
   
+  fun setupNewState(state: NetworkStateT, changeAccessToken: Any) {
+    checkChangeAccess(changeAccessToken)
+    networkStateHolder.set(state)
+  }
+  
   private fun handleDetachNode(
     node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
   ) {
@@ -229,10 +231,6 @@ class NetworkStateHolder(
                   switchToLobby(event, changeAccessToken)
                 }
                 
-                is Event.State.ByInternal.MasterNow       -> {
-                  switchToMaster(stateMachine, event, changeAccessToken)
-                }
-                
                 else                                      -> {
                   Logger.error { "unsupported event by reconfigureContext $event" }
                 }
@@ -255,59 +253,29 @@ class NetworkStateHolder(
   private fun joinAsActive(
     event: Event.State.ByInternal.JoinReqAck
   ) {
-    when(val curState = networkState) {
-      !is LobbyState -> IllegalChangeStateAttempt(
-        fromState = curState.javaClass.name,
-        toState = ActiveState::class.java.name,
-      )
-    }
-    try {
-      val destAddr = InetSocketAddress(
-        event.onEventAck.gameAnnouncement.host,
-        event.onEventAck.gameAnnouncement.port
-      )
-      nodeHandlers.clusterNodesHandler.launch()
-      val state = ActiveStateUtils.prepareActiveState(
-        clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-        stateHolder = this@NetworkStateHolder,
-        destAddr = destAddr,
-        internalGameConfig = event.internalGameConfig,
-        masterId = event.senderId,
-        playerId = event.gamePlayerInfo.playerId
-      )
-      networkStateHolder.set(state)
-    } catch(e: Exception) {
-      nodeHandlers.clusterNodesHandler.shutdown()
-      Logger.error(e) { "unexpected error during " }
-      return
-    }
-    Logger.trace { "joined as ${SnakesProto.NodeRole.NORMAL} to $event" }
+    val curState = networkState
+    if(curState !is LobbyState) throw IllegalChangeStateAttempt(
+      fromState = curState.javaClass.name,
+      toState = ActiveState::class.java.name,
+    )
+    curState.toActive(
+      nodeHandlers.clusterNodesHandler, event, changeAccessToken
+    )
+    Logger.trace { "joined as ${NodeRole.NORMAL} to $event" }
   }
   
   private fun joinAsViewer(
     event: Event.State.ByInternal.JoinReqAck
   ) {
-    when(val curState = networkState) {
-      !is LobbyState -> IllegalChangeStateAttempt(
-        fromState = curState.javaClass.name,
-        toState = ActiveState::class.java.name,
-      )
-    }
-    val destAddr = InetSocketAddress(
-      event.onEventAck.gameAnnouncement.host,
-      event.onEventAck.gameAnnouncement.port
+    val curState = networkState
+    if(curState !is LobbyStateT) throw IllegalChangeStateAttempt(
+      fromState = curState.javaClass.name,
+      toState = ActiveState::class.java.name,
     )
     
-    nodeHandlers.clusterNodesHandler.launch()
-    PassiveStateUtils.createPassiveState(
-      stateHolder = this,
-      clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-      destAddr = destAddr,
-      internalGameConfig = event.internalGameConfig,
-      masterId = event.senderId,
-      playerId = event.gamePlayerInfo.playerId,
-    ).apply { networkStateHolder.set(this) }
-    
+    curState.toPassive(
+      nodeHandlers.clusterNodesHandler, event, changeAccessToken
+    )
     Logger.trace { "joined as ${NodeRole.VIEWER} to $event" }
   }
   
@@ -321,16 +289,6 @@ class NetworkStateHolder(
         toState = PassiveState::class.java.name,
       )
     }
-    
-    curState.cleanup()
-    PassiveState(
-      nodeId = localNode.nodeId,
-      gameConfig = gameConfig,
-      stateHolder = this,
-      clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-    ).apply {
-      networkStateHolder.set(this)
-    }
   }
   
   private fun launchGame(
@@ -342,26 +300,13 @@ class NetworkStateHolder(
       fromState = curState.javaClass.name,
       toState = MasterState::class.java.name
     )
-    try {
-      val playerInfo = GamePlayerInfo(event.internalGameConfig.playerName, 0)
-      nodeHandlers.clusterNodesHandler.launch()
-      val st = MasterStateUtils.prepareMasterContext(
-        clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-        gamePlayerInfo = playerInfo,
-        gameConfig = event.internalGameConfig,
-        stateHolder = this,
-      )
-      networkStateHolder.set(st)
-    } catch(e: Exception) {
-      Logger.error(e) { "unexpected error during launch game" }
-      return
-    }
-    gameController.openGameScreen(TODO())
+    curState.toMaster(
+      changeAccessToken, nodeHandlers.clusterNodesHandler, event
+    )
   }
   
-  fun switchToMaster(
+  /*fun switchToMaster(
     stateMachine: NetworkStateHolder,
-    event: Event.State.ByInternal.MasterNow,
     changeAccessToken: Any
   ) {
     checkChangeAccess(changeAccessToken)
@@ -370,19 +315,8 @@ class NetworkStateHolder(
       fromState = curState.javaClass.name,
       toState = MasterState::class.java.name
     )
-    try {
-      MasterStateUtils.prepareMasterFromState(
-        state = event.gameState,
-        clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-        gameConfig = event.internalGameConfig,
-        gamePlayerInfo = event.gamePlayerInfo,
-        stateHolder = this
-      ).apply { networkStateHolder.set(this) }
-    } catch(e: Exception) {
-      Logger.error(e) { "during switchToMaster" }
-      stateContextDispatcherScope.cancel()
-    }
-  }
+    curState.toMaster(event, changeAccessToken)
+  }*/
   
   fun reconfigureMasterDeputy(
     masterDeputyInfo: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
@@ -406,7 +340,7 @@ class NetworkStateHolder(
     nodeHandlers.clusterNodesHandler.shutdown()
     
     LobbyState(
-      ncStateMachine = this,
+      stateHolder = this,
       netNodesHandler = nodeHandlers.netNodesHandler,
     ).apply { networkStateHolder.set(this) }
     Logger.trace { "state ${LobbyState::class.java} $event" }

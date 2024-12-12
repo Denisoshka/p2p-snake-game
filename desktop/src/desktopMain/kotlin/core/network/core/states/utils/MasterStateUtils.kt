@@ -41,9 +41,7 @@ object MasterStateUtils {
   ): MasterState {
     val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = init(
-      eng,
-      gameConfig,
-      gamePlayerInfo
+      eng, gameConfig, gamePlayerInfo
     )
     val player = createLocalObserverContext(
       entities, gamePlayerInfo, stateHolder
@@ -52,10 +50,10 @@ object MasterStateUtils {
     try {
       Logger.info { "master inited" }
       return MasterState(
-        gameConfig = gameConfig,
+        internalGameConfig = gameConfig,
         gameEngine = eng,
-        stateHandler = stateHolder,
-        clusterNodesHandler = clusterNodesHandler,
+        stateHolder = stateHolder,
+        nodesHolder = clusterNodesHandler,
         gamePlayerInfo = gamePlayerInfo,
         player = player,
         nodesInitScope = scope
@@ -89,10 +87,10 @@ object MasterStateUtils {
       )
       Logger.info { "master inited" }
       return MasterState(
-        gameConfig = gameConfig,
+        internalGameConfig = gameConfig,
         gameEngine = eng,
-        stateHandler = stateHolder,
-        clusterNodesHandler = clusterNodesHandler,
+        stateHolder = stateHolder,
+        nodesHolder = clusterNodesHandler,
         gamePlayerInfo = gamePlayerInfo,
         player = player,
         nodesInitScope = scope
@@ -110,7 +108,7 @@ object MasterStateUtils {
   ): LocalObserverContext {
     val localSnake = entities[gamePlayerInfo.playerId]
       ?: throw IllegalMasterLaunchAttempt("local snake absent in state message")
-    val player = createlocalObserverContext(
+    val player = createLocalObserverContext(
       gamePlayerInfo, localSnake, stateHolder
     )
     return player
@@ -167,7 +165,27 @@ object MasterStateUtils {
   }
   
   
-  private fun createlocalObserverContext(
+  private fun initObservers(
+    players: Map<Int, SnakesProto.GamePlayer>,
+    it: ClusterNode,
+    entities: Map<Int, ActiveEntity>
+  ) {
+    val player = players[it.nodeId]
+    val entity = entities[it.nodeId]
+    if(player != null && it.nodeState == Node.NodeState.Active && entity != null) {
+      TODO("необходимо добавить возможность добавить наблюдателя")
+    } else if(player != null && it.nodeState == Node.NodeState.Passive && entity == null) {/*ничего не делаем*/
+    } else {
+      it.shutdown()
+      /**
+       * Вообще такой ситуации быть не должно тк все состояние снимается с
+       * контекста наблюдателя
+       */
+      Logger.error { "player ${it.nodeId} not found" }
+    }
+  }
+  
+  private fun createLocalObserverContext(
     gamePlayerInfo: GamePlayerInfo,
     localSnake: ActiveEntity,
     stateMachine: NetworkStateHolder
@@ -180,26 +198,6 @@ object MasterStateUtils {
       score = localSnake.score,
     )
     return player
-  }
-  
-  private fun initObservers(
-    players: Map<Int, SnakesProto.GamePlayer>,
-    it: ClusterNode,
-    entities: Map<Int, ActiveEntity>
-  ) {
-    val player = players[it.nodeId]
-    val entity = entities[it.nodeId]
-    if(player != null && it.nodeState == Node.NodeState.Passive && entity != null) {
-      TODO("необходимо добавить возможность добавить наблюдателя")
-    } else if(player != null && it.nodeState == Node.NodeState.Active && entity == null) {/*ничего не делаем*/
-    } else {
-      it.shutdown()
-      /**
-       * Вообще такой ситуации быть не должно тк все состояние снимается с
-       * контекста наблюдателя
-       */
-      Logger.error { "player ${it.nodeId} not found" }
-    }
   }
   
   private fun CoroutineScope.restoreNodes(

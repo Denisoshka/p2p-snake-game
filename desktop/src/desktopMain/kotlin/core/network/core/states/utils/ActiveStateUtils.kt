@@ -26,7 +26,7 @@ object ActiveStateUtils {
     )
     clusterNodesHandler.registerNode(masterNode)
     return ActiveState(
-      gameConfig = internalGameConfig,
+      internalGameConfig = internalGameConfig,
       stateHolder = stateHolder,
       nodesHolder = clusterNodesHandler,
       nodeId = playerId

@@ -1,9 +1,14 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.game.impl.ClusterNodesHandler
 import core.network.core.connection.lobby.impl.NetNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
+import core.network.core.states.utils.ActiveStateUtils
+import core.network.core.states.utils.MasterStateUtils
+import core.network.core.states.utils.PassiveStateUtils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
@@ -15,7 +20,8 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
-  private val ncStateMachine: NetworkStateHolder,
+  private val stateHolder: NetworkStateHolder,
+  private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
   override fun requestJoinToGame(
@@ -41,7 +47,7 @@ class LobbyState(
       netNodesHandler.registerNode(newNode)
     }
     val msg = MessageUtils.MessageProducer.getJoinMsg(
-      msgSeq = ncStateMachine.nextSeqNum,
+      msgSeq = stateHolder.nextSeqNum,
       playerType = SnakesProto.PlayerType.HUMAN,
       playerName = event.playerName,
       gameName = event.gameAnnouncement.announcement.gameName,
@@ -57,7 +63,7 @@ class LobbyState(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = ncStateMachine.onPingMsg(ipAddress, message, 0)
+  ) = stateHolder.onPingMsg(ipAddress, message, me)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress,
@@ -97,6 +103,83 @@ class LobbyState(
   
   override fun cleanup() {
     netNodesHandler.shutdown()
+  }
+  
+  override fun toMaster(
+    changeAccessToken: Any,
+    nodesHandler: ClusterNodesHandler,
+    event: Event.State.ByController.LaunchGame
+  ) {
+    try {
+      val playerInfo = GamePlayerInfo(event.internalGameConfig.playerName, 0)
+      nodesHandler.launch()
+      MasterStateUtils.prepareMasterContext(
+        clusterNodesHandler = nodesHandler,
+        gamePlayerInfo = playerInfo,
+        gameConfig = event.internalGameConfig,
+        stateHolder = stateHolder,
+      ).apply {
+        stateHolder.setupNewState(this, changeAccessToken)
+      }
+    } catch(e: Exception) {
+      Logger.error(e) { "unexpected error during launch game" }
+      throw e
+    }
+    gameController.openGameScreen(event.internalGameConfig)
+  }
+  
+  override fun toActive(
+    nodesHandler: ClusterNodesHandler,
+    event: Event.State.ByInternal.JoinReqAck,
+    changeAccessToken: Any
+  ) {
+    try {
+      val destAddr = InetSocketAddress(
+        event.onEventAck.gameAnnouncement.host,
+        event.onEventAck.gameAnnouncement.port
+      )
+      nodesHandler.launch()
+      ActiveStateUtils.prepareActiveState(
+        clusterNodesHandler = nodesHandler,
+        stateHolder = stateHolder,
+        destAddr = destAddr,
+        internalGameConfig = event.internalGameConfig,
+        masterId = event.senderId,
+        playerId = event.gamePlayerInfo.playerId
+      ).apply { stateHolder.setupNewState(this, changeAccessToken) }
+    } catch(e: Exception) {
+      nodesHandler.shutdown()
+      Logger.trace { "joined as ${SnakesProto.NodeRole.NORMAL} to $event" }
+      throw e
+    }
+    gameController.openGameScreen(event.internalGameConfig)
+  }
+  
+  
+  override fun toPassive(
+    clusterNodesHandler: ClusterNodesHandler,
+    event: Event.State.ByInternal.JoinReqAck,
+    changeAccessToken: Any
+  ) {
+    try {
+      val destAddr = InetSocketAddress(
+        event.onEventAck.gameAnnouncement.host,
+        event.onEventAck.gameAnnouncement.port
+      )
+      clusterNodesHandler.launch()
+      PassiveStateUtils.createPassiveState(
+        stateHolder = stateHolder,
+        clusterNodesHandler = clusterNodesHandler,
+        destAddr = destAddr,
+        internalGameConfig = event.internalGameConfig,
+        masterId = event.senderId,
+        playerId = event.gamePlayerInfo.playerId,
+      ).apply { stateHolder.setupNewState(this, changeAccessToken) }
+    } catch(e: Exception) {
+      Logger.error(e) { "unexpected error during switch to passive game" }
+      clusterNodesHandler.shutdown()
+      throw e
+    }
   }
   
   companion object LobbyStateDelayProvider {

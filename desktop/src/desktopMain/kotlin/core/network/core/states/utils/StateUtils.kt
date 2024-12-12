@@ -1,6 +1,7 @@
 package core.network.core.states.utils
 
-import core.network.core.connection.game.impl.ClusterNode
+import core.network.core.connection.Node
+import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import core.network.core.connection.game.impl.LocalNode
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -114,12 +115,13 @@ object StateUtils {
   }
   
   fun onStateMsg(
-    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
+    stateHolder: NetworkStateHolder,
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage
   ) {
-    val (ms, _) = masterDeputyHolder.get() ?: return
+    val (ms, _) = stateHolder.masterDeputy ?: return
     if(ms.first != ipAddress) return
     val stateSeq = message.state.state.stateOrder
-    
   }
   
   suspend fun onJoinGameAck(
@@ -146,7 +148,7 @@ object StateUtils {
    * @throws IllegalChangeStateAttempt
    * */
   private fun passiveHandleNodeDetach(
-    st: PassiveState, node: ClusterNode<>
+    st: PassiveState, node: ClusterNodeT<Node.MsgInfo>
   ) {
     stateHolder.apply {
       val (msInfo, depInfo) = stateHolder.masterDeputy ?: return

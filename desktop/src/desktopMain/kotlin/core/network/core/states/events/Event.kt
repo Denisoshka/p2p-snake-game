@@ -36,19 +36,12 @@ sealed class Event {
         val gamePlayerInfo: GamePlayerInfo,
         val internalGameConfig: InternalGameConfig,
       ) : ByInternal()
-      
-      data class MasterNow(
-        val gamePlayerInfo: GamePlayerInfo,
-        val gameState: SnakesProto.GameMessage.StateMsg,
-        val internalGameConfig: InternalGameConfig,
-      ) : ByInternal()
     }
   }
   
   
   sealed class InternalGameEvent : Event() {
     data class NewState(
-      val
       val state: StateMsg,
     ) : State()
     

@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import java.net.InetSocketAddress
 
-interface LobbyStateT : NetworkStateT {
+interface LobbyStateT : NetworkStateT, Switches.FromLobby {
   fun requestJoinToGame(
     event: Event.State.ByController.JoinReq
   )

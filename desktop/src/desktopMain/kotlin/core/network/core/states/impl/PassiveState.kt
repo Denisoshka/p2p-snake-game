@@ -65,6 +65,13 @@ class PassiveState(
     clusterNodesHandler.shutdown()
   }
   
+  override fun toLobby(
+    event: Event.State.ByController.SwitchToLobby,
+    changeAccessToken: Any
+  ) {
+    TODO("Not yet implemented")
+  }
+  
   override suspend fun handleNodeDetach(
     node: ClusterNodeT<Node.MsgInfo>,
     changeAccessToken: Any

@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import java.net.InetSocketAddress
 
-interface PassiveStateT : NetworkStateT {
+interface PassiveStateT : NetworkStateT, Switches.FromPassive {
   val gameConfig: InternalGameConfig
   override fun joinHandle(
     ipAddress: InetSocketAddress,
