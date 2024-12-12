@@ -1,13 +1,13 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import core.network.core.connection.game.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import java.net.InetSocketAddress
 
@@ -32,7 +32,7 @@ class ActiveObserverContext(
   }
 
   override fun shootContextState(
-    state: StateMsg,
+    state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?
   ) {

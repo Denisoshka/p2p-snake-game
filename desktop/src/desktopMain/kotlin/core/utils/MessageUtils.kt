@@ -81,7 +81,25 @@ object MessageUtils {
         setRoleChange(roleCng)
       }.build()
     }
-
+    
+    fun getStateMsg(
+      msgSeq: Long, state: SnakesProto.GameMessage.StateMsg
+    ): SnakesProto.GameMessage {
+      return SnakesProto.GameMessage.newBuilder().apply {
+        setMsgSeq(msgSeq)
+        setState(state)
+      }.build()
+    }
+    
+    fun getStateMsg(
+      msgSeq: Long, state: SnakesProto.GameState
+    ): SnakesProto.GameMessage {
+      val stateMsg = SnakesProto.GameMessage.StateMsg.newBuilder().apply {
+        setState(state)
+      }.build()
+      return getStateMsg(msgSeq, stateMsg)
+    }
+    
     fun getAckMsg(
       msgSeq: SnakesProto.GameMessage, senderId: Int, receiverId: Int
     ): SnakesProto.GameMessage {

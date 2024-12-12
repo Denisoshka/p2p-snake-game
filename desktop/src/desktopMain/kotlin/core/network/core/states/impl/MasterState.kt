@@ -11,8 +11,8 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
@@ -32,11 +32,9 @@ class MasterState(
   override val gameConfig: InternalGameConfig,
   gamePlayerInfo: GamePlayerInfo,
   private val gameEngine: GameContext,
-  private val stateMachine: NetworkStateHolder,
+  private val stateHandler: NetworkStateHolder,
   private val clusterNodesHandler: ClusterNodesHandler,
   val player: LocalObserverContext,
-//  gamePlayerInfo: GamePlayerInfo,
-//  state: SnakesProto.GameMessage.StateMsg? = null,
 ) : MasterStateT, GameStateT {
   val nodeId: Int
   private val nodesInitScope: CoroutineScope = CoroutineScope(
@@ -45,7 +43,7 @@ class MasterState(
   
   init {
     Logger.info { "$this init" }
-    nodeId = player.
+    nodeId = gamePlayerInfo.playerId
   }
   
   override fun joinHandle(
@@ -73,7 +71,7 @@ class MasterState(
       
       val node = ClusterNode(
         nodeState = initialNodeState,
-        nodeId = stateMachine.nextNodeId,
+        nodeId = stateHandler.nextNodeId,
         ipAddress = ipAddress,
         payload = null,
         clusterNodesHandler = clusterNodesHandler,
@@ -92,9 +90,9 @@ class MasterState(
       }
     } catch(e: IllegalNodeRegisterAttempt) {
       val err = MessageUtils.MessageProducer.getErrorMsg(
-        stateMachine.nextSeqNum, e.message ?: ""
+        stateHandler.nextSeqNum, e.message ?: ""
       )
-      stateMachine.sendUnicast(err, ipAddress)
+      stateHandler.sendUnicast(err, ipAddress)
       Logger.error(e) { "during joinHandle" }
     }
   }
@@ -103,13 +101,13 @@ class MasterState(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = stateMachine.onPingMsg(ipAddress, message, nodeId)
+  ) = stateHandler.onPingMsg(ipAddress, message, nodeId)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
     msgT: MessageType
-  ) = stateMachine.nonLobbyOnAck(ipAddress, message, msgT)
+  ) = stateHandler.nonLobbyOnAck(ipAddress, message, msgT)
   
   
   override fun roleChangeHandle(
@@ -121,9 +119,9 @@ class MasterState(
     val node = clusterNodesHandler[ipAddress] ?: return
     
     val ack = MessageUtils.MessageProducer.getAckMsg(
-      message.msgSeq, stateMachine.internalNodeId, node.nodeId
+      message.msgSeq, stateHandler.internalNodeId, node.nodeId
     )
-    stateMachine.sendUnicast(ack, ipAddress)
+    stateHandler.sendUnicast(ack, ipAddress)
     
     if(!node.running) node.detach()
   }
@@ -151,7 +149,7 @@ class MasterState(
   
   fun submitSteerMsg(steerMsg: SteerMsg) {
     player.handleEvent(
-      steerMsg, stateMachine.nextSeqNum
+      steerMsg, stateHandler.nextSeqNum
     )
   }
   
@@ -161,13 +159,30 @@ class MasterState(
     nodesInitScope.cancel()
   }
   
+  
+  private fun findNewMasterDeputyPair(oldDeputyId: Int): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
+    val (masterInfo, _) = stateHandler.masterDeputy
+      ?: throw IllegalChangeStateAttempt(
+        "current master deputy missing "
+      )
+    
+    val deputyCandidate = clusterNodesHandler.find {
+      it.value.nodeState == Node.NodeState.Active && it.value.payload != null && it.value.nodeId != oldDeputyId
+    }?.value
+    
+    val newDeputyInfo = deputyCandidate?.let {
+      Pair(it.ipAddress, it.nodeId)
+    }
+    return (masterInfo to newDeputyInfo)
+  }
+  
   override suspend fun handleNodeDetach(
     node: ClusterNode
   ) {
-    stateMachine.apply {
+    stateHandler.apply {
       val (_, depInfo) = masterDeputy ?: return
       if(node.nodeId != depInfo?.second && node.ipAddress == depInfo?.first) return
-      val newDep = chooseSetNewDeputy(node.nodeId) ?: return
+      val newDep = findNewMasterDeputyPair(node.nodeId) ?: return
       
       /**
        * choose new deputy
@@ -180,7 +195,7 @@ class MasterState(
         receiverRole = SnakesProto.NodeRole.DEPUTY
       )
       
-      stateMachine.sendUnicast(outMsg, newDep.ipAddress)
+      stateHandler.sendUnicast(outMsg, newDep.ipAddress)
     }
   }
 }

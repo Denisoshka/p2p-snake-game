@@ -10,7 +10,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
@@ -189,7 +188,7 @@ class ActiveState(
   }
   
   private fun normalChangeInfoDeputyToMaster(
-    depInfo: Pair<InetSocketAddress, Int>, masterNode: Node
+    depInfo: Pair<InetSocketAddress, Int>, masterNode: ClusterNode
   ) {
     stateHolder.apply {
       reconfigureMasterDeputy(depInfo to null)
@@ -205,7 +204,7 @@ class ActiveState(
       
       clusterNodesHandler.registerNode(newMasterClusterNode)
       newMasterClusterNode.apply {
-        unacknowledgedMessages.forEach(newMasterClusterNode::sendToNode)
+        unacknowledgedMessages.forEach { newMasterClusterNode.sendToNode(it.req) }
         addAllMessageForAck(unacknowledgedMessages)
       }
     }

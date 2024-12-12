@@ -1,4 +1,4 @@
-package core.network.core.states.initializers
+package d.zhdanov.ccfit.nsu.core.network.core.states.initializers
 
 import core.network.core.connection.Node
 import core.network.core.connection.game.impl.ClusterNode
@@ -6,9 +6,10 @@ import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import java.net.InetSocketAddress
 
-object ActiveStateInitializer {
+object PassiveStateInitializer {
   fun createActiveState(
     clusterNodesHandler: ClusterNodesHandler,
     stateHolder: NetworkStateHolder,
@@ -16,7 +17,7 @@ object ActiveStateInitializer {
     internalGameConfig: InternalGameConfig,
     masterId: Int,
     playerId: Int
-  ): ActiveState {
+  ): PassiveState {
     val masterNode = ClusterNode(
       nodeState = Node.NodeState.Active,
       nodeId = masterId,
@@ -25,11 +26,11 @@ object ActiveStateInitializer {
       name = ""
     )
     clusterNodesHandler.registerNode(masterNode)
-    return ActiveState(
-      gameConfig = internalGameConfig,
+    return PassiveState(
+      nodeId = playerId,
       stateHolder = stateHolder,
-      clusterNodesHandler = clusterNodesHandler,
-      nodeId = playerId
+      gameConfig = internalGameConfig,
+      clusterNodesHandler = clusterNodesHandler
     )
   }
 }

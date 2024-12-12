@@ -14,11 +14,10 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import java.net.InetSocketAddress
 
 class PassiveState(
-	val nodeId: Int,
-	override val gameConfig: InternalGameConfig,
-	private val stateMachine: NetworkStateHolder,
-	private val controller: NetworkController,
-	private val clusterNodesHandler: ClusterNodesHandler,
+  val nodeId: Int,
+  override val gameConfig: InternalGameConfig,
+  private val stateHolder: NetworkStateHolder,
+  private val clusterNodesHandler: ClusterNodesHandler,
 ) : PassiveStateT, GameStateT {
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
@@ -27,11 +26,11 @@ class PassiveState(
   
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = stateMachine.onPingMsg(ipAddress, message, nodeId)
+  ) = stateHolder.onPingMsg(ipAddress, message, nodeId)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
-  ) = stateMachine.nonLobbyOnAck(ipAddress, message, msgT)
+  ) = stateHolder.nonLobbyOnAck(ipAddress, message, msgT)
   
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
@@ -78,8 +77,8 @@ class PassiveState(
   private suspend fun passiveHandleNodeDetach(
     st: PassiveState, node: ClusterNodeT
   ) {
-    stateMachine.apply {
-      val (msInfo, depInfo) = stateMachine.masterDeputy ?: return
+    stateHolder.apply {
+      val (msInfo, depInfo) = stateHolder.masterDeputy ?: return
       if(msInfo.second != node.nodeId) throw IllegalChangeStateAttempt(
         "non master node $node in passiveHandleNodeDetach"
       )

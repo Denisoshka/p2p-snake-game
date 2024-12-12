@@ -46,14 +46,14 @@ object MasterStateInitializer {
     return MasterState(
       gameConfig = gameConfig,
       gameEngine = gameEngine,
-      stateMachine = stateHolder,
+      stateHandler = stateHolder,
       clusterNodesHandler = clusterNodesHandler,
       gamePlayerInfo = gamePlayerInfo,
       player = player
     )
   }
   
-  fun createMasterWithState(
+  fun prepareMasterFromState(
     gameEngine: GameContext,
     state: SnakesProto.GameMessage.StateMsg,
     clusterNodesHandler: ClusterNodesHandler,
@@ -78,7 +78,7 @@ object MasterStateInitializer {
     return MasterState(
       gameConfig = gameConfig,
       gameEngine = gameEngine,
-      stateMachine = stateHolder,
+      stateHandler = stateHolder,
       clusterNodesHandler = clusterNodesHandler,
       gamePlayerInfo = gamePlayerInfo,
       player = player
@@ -131,11 +131,11 @@ object MasterStateInitializer {
     val ret = gameEngine.initGame(
       gameConfig.gameSettings, gamePlayerInfo, state
     ).associateBy { it.id }
-    xyi(state, nodes, ret)
+    initObservers(state, nodes, ret)
     return ret
   }
   
-  private fun xyi(
+  private fun initObservers(
     state: SnakesProto.GameMessage.StateMsg,
     nodesInit: List<Deferred<ClusterNode?>>,
     entities: Map<Int, ActiveEntity>,

@@ -1,17 +1,15 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import core.network.core.connection.Node
 import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import core.network.core.connection.lobby.impl.NetNodeHandler
-import core.network.core.states.initializers.ActiveStateInitializer
+import core.network.core.states.utils.ActiveStateInitializer
+import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameMessage
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
@@ -21,12 +19,11 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
+import d.zhdanov.ccfit.nsu.core.network.core.states.initializers.PassiveStateInitializer
 import d.zhdanov.ccfit.nsu.core.network.interfaces.GameSessionHandler
 import d.zhdanov.ccfit.nsu.core.network.interfaces.NetworkStateContext
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
-import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +47,7 @@ class NetworkStateHolder(
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
+  
   private val stateContextDistacherScope = CoroutineScope(Dispatchers.Default)
   
   private val seqNumProvider = AtomicLong(0)
@@ -115,7 +113,6 @@ class NetworkStateHolder(
     switchToLobbyReq: Event.State.ByController.SwitchToLobby
   ) {
     stateContextDistacherScope.launch {
-      
       reconfigureContext(switchToLobbyReq)
     }
   }
@@ -132,24 +129,6 @@ class NetworkStateHolder(
     if(st !is MasterState) return
     val msdp = masterDeputyHolder.get() ?: return
     
-    val (ms, dp) = msdp
-    st.player.shootContextState(state, ms, dp)
-    
-    for((_, node) in nodeHandlers.clusterNodesHandler) {
-      node.payload?.shootContextState(state, ms, dp)
-    }
-    
-    val stateNum = stateNumProvider.incrementAndGet()
-    state.stateOrder = stateNum
-    
-    val p2pmsg = GameMessage(nextSeqNum, state)
-    val protomsg = toGameMessage(p2pmsg, MessageType.StateMsg)
-    
-    for((ipAddr, node) in nodeHandlers.clusterNodesHandler) {
-      if(!node.running) continue
-      node.addMessageForAck(protomsg)
-      sendUnicast(protomsg, ipAddr)
-    }
   }
   
   override fun cleanup() {
@@ -160,30 +139,6 @@ class NetworkStateHolder(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = netController.sendUnicast(msg, nodeAddress)
   
-  
-  /**
-   * @return `Node<MessageT, InboundMessageTranslatorT, PayloadT>` if new
-   * deputy was chosen successfully, else `null`
-   * @throws IllegalChangeStateAttempt
-   */
-  fun chooseSetNewDeputy(oldDeputyId: Int): ClusterNodeT? {
-    val (masterInfo, _) = masterDeputyHolder.get()
-      ?: throw IllegalChangeStateAttempt(
-        "current master deputy missing "
-      )
-    
-    val deputyCandidate = nodeHandlers.clusterNodesHandler.find {
-      it.value.nodeState == Node.NodeState.Active && it.value.payload != null && it.value.nodeId != oldDeputyId
-    }?.value
-    
-    val newDeputyInfo = deputyCandidate?.let {
-      Pair(it.ipAddress, it.nodeId)
-    }
-    
-    masterDeputyHolder.set(Pair(masterInfo, newDeputyInfo))
-    
-    return deputyCandidate
-  }
   
   override suspend fun detachNode(
     node: ClusterNodeT
@@ -196,34 +151,6 @@ class NetworkStateHolder(
   
   override suspend fun joinNode(node: ClusterNodeT) {
   
-  }
-  
-  fun onPingMsg(
-    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage, nodeId: Int
-  ) {
-    nodeHandlers.clusterNodesHandler[ipAddress]?.let {
-      val ack = MessageUtils.MessageProducer.getAckMsg(
-        message.msgSeq, nodeId, it.nodeId
-      )
-      netController.sendUnicast(ack, it.ipAddress)
-    }
-  }
-  
-  fun nonLobbyOnAck(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
-  ) {
-    nodeHandlers.clusterNodesHandler[ipAddress]?.ackMessage(message)
-  }
-  
-  fun onStateMsg(
-    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
-  ) {
-    val (ms, _) = masterDeputyHolder.get() ?: return
-    if(ms.first != ipAddress) return
-    val stateSeq = message.state.state.stateOrder
-    
   }
   
   suspend fun reconfigureContext(event: Event.State) {
@@ -278,7 +205,7 @@ class NetworkStateHolder(
                 }
                 
                 is Event.State.ByInternal.JoinReqAck      -> {
-                  onJoinGameAck(stateMachine, event)
+                  Utils.onJoinGameAck(stateMachine, event)
                 }
                 
                 is Event.State.ByController.SwitchToLobby -> {
@@ -309,26 +236,6 @@ class NetworkStateHolder(
     }
   }
   
-  private suspend fun onJoinGameAck(
-    stateMachine: NetworkStateHolder, event: Event.State.ByInternal.JoinReqAck
-  ) {
-    Logger.trace { "join to game with $event" }
-    when(event.onEventAck.playerRole) {
-      NodeRole.VIEWER -> {
-        joinAsViewer(event)
-      }
-      
-      NodeRole.NORMAL -> {
-        joinAsActive(event)
-      }
-      
-      else            -> {
-        Logger.error { "incorrect $event" }
-        throw IllegalChangeStateAttempt("incorrect $event")
-      }
-    }
-  }
-  
   private fun joinAsActive(
     event: Event.State.ByInternal.JoinReqAck
   ) {
@@ -344,7 +251,7 @@ class NetworkStateHolder(
     )
     apply {
       nodeHandlers.clusterNodesHandler.launch()
-      ActiveStateInitializer.createActiveState(
+      val state = ActiveStateInitializer.createActiveState(
         nodeHandlers.clusterNodesHandler,
         this@NetworkStateHolder,
         destAddr,
@@ -352,9 +259,7 @@ class NetworkStateHolder(
         event.senderId,
         event.gamePlayerInfo.playerId
       )
-      networkStateHolder.set(
-      
-      )
+      networkStateHolder.set(state)
     }
     Logger.trace { "joined as ${NodeRole.NORMAL} to $event" }
   }
@@ -372,24 +277,18 @@ class NetworkStateHolder(
       event.onEventAck.gameAnnouncement.host,
       event.onEventAck.gameAnnouncement.port
     )
+    
     nodeHandlers.clusterNodesHandler.launch()
-    val masterNode = ClusterNode(
-      nodeState = Node.NodeState.Active,
-      nodeId = event.senderId,
-      ipAddress = destAddr,
-      payload = null,
-      clusterNodesHandler = nodeHandlers.clusterNodesHandler
-    )
-    nodeHandlers.clusterNodesHandler.registerNode(masterNode)
-    networkStateHolder.set(
-      PassiveState(
-        gameConfig = event.internalGameConfig,
-        stateMachine = this,
-        controller = netController,
-        clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-        nodeId = event.gamePlayerInfo.playerId
-      )
-    )
+    
+    PassiveStateInitializer.createActiveState(
+      stateHolder = this,
+      clusterNodesHandler = nodeHandlers.clusterNodesHandler,
+      destAddr = destAddr,
+      internalGameConfig = event.internalGameConfig,
+      masterId = event.senderId,
+      playerId = event.gamePlayerInfo.playerId,
+    ).apply { networkStateHolder.set(this) }
+    
     Logger.trace { "joined as ${NodeRole.VIEWER} to $event" }
   }
   
@@ -408,13 +307,7 @@ class NetworkStateHolder(
     stateMachine.apply {
       nodeHandlers.clusterNodesHandler.launch()
       networkStateHolder.set(
-        MasterState(
-          stateMachine = this,
-          clusterNodesHandler = nodeHandlers.clusterNodesHandler,
-          gameConfig = event.internalGameConfig,
-          gamePlayerInfo = playerInfo,
-          state = null,
-        )
+      
       )
     }
     gameController.openGameScreen()
@@ -432,7 +325,7 @@ class NetworkStateHolder(
     stateMachine.apply {
       networkStateHolder.set(
         MasterState(
-          stateMachine = this@apply,
+          stateHandler = this@apply,
           netController = netController,
           clusterNodesHandler = nodeHandlers.clusterNodesHandler,
           gamePlayerInfo = event.gamePlayerInfo,
@@ -485,45 +378,6 @@ class NetworkStateHolder(
     handleSendStateToController(newState)
   }
   
-  private suspend fun checkMsInfoInState(
-    curMsDp: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
-    state: SnakesProto.GameState
-  ) {
-    val stateMs = state.players.playersList.find {
-      it.role == SnakesProto.NodeRole.MASTER
-    }
-    if(stateMs == null) {
-      Logger.trace { "master absent in state $state" }
-      switchToLobby(Event.State.ByController.SwitchToLobby)
-      return
-    }
-  }
-  
-  private suspend fun checkDpInfoInState(
-    curMsDp: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
-    state: SnakesProto.GameState
-  ) {
-    val (curMs, curDp) = curMsDp
-    val stateDp = state.players.playersList.find {
-      it.role == SnakesProto.NodeRole.DEPUTY
-    }
-    if(stateDp == null) {
-      Logger.trace { "deputy absent in state $state" }
-      masterDeputyHolder.set(curMs to null)
-    } else if(stateDp.id != curDp?.second) {
-      try {
-        Logger.trace {
-          "setup new deputy (id:${stateDp.id}, addr:${stateDp.ipAddress}, port:${stateDp.id})"
-        }
-        val ipAddr = InetSocketAddress(stateDp.ipAddress, stateDp.port)
-        masterDeputyHolder.set(curMs to (ipAddr to stateDp.id))
-      } catch(e: Exception) {
-        Logger.error(e) { "during setup new deputy (id:${stateDp.id}, addr:${stateDp.ipAddress}, port:${stateDp.id})" }
-        switchToLobby(Event.State.ByController.SwitchToLobby)
-      }
-    }
-  }
-  
   private data class NodeChannels(
     val deadNodeChannel: Channel<ClusterNode>,
     val detachNodeChannel: Channel<ClusterNode>,
@@ -535,5 +389,4 @@ class NetworkStateHolder(
     val clusterNodesHandler: ClusterNodesHandler,
     val netNodesHandler: NetNodeHandler
   )
-//  private object ChangeStateContextToken(){}
 }
