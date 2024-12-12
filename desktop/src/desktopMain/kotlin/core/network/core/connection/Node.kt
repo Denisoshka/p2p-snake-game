@@ -26,8 +26,8 @@ interface Node<T> {
   fun getUnacknowledgedMessages(): List<T>
   
   enum class NodeState {
-    Actor,
-    Listener,
+    Active,
+    Passive,
     Terminated,
   }
   

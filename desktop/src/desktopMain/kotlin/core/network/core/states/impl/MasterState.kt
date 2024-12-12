@@ -8,15 +8,12 @@ import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
-import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +21,6 @@ import kotlinx.coroutines.cancel
 import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger(MasterState::class.java.name)
-private const val PlayerNameIsBlank = "player name blank"
 private const val JoinInUpdateQ = 10
 
 class MasterState(
@@ -49,49 +45,35 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
+    val joinMsg = message.join
     try {
-      val joinMsg = message.join
-      if(joinMsg.playerName.isBlank()) {
-        throw IllegalNodeRegisterAttempt(PlayerNameIsBlank)
-      }
-      if(!(joinMsg.requestedRole == SnakesProto.NodeRole.VIEWER || joinMsg.requestedRole == SnakesProto.NodeRole.NORMAL)) {
-        throw IllegalNodeRegisterAttempt(
-          "$ipAddress invalid node role: ${joinMsg.requestedRole}"
-        )
-      }
-      if(clusterNodesHandler[ipAddress] != null) {
-        return
-      }
-      val initialNodeState = when(joinMsg.requestedRole) {
-        SnakesProto.NodeRole.NORMAL -> Node.NodeState.Listener
-        else                        -> Node.NodeState.Actor
-      }
-      
-      val node = ClusterNode(
-        nodeState = initialNodeState,
-        nodeId = stateHandler.nextNodeId,
-        ipAddress = ipAddress,
-        payload = null,
-        clusterNodesHandler = clusterNodesHandler,
-      )
-      
-      if(node.nodeState == Node.NodeState.Actor) {
-        node.payload = ObserverContext(node, joinMsg.playerName)
-      } else {
-        TODO()
-      }
-      
-      try {
-        clusterNodesHandler.registerNode(node)
-      } catch(e: IllegalNodeRegisterAttempt) {
-        Logger.error(e) { "during registerNode" }
-      }
-    } catch(e: IllegalNodeRegisterAttempt) {
+      MessageUtils.Preconditions.checkJoin(joinMsg)
+    } catch(e: Exception) {
       val err = MessageUtils.MessageProducer.getErrorMsg(
         stateHandler.nextSeqNum, e.message ?: ""
       )
       stateHandler.sendUnicast(err, ipAddress)
       Logger.error(e) { "during joinHandle" }
+      return
+    }
+    
+    try {
+      clusterNodesHandler[ipAddress]?.let {
+        return
+      }
+      val initialNodeState = when(joinMsg.requestedRole) {
+        SnakesProto.NodeRole.NORMAL -> Node.NodeState.Passive
+        else                        -> Node.NodeState.Active
+      }
+      ClusterNode(
+        nodeState = initialNodeState,
+        nodeId = stateHandler.nextNodeId,
+        ipAddress = ipAddress,
+        clusterNodesHandler = clusterNodesHandler,
+        name = joinMsg.playerName,
+      ).apply { clusterNodesHandler.registerNode(this) }
+    } catch(e: Exception) {
+      Logger.error(e) { "during node registration" }
     }
   }
   
@@ -114,15 +96,13 @@ class MasterState(
     msgT: MessageType
   ) {
     if(!MessageUtils.RoleChangeIdentifier.fromNodeNodeLeave(message)) return
-    val node = clusterNodesHandler[ipAddress] ?: return
-    
-    val ack = MessageUtils.MessageProducer.getAckMsg(
-      message.msgSeq, stateHandler.internalNodeId, node.nodeId
-    )
-    
-    stateHandler.sendUnicast(ack, ipAddress)
-    
-    if(!node.running) node.detach()
+    clusterNodesHandler[ipAddress]?.apply {
+      val ack = MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, nodeId, it.nodeId
+      )
+      sendToNode(ack)
+      detach()
+    }
   }
   
   override fun errorHandle(
@@ -137,13 +117,9 @@ class MasterState(
     message: SnakesProto.GameMessage,
     msgT: MessageType
   ) {
-    val node = clusterNodesHandler[ipAddress] ?: return
-    if(!node.running) return
-    
-    val inp2p = MessageTranslator.fromProto(
-      message, MessageType.SteerMsg
-    )
-    node.payload?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
+    clusterNodesHandler[ipAddress]?.apply {
+      payload?.handleEvent(inp2p.msg as SteerMsg, inp2p.msgSeq)
+    }
   }
   
   fun submitSteerMsg(steerMsg: SteerMsg) {
@@ -161,12 +137,10 @@ class MasterState(
   
   private fun findNewMasterDeputyPair(oldDeputyId: Int): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
     val (masterInfo, _) = stateHandler.masterDeputy
-      ?: throw IllegalChangeStateAttempt(
-        "current master deputy missing "
-      )
+      ?: throw IllegalChangeStateAttempt("current master deputy absent")
     
     val deputyCandidate = clusterNodesHandler.find {
-      it.value.nodeState == Node.NodeState.Listener && it.value.payload != null && it.value.nodeId != oldDeputyId
+      it.value.nodeState == Node.NodeState.Passive && it.value.payload != null && it.value.nodeId != oldDeputyId
     }?.value
     
     val newDeputyInfo = deputyCandidate?.let {
@@ -176,13 +150,12 @@ class MasterState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNode,
-    token: NetworkStateHolder.ChangeToken
+    node: ClusterNode, changeAccessToken: Any
   ) {
     stateHandler.apply {
       val (_, depInfo) = masterDeputy ?: return
       if(node.nodeId != depInfo?.second && node.ipAddress == depInfo?.first) return
-      val (ms, newDep) = findNewMasterDeputyPair(node.nodeId) ?: return
+      val (ms, newDep) = findNewMasterDeputyPair(node.nodeId)
       
       /**
        * choose new deputy

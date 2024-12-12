@@ -33,7 +33,7 @@ class LocalObserverContext(
       TODO("пошел нахуй уебище это заглушка")
     }
   
-  override fun onContextObserverTerminated() {
+  override fun observerTerminated() {
     snake.snakeState = SnakeState.ZOMBIE
     
   }

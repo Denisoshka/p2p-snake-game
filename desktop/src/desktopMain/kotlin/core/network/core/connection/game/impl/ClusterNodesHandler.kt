@@ -1,6 +1,8 @@
 package core.network.core.connection.game.impl
 
+import core.network.core.connection.Node
 import core.network.core.connection.NodeContext
+import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
@@ -18,8 +20,8 @@ private val Logger = KotlinLogging.logger(ClusterNodesHandler::class.java.name)
 class ClusterNodesHandler(
   stateDelayMs: Int,
   private val ncStateMachine: NetworkStateHolder,
-) : NodeContext<ClusterNode>,
-    Iterable<Map.Entry<InetSocketAddress, ClusterNode>> {
+) : NodeContext<ClusterNodeT<Node.MsgInfo>>,
+    Iterable<Map.Entry<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>> {
   var stateDelayMs: Int = stateDelayMs
     set(value) {
       resendDelay = getResendDelay(value).toLong()
@@ -35,7 +37,8 @@ class ClusterNodesHandler(
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, ClusterNode>()
+  private val nodesByIp =
+    ConcurrentHashMap<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>()
   override val nextSeqNum
     get() = ncStateMachine.nextSeqNum
   
@@ -58,7 +61,7 @@ class ClusterNodesHandler(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
   
-  override fun registerNode(node: ClusterNode): ClusterNode {
+  override fun registerNode(node: ClusterNodeT<Node.MsgInfo>): ClusterNode {
     nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
       with(it) {
         nodesScope?.startObservation()
@@ -69,23 +72,23 @@ class ClusterNodesHandler(
   }
   
   override suspend fun handleNodeTermination(
-    node: ClusterNode
+    node: ClusterNodeT<Node.MsgInfo>
   ) {
     nodesByIp.remove(node.ipAddress)
     ncStateMachine.terminateNode(node)
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNode
+    node: ClusterNodeT<Node.MsgInfo>
   ) {
     ncStateMachine.detachNode(node)
   }
   
-  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNode>> {
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>> {
     return nodesByIp.entries.iterator()
   }
   
-  override operator fun get(ipAddress: InetSocketAddress): ClusterNode? {
+  override operator fun get(ipAddress: InetSocketAddress): ClusterNodeT<Node.MsgInfo>? {
     return nodesByIp[ipAddress]
   }
   

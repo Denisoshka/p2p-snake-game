@@ -6,6 +6,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.DEPUTY
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.MASTER
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.NORMAL
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.VIEWER
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalNodeRoleException
 
 object MessageUtils {
@@ -22,10 +23,17 @@ object MessageUtils {
       return msgDescriptor == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT || msgDescriptor == SnakesProto.GameMessage.TypeCase.ACK || msgDescriptor == SnakesProto.GameMessage.TypeCase.DISCOVER
     }
     
-    fun correctCoin(message: SnakesProto.GameMessage): Boolean {
-      return message.run {
-        hasJoin() && join.run {
-          playerName.isNotBlank() && playerType == SnakesProto.PlayerType.HUMAN && (requestedRole == SnakesProto.NodeRole.VIEWER || requestedRole == SnakesProto.NodeRole.NORMAL)
+    fun checkJoin(message: SnakesProto.GameMessage.JoinMsg) {
+      if(message.playerName.isBlank()) {
+        throw IllegalNodeRegisterAttempt("player name is blank")
+      }
+      if(message.playerType != SnakesProto.PlayerType.HUMAN) {
+        throw IllegalNodeRegisterAttempt("player type must be human")
+      }
+      when(val role = message.requestedRole) {
+        SnakesProto.NodeRole.NORMAL, SnakesProto.NodeRole.MASTER -> {}
+        else                                                     -> {
+          throw IllegalNodeRegisterAttempt("illegal role requester $role")
         }
       }
     }

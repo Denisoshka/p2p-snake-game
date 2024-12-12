@@ -10,20 +10,22 @@ import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.onSuccess
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
-import java.util.*
+import java.util.TreeMap
 import java.util.concurrent.atomic.AtomicReference
 
 private val Logger = KotlinLogging.logger {}
 
-/**
- * todo fix doc
- */
+
 class ClusterNode(
   nodeState: Node.NodeState,
   override val name: String,
@@ -31,10 +33,12 @@ class ClusterNode(
   override val ipAddress: InetSocketAddress,
   private val clusterNodesHandler: ClusterNodesHandler
 ) : ClusterNodeT<Node.MsgInfo> {
+  private val onPassiveHandler = Channel<Node.NodeState>()
+  private val onTerminatedHandler = Channel<Node.NodeState>()
+  
   private val thresholdDelay = clusterNodesHandler.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
-  @Volatile var changedToPassive = false
   override val running: Boolean
     get() = (payload != null)
   
@@ -45,20 +49,18 @@ class ClusterNode(
   private val resendDelay = clusterNodesHandler.resendDelay
   private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>> =
     when(nodeState) {
-      Node.NodeState.Actor    -> {
-        AtomicReference(Pair(Node.NodeState.Actor, null))
+      Node.NodeState.Active  -> {
+        AtomicReference(Pair(Node.NodeState.Active, null))
       }
       
-      Node.NodeState.Listener -> {
-        AtomicReference(Pair(Node.NodeState.Listener, ObserverContext(this)))
+      Node.NodeState.Passive -> {
+        AtomicReference(Pair(Node.NodeState.Passive, ObserverContext(this)))
       }
       
-      else                    -> {
+      else                   -> {
         throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
       }
     }
-  
-  @Volatile private var observeJob: Job? = null
   
   /**
    * Use this valuee within the scope of synchronized([msgForAcknowledge]).
@@ -109,81 +111,81 @@ class ClusterNode(
     }
   }
   
-  private fun checkMessages(): Long {
-    var ret = resendDelay
-    val now = System.currentTimeMillis()
-    val it = msgForAcknowledge.iterator()
-    while(it.hasNext()) {
-      val entry = it.next()
-      val (msg, msgInfo) = entry
-      if(now - msgInfo.lastCheck < thresholdDelay) {
-        ret = ret.coerceAtMost(thresholdDelay + msgInfo.lastCheck - now)
-        msgInfo.lastCheck = now
-        
-        sendToNode(msg)
-      } else {
-        it.remove()
-      }
-    }
-    return ret
-  }
-  
-  private fun changeState(newState: Pair<Node.NodeState, ObserverContext?>): Boolean {
-    var prevState: Pair<Node.NodeState, ObserverContext?>
-    do {
-      prevState = stateHolder.get()
-      if(newState.first <= prevState.first) return false;
-    } while(stateHolder.compareAndSet(prevState, newState))
-    prevState.second?.onContextObserverTerminated()
-    return true
-  }
-  
   override fun detach() {
-    payload?.onContextObserverTerminated()
-    ObserverContext(this).apply {
-      if(!changeState(Node.NodeState.Actor to this)) {
-        this.onContextObserverTerminated()
-      } else {
-        changedToPassive = true
-      }
+    onPassiveHandler.trySend(Node.NodeState.Passive).onSuccess {
+      Logger.trace { "$this marked as passive" }
     }
   }
   
   override fun shutdown() {
-    payload?.onContextObserverTerminated()
-    changeState(Node.NodeState.Terminated to null)
+    onTerminatedHandler.trySend(Node.NodeState.Terminated).onSuccess {
+      Logger.trace { "$this marked as terminated" }
+    }
   }
   
+  @OptIn(ExperimentalCoroutinesApi::class)
   @Synchronized
   override fun CoroutineScope.startObservation(): Job {
     return launch {
       var nextDelay = 0L
-      var detachedFromCluster = false
       try {
         Logger.trace { "${this@ClusterNode} startObservation" }
         while(isActive) {
-          delay(nextDelay)
-          when(nodeState) {
-            Node.NodeState.Listener, Node.NodeState.Actor -> {
-              if(changedToPassive) {
-                this@ClusterNode.clusterNodesHandler.handleNodeDetach(
-                  this@ClusterNode
-                )
+          select<Unit> {
+            onPassiveHandler.onReceive { state ->
+              if(state != Node.NodeState.Passive) {
+                Logger.warn {
+                  "onPassiveHandler ${this@ClusterNode} receive wrong $state"
+                }
+                return@onReceive
               }
-              nextDelay = onProcessing()
+              Logger.trace {
+                "${this@ClusterNode} receive switch to $state state"
+              }
+              onPassiveHandler.close()
+              if(nodeState == Node.NodeState.Terminated) {
+                return@onReceive
+              }
+              payload?.observerTerminated()
+              stateHolder.set(state to ObserverContext(this@ClusterNode))
+              this@ClusterNode.clusterNodesHandler.apply {
+                handleNodeDetach(this@ClusterNode)
+              }
             }
             
-            Node.NodeState.Terminated                     -> {
-              Logger.trace { "${this@ClusterNode} terminated" }
-              this@ClusterNode.clusterNodesHandler.handleNodeTermination(this@ClusterNode)
-              break
+            onTerminatedHandler.onReceive { state ->
+              if(state != Node.NodeState.Terminated) {
+                Logger.warn {
+                  "onTerminatedHandler ${this@ClusterNode} receive wrong $state"
+                }
+                return@onReceive
+              }
+              Logger.trace {
+                "${this@ClusterNode} receive switch to $state state"
+              }
+              onTerminatedHandler.close()
+              payload?.observerTerminated()
+              stateHolder.set(state to null)
+              this@ClusterNode.clusterNodesHandler.apply {
+                handleNodeDetach(this@ClusterNode)
+              }
+            }
+            
+            onTimeout(nextDelay) {
+              when(nodeState) {
+                Node.NodeState.Active, Node.NodeState.Passive -> {
+                  nextDelay = onProcessing()
+                }
+                
+                Node.NodeState.Terminated                     -> {}
+              }
             }
           }
         }
       } catch(e: CancellationException) {
         this.cancel()
       }
-    }.also { observeJob = it }
+    }
   }
   
   /**
@@ -207,6 +209,25 @@ class ClusterNode(
     return checkMessages()
   }
   
+  private fun checkMessages(): Long {
+    var ret = resendDelay
+    val now = System.currentTimeMillis()
+    val it = msgForAcknowledge.iterator()
+    while(it.hasNext()) {
+      val entry = it.next()
+      val (msg, msgInfo) = entry
+      if(now - msgInfo.lastCheck < thresholdDelay) {
+        ret = ret.coerceAtMost(thresholdDelay + msgInfo.lastCheck - now)
+        msgInfo.lastCheck = now
+        
+        sendToNode(msg)
+      } else {
+        it.remove()
+      }
+    }
+    return ret
+  }
+  
   private fun onProcessing(): Long {
     synchronized(msgForAcknowledge) {
       val now = System.currentTimeMillis()
@@ -218,6 +239,6 @@ class ClusterNode(
   }
   
   override fun toString(): String {
-    return "Node(nodeId=$nodeId, ipAddress=$ipAddress, running=$running, nodeState=$nodeState)"
+    return "ClusterNode(name='$name', nodeId=$nodeId, ipAddress=$ipAddress, nodeState=$nodeState)"
   }
 }

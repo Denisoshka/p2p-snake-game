@@ -1,5 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
+import core.network.core.connection.Node
+import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
@@ -8,14 +10,14 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import java.net.InetSocketAddress
 
 open class ObserverContext(
-  override val node: ClusterNode,
+  override val node: ClusterNodeT<Node.MsgInfo>,
 ) : NodePayloadT {
   override val score: Int
     get() = 0
   
   override fun handleEvent(event: SteerMsg, seq: Long) {}
   
-  override fun onContextObserverTerminated() {}
+  override fun observerTerminated() {}
   
   override fun shootContextState(
     state: SnakesProto.GameState.Builder,

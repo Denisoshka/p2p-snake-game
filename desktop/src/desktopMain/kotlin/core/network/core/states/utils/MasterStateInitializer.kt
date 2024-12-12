@@ -174,9 +174,9 @@ object MasterStateInitializer {
   ) {
     val player = players[it.nodeId]
     val entity = entities[it.nodeId]
-    if(player != null && it.nodeState == Node.NodeState.Listener && entity != null) {
+    if(player != null && it.nodeState == Node.NodeState.Passive && entity != null) {
       TODO("необходимо добавить возможность добавить наблюдателя")
-    } else if(player != null && it.nodeState == Node.NodeState.Actor && entity == null) {/*ничего не делаем*/
+    } else if(player != null && it.nodeState == Node.NodeState.Active && entity == null) {/*ничего не делаем*/
     } else {
       it.shutdown()
       /**
@@ -198,11 +198,11 @@ object MasterStateInitializer {
         try {
           val nodeState = when(it.role) {
             SnakesProto.NodeRole.NORMAL, SnakesProto.NodeRole.DEPUTY -> {
-              Node.NodeState.Listener
+              Node.NodeState.Passive
             }
             
             SnakesProto.NodeRole.VIEWER                              -> {
-              Node.NodeState.Actor
+              Node.NodeState.Active
             }
             
             SnakesProto.NodeRole.MASTER, null                        -> {

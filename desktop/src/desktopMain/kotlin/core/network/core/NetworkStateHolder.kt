@@ -47,7 +47,6 @@ class NetworkStateHolder(
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
-  private val changeToken = Any()
   private val stateContextDispatcherScope = CoroutineScope(Dispatchers.Default)
   
   private val seqNumProvider = AtomicLong(0)
@@ -140,7 +139,14 @@ class NetworkStateHolder(
   
   override suspend fun detachNode(
     node: ClusterNode
-  ) = nodeChannels.detachNodeChannel.send(node)
+  ) {
+    /**
+     * вообще здесь предполагалась логика по уведомлению того что viewer now,
+     * но наверное это лучше сделать где то в другом месте, а ну да в
+     * качестве функций сделать проверку которая уже будет уведомлять ноду
+     */
+    nodeChannels.detachNodeChannel.send(node)
+  }
   
   override suspend fun terminateNode(
     node: ClusterNode
@@ -156,11 +162,20 @@ class NetworkStateHolder(
   }
   
   
-  private suspend fun handleDetachNode(node: ClusterNode) {
+  private suspend fun handleDetachNode(
+    node: ClusterNode, changeAccessToken: Any
+  ) {
     when(val st = networkState) {
-      is GameStateT -> st.handleNodeDetach(node)
+      is GameStateT -> st.handleNodeDetach(node, changeAccessToken)
     }
   }
+  
+  /**
+   * вообще не трогать в иных местах кроме как nodesNonLobbyWatcherRoutine,
+   * потому что это костыль чтобы не было гонки данных изза кривого доступа к
+   * функциям которые меняют состояние
+   * */
+  private val changeAccessToken = Any()
   
   /**
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
@@ -177,14 +192,14 @@ class NetworkStateHolder(
               Logger.trace {
                 "$node received in detachNodeChannel"
               }
-              stateMachine.handleDetachNode(node)
+              stateMachine.handleDetachNode(node, changeAccessToken)
             }
             
             stateMachine.nodeChannels.deadNodeChannel.onReceive { node ->
               Logger.trace {
                 "$node received in deadNodeChannel"
               }
-              stateMachine.handleDetachNode(node)
+              stateMachine.handleDetachNode(node, changeAccessToken)
             }
             
             stateMachine.nodeChannels.updateNodesInfo.onReceive { node ->
@@ -207,11 +222,11 @@ class NetworkStateHolder(
                 }
                 
                 is Event.State.ByController.SwitchToLobby -> {
-                  switchToLobby(event)
+                  switchToLobby(event, changeAccessToken)
                 }
                 
                 is Event.State.ByInternal.MasterNow       -> {
-                  switchToMaster(stateMachine, event)
+                  switchToMaster(stateMachine, event, changeAccessToken)
                 }
                 
                 else                                      -> {
@@ -220,7 +235,7 @@ class NetworkStateHolder(
               }
             }
             stateMachine.nodeChannels.updateNodesInfo.onReceive {
-              
+            
             }
           }
         } catch(e: IllegalChangeStateAttempt) {
@@ -325,9 +340,9 @@ class NetworkStateHolder(
   fun switchToMaster(
     stateMachine: NetworkStateHolder,
     event: Event.State.ByInternal.MasterNow,
-    token: ChangeToken
+    changeAcessToken: Any
   ) {
-    checkChangeAccess(token)
+    checkChangeAccess(changeAcessToken)
     val curState = stateMachine.networkStateHolder.get()
     if(curState !is ActiveState) throw IllegalChangeStateAttempt(
       fromState = curState.javaClass.name,
@@ -339,7 +354,6 @@ class NetworkStateHolder(
         clusterNodesHandler = nodeHandlers.clusterNodesHandler,
         gameConfig = event.internalGameConfig,
         gamePlayerInfo = event.gamePlayerInfo,
-        initScope = stateContextDispatcherScope,
         stateHolder = this
       ).apply { networkStateHolder.set(this) }
     } catch(e: Exception) {
@@ -357,9 +371,9 @@ class NetworkStateHolder(
   }
   
   fun switchToLobby(
-    event: Event.State.ByController.SwitchToLobby, token: Any
+    event: Event.State.ByController.SwitchToLobby, changeAcessToken: Any
   ) {
-    checkChangeAccess(token)
+    checkChangeAccess(changeAcessToken)
     val curState = networkState
     if(curState is LobbyState) throw IllegalChangeStateAttempt(
       fromState = curState.javaClass.name, toState = LobbyState::class.java.name
@@ -403,7 +417,7 @@ class NetworkStateHolder(
   )
   
   private fun checkChangeAccess(token: Any) {
-    if(token !== changeToken) throw IllegalChangeStateAttempt(
+    if(token !== changeAccessToken) throw IllegalChangeStateAttempt(
       "дружише предоставь токен того что находишься в корутине которая меняет стейт"
     )
   }

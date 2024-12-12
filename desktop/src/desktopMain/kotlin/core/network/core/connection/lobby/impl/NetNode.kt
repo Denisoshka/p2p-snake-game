@@ -29,11 +29,11 @@ class NetNode(
   @Volatile override var lastSend = System.currentTimeMillis()
   
   @Volatile private var nodeStateHolder: Node.NodeState =
-    Node.NodeState.Actor
+    Node.NodeState.Active
   override val nodeState: Node.NodeState
     get() = nodeStateHolder
   override val running: Boolean
-    get() = nodeStateHolder == Node.NodeState.Actor
+    get() = nodeStateHolder == Node.NodeState.Active
   private val msgs: TreeMap<SnakesProto.GameMessage, Node.MsgInfoWithPayload> =
     TreeMap(
       MessageUtils.messageComparator

@@ -27,7 +27,7 @@ class ActiveObserverContext(
     snake.changeState(event)
   }
 
-  override fun onContextObserverTerminated() {
+  override fun observerTerminated() {
     snake.snakeState = SnakeState.ZOMBIE
   }
 

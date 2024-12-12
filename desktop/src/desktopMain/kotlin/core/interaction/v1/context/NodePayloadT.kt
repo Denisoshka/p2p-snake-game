@@ -12,7 +12,7 @@ interface NodePayloadT {
   val score: Int
   val node: ClusterNode
   fun handleEvent(event: SteerMsg, seq: Long)
-  fun onContextObserverTerminated()
+  fun observerTerminated()
   fun shootContextState(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
@@ -27,9 +27,9 @@ interface NodePayloadT {
     deputyAddrId?.second -> NodeRole.DEPUTY
     else                 -> {
       when(node.nodeState) {
-        Node.NodeState.Listener -> NodeRole.NORMAL
-        Node.NodeState.Actor    -> NodeRole.VIEWER
-        else                  -> null
+        Node.NodeState.Passive -> NodeRole.NORMAL
+        Node.NodeState.Active  -> NodeRole.VIEWER
+        else                    -> null
       }
     }
   }

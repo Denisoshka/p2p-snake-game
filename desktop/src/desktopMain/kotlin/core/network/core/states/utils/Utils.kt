@@ -1,5 +1,6 @@
 package core.network.core.states.utils
 
+import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
@@ -86,7 +87,6 @@ object Utils {
       node.sendToNode(msg)
     }
   }
-  
   
   fun onPingMsg(
     clusterNodesHandler: ClusterNodesHandler,
