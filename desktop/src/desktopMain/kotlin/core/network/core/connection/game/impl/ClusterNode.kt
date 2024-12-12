@@ -8,7 +8,13 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttem
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference
@@ -28,11 +34,9 @@ class ClusterNode(
   private val thresholdDelay = clusterNodesHandler.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
-  @Volatile var markedAsPassive = false
+  @Volatile var changedToPassive = false
   override val running: Boolean
-    get() = with(nodeState) {
-      this == Node.NodeState.Active || this == Node.NodeState.Passive
-    }
+    get() = (payload != null)
   
   override val payload: ObserverContext?
     get() = stateHolder.get().second
@@ -41,15 +45,15 @@ class ClusterNode(
   private val resendDelay = clusterNodesHandler.resendDelay
   private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>> =
     when(nodeState) {
-      Node.NodeState.Passive -> {
-        AtomicReference(Pair(Node.NodeState.Passive, ObserverContext(this)))
+      Node.NodeState.Actor    -> {
+        AtomicReference(Pair(Node.NodeState.Actor, null))
       }
       
-      Node.NodeState.Active  -> {
-        AtomicReference(Pair(Node.NodeState.Active, null))
+      Node.NodeState.Listener -> {
+        AtomicReference(Pair(Node.NodeState.Listener, ObserverContext(this)))
       }
       
-      else                   -> {
+      else                    -> {
         throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
       }
     }
@@ -125,22 +129,24 @@ class ClusterNode(
   }
   
   private fun changeState(newState: Pair<Node.NodeState, ObserverContext?>): Boolean {
+    var prevState: Pair<Node.NodeState, ObserverContext?>
     do {
-      val prevState = stateHolder.get()
+      prevState = stateHolder.get()
       if(newState.first <= prevState.first) return false;
     } while(stateHolder.compareAndSet(prevState, newState))
+    prevState.second?.onContextObserverTerminated()
     return true
   }
   
-  /*override fun markAsPassive() {
-    if(changeState(Node.NodeState.Passive to ObserverContext(this))) {
-    
-    }
-  }*/
-  
   override fun detach() {
     payload?.onContextObserverTerminated()
-    changeState(Node.NodeState.Disconnected to null)
+    ObserverContext(this).apply {
+      if(!changeState(Node.NodeState.Actor to this)) {
+        this.onContextObserverTerminated()
+      } else {
+        changedToPassive = true
+      }
+    }
   }
   
   override fun shutdown() {
@@ -158,17 +164,13 @@ class ClusterNode(
         while(isActive) {
           delay(nextDelay)
           when(nodeState) {
-            Node.NodeState.Active, Node.NodeState.Passive -> {
-              nextDelay = onProcessing()
-            }
-            
-            Node.NodeState.Disconnected                   -> {
-              if(!detachedFromCluster) {
-                Logger.trace { "${this@ClusterNode} disconnected" }
-                detachedFromCluster = true
-                this@ClusterNode.clusterNodesHandler.handleNodeDetach(this@ClusterNode)
+            Node.NodeState.Listener, Node.NodeState.Actor -> {
+              if(changedToPassive) {
+                this@ClusterNode.clusterNodesHandler.handleNodeDetach(
+                  this@ClusterNode
+                )
               }
-              nextDelay = onDetaching()
+              nextDelay = onProcessing()
             }
             
             Node.NodeState.Terminated                     -> {
@@ -186,10 +188,10 @@ class ClusterNode(
   
   /**
    * @throws IllegalUnacknowledgedMessagesGetAttempt if [Node.nodeState] <
-   * [ClusterNodeT.NodeState.Disconnected]
+   * [Node.NodeState.Terminated]
    * */
   override fun getUnacknowledgedMessages(): List<Node.MsgInfo> {
-    if(nodeState < Node.NodeState.Disconnected) {
+    if(nodeState < Node.NodeState.Terminated) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
     return synchronized(msgForAcknowledge) {
@@ -212,18 +214,6 @@ class ClusterNode(
       sendPingIfNecessary(nextDelay, now)
       
       return nextDelay
-    }
-  }
-  
-  private fun onDetaching(): Long {
-    synchronized(msgForAcknowledge) {
-      if(nodeState <= Node.NodeState.Disconnected) return 0
-      val ret = checkNodeConditions(System.currentTimeMillis())
-      if(msgForAcknowledge.isEmpty()) {
-        shutdown()
-        return 0
-      }
-      return ret
     }
   }
   

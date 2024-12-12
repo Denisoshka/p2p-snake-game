@@ -18,7 +18,7 @@ object ActiveStateInitializer {
     playerId: Int
   ): ActiveState {
     val masterNode = ClusterNode(
-      nodeState = Node.NodeState.Active,
+      nodeState = Node.NodeState.Listener,
       nodeId = masterId,
       ipAddress = destAddr,
       clusterNodesHandler = clusterNodesHandler,

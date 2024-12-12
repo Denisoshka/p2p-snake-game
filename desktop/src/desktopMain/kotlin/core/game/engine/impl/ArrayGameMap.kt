@@ -43,13 +43,6 @@ class ArrayGameMap(override var width: Int, override var height: Int) :
     return null
   }
 
-  override fun resize(newWidth: Int, newHeight: Int) {
-    val newField = Array(newHeight) { Array(newWidth) { GameType.None } }
-    width = newWidth
-    height = newHeight
-    field = newField
-  }
-
   private fun isSquareFree(x: Int, y: Int, size: Int = 5): Boolean {
     for(yi in y until y + size) {
       for(xi in x until x + size) {

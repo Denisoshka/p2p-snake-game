@@ -47,9 +47,8 @@ class NetworkStateHolder(
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
-  private val changeToken = ChangeToken()
-  
-  private val stateContextDistacherScope = CoroutineScope(Dispatchers.Default)
+  private val changeToken = Any()
+  private val stateContextDispatcherScope = CoroutineScope(Dispatchers.Default)
   
   private val seqNumProvider = AtomicLong(0)
   private val nextNodeIdProvider = AtomicInteger(0)
@@ -98,13 +97,13 @@ class NetworkStateHolder(
   override fun handleLaunchGame(
     launchGameReq: Event.State.ByController.LaunchGame
   ) {
-    stateContextDistacherScope.launch {
+    stateContextDispatcherScope.launch {
       reconfigureContext(launchGameReq)
     }
   }
   
   override fun handleConnectToGame(joinReqAck: Event.State.ByInternal.JoinReqAck) {
-    stateContextDistacherScope.launch {
+    stateContextDispatcherScope.launch {
       reconfigureContext(joinReqAck)
     }
   }
@@ -112,7 +111,7 @@ class NetworkStateHolder(
   override fun handleSwitchToLobby(
     switchToLobbyReq: Event.State.ByController.SwitchToLobby
   ) {
-    stateContextDistacherScope.launch {
+    stateContextDispatcherScope.launch {
       reconfigureContext(switchToLobbyReq)
     }
   }
@@ -324,7 +323,8 @@ class NetworkStateHolder(
   }
   
   fun switchToMaster(
-    stateMachine: NetworkStateHolder, event: Event.State.ByInternal.MasterNow,
+    stateMachine: NetworkStateHolder,
+    event: Event.State.ByInternal.MasterNow,
     token: ChangeToken
   ) {
     checkChangeAccess(token)
@@ -339,25 +339,25 @@ class NetworkStateHolder(
         clusterNodesHandler = nodeHandlers.clusterNodesHandler,
         gameConfig = event.internalGameConfig,
         gamePlayerInfo = event.gamePlayerInfo,
-        initScope = stateContextDistacherScope,
+        initScope = stateContextDispatcherScope,
         stateHolder = this
       ).apply { networkStateHolder.set(this) }
     } catch(e: Exception) {
       Logger.error(e) { "during switchToMaster" }
-      stateContextDistacherScope.cancel()
+      stateContextDispatcherScope.cancel()
     }
   }
   
   fun reconfigureMasterDeputy(
     masterDeputyInfo: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
-    token: ChangeToken
+    token: Any
   ) {
     checkChangeAccess(token)
     masterDeputyHolder.set(masterDeputyInfo)
   }
   
   fun switchToLobby(
-    event: Event.State.ByController.SwitchToLobby, token: ChangeToken
+    event: Event.State.ByController.SwitchToLobby, token: Any
   ) {
     checkChangeAccess(token)
     val curState = networkState
@@ -373,8 +373,7 @@ class NetworkStateHolder(
       ncStateMachine = this,
       netNodesHandler = nodeHandlers.netNodesHandler,
     ).apply { networkStateHolder.set(this) }
-    
-    Logger.trace { "switchToLobby $event" }
+    Logger.trace { "state ${LobbyState::class.java} $event" }
     gameController.openLobby()
   }
   
@@ -403,9 +402,9 @@ class NetworkStateHolder(
     val netNodesHandler: NetNodeHandler
   )
   
-  class ChangeToken
-  
-  private fun checkChangeAccess(token: ChangeToken) {
-    if(token !== changeToken) throw IllegalChangeStateAttempt("incorrect token")
+  private fun checkChangeAccess(token: Any) {
+    if(token !== changeToken) throw IllegalChangeStateAttempt(
+      "дружише предоставь токен того что находишься в корутине которая меняет стейт"
+    )
   }
 }

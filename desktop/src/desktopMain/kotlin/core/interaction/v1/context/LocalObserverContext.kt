@@ -35,10 +35,7 @@ class LocalObserverContext(
   
   override fun onContextObserverTerminated() {
     snake.snakeState = SnakeState.ZOMBIE
-    runBlocking {
-
-//      ncStateMachine.switchToLobby()
-    }
+    
   }
   
   override fun shootContextState(

@@ -20,7 +20,6 @@ import d.zhdanov.ccfit.nsu.core.utils.MessageTranslator
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import java.net.InetSocketAddress
 
@@ -34,12 +33,10 @@ class MasterState(
   private val gameEngine: GameContext,
   private val stateHandler: NetworkStateHolder,
   private val clusterNodesHandler: ClusterNodesHandler,
+  private val nodesInitScope: CoroutineScope,
   val player: LocalObserverContext,
 ) : MasterStateT, GameStateT {
   val nodeId: Int
-  private val nodesInitScope: CoroutineScope = CoroutineScope(
-    Dispatchers.Default
-  )
   
   init {
     Logger.info { "$this init" }
@@ -66,8 +63,8 @@ class MasterState(
         return
       }
       val initialNodeState = when(joinMsg.requestedRole) {
-        SnakesProto.NodeRole.NORMAL -> Node.NodeState.Active
-        else                        -> Node.NodeState.Passive
+        SnakesProto.NodeRole.NORMAL -> Node.NodeState.Listener
+        else                        -> Node.NodeState.Actor
       }
       
       val node = ClusterNode(
@@ -78,7 +75,7 @@ class MasterState(
         clusterNodesHandler = clusterNodesHandler,
       )
       
-      if(node.nodeState == Node.NodeState.Passive) {
+      if(node.nodeState == Node.NodeState.Actor) {
         node.payload = ObserverContext(node, joinMsg.playerName)
       } else {
         TODO()
@@ -169,7 +166,7 @@ class MasterState(
       )
     
     val deputyCandidate = clusterNodesHandler.find {
-      it.value.nodeState == Node.NodeState.Active && it.value.payload != null && it.value.nodeId != oldDeputyId
+      it.value.nodeState == Node.NodeState.Listener && it.value.payload != null && it.value.nodeId != oldDeputyId
     }?.value
     
     val newDeputyInfo = deputyCandidate?.let {

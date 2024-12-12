@@ -18,16 +18,16 @@ interface Node<T> {
   fun addMessageForAck(message: SnakesProto.GameMessage)
   fun addAllMessageForAck(messages: List<T>)
   fun CoroutineScope.startObservation(): Job
-//  fun markAsPassive()
+  
+  //  fun markAsPassive()
   fun detach()
   fun shutdown()
   
   fun getUnacknowledgedMessages(): List<T>
   
   enum class NodeState {
-    Passive,
-    Active,
-    Disconnected,
+    Actor,
+    Listener,
     Terminated,
   }
   

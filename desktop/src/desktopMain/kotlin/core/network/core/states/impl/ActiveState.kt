@@ -196,7 +196,7 @@ class ActiveState(
       val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
       
       val newMasterClusterNode = ClusterNode(
-        nodeState = Node.NodeState.Active,
+        nodeState = Node.NodeState.Listener,
         nodeId = depInfo.second,
         ipAddress = depInfo.first,
         clusterNodesHandler = clusterNodesHandler,

@@ -27,9 +27,9 @@ interface NodePayloadT {
     deputyAddrId?.second -> NodeRole.DEPUTY
     else                 -> {
       when(node.nodeState) {
-        Node.NodeState.Active  -> NodeRole.NORMAL
-        Node.NodeState.Passive -> NodeRole.VIEWER
-        else                   -> null
+        Node.NodeState.Listener -> NodeRole.NORMAL
+        Node.NodeState.Actor    -> NodeRole.VIEWER
+        else                  -> null
       }
     }
   }

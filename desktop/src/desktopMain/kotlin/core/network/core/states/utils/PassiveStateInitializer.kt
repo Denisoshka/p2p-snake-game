@@ -5,7 +5,6 @@ import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import java.net.InetSocketAddress
 
@@ -19,7 +18,7 @@ object PassiveStateInitializer {
     playerId: Int
   ): PassiveState {
     val masterNode = ClusterNode(
-      nodeState = Node.NodeState.Active,
+      nodeState = Node.NodeState.Listener,
       nodeId = masterId,
       ipAddress = destAddr,
       clusterNodesHandler = clusterNodesHandler,

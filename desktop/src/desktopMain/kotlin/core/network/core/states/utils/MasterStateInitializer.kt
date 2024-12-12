@@ -59,18 +59,20 @@ object MasterStateInitializer {
     clusterNodesHandler: ClusterNodesHandler,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
-    initScope: CoroutineScope,
     stateHolder: NetworkStateHolder,
   ): MasterState {
     val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
-    val entities = initFromState(
-      eng,
-      gameConfig,
-      gamePlayerInfo,
-      clusterNodesHandler,
-      initScope,
-      state
-    )
+    try{
+      
+      val entities = initFromState(
+        eng,
+        gameConfig,
+        gamePlayerInfo,
+        clusterNodesHandler,
+        initScope,
+        state
+      )
+    }
     val player = createLocalObserverContext(
       entities, gamePlayerInfo, stateHolder
     )
@@ -172,9 +174,9 @@ object MasterStateInitializer {
   ) {
     val player = players[it.nodeId]
     val entity = entities[it.nodeId]
-    if(player != null && it.nodeState == Node.NodeState.Active && entity != null) {
+    if(player != null && it.nodeState == Node.NodeState.Listener && entity != null) {
       TODO("необходимо добавить возможность добавить наблюдателя")
-    } else if(player != null && it.nodeState == Node.NodeState.Passive && entity == null) {/*ничего не делаем*/
+    } else if(player != null && it.nodeState == Node.NodeState.Actor && entity == null) {/*ничего не делаем*/
     } else {
       it.shutdown()
       /**
@@ -196,11 +198,11 @@ object MasterStateInitializer {
         try {
           val nodeState = when(it.role) {
             SnakesProto.NodeRole.NORMAL, SnakesProto.NodeRole.DEPUTY -> {
-              Node.NodeState.Active
+              Node.NodeState.Listener
             }
             
             SnakesProto.NodeRole.VIEWER                              -> {
-              Node.NodeState.Passive
+              Node.NodeState.Actor
             }
             
             SnakesProto.NodeRole.MASTER, null                        -> {
