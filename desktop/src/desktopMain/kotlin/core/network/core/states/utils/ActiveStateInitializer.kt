@@ -9,7 +9,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import java.net.InetSocketAddress
 
 object ActiveStateInitializer {
-  fun createActiveState(
+  fun prepareActiveState(
     clusterNodesHandler: ClusterNodesHandler,
     stateHolder: NetworkStateHolder,
     destAddr: InetSocketAddress,

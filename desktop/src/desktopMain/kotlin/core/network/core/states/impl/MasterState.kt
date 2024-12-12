@@ -44,6 +44,7 @@ class MasterState(
   init {
     Logger.info { "$this init" }
     nodeId = gamePlayerInfo.playerId
+    gameEngine.launch()
   }
   
   override fun joinHandle(
@@ -121,6 +122,7 @@ class MasterState(
     val ack = MessageUtils.MessageProducer.getAckMsg(
       message.msgSeq, stateHandler.internalNodeId, node.nodeId
     )
+    
     stateHandler.sendUnicast(ack, ipAddress)
     
     if(!node.running) node.detach()
@@ -177,12 +179,13 @@ class MasterState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNode
+    node: ClusterNode,
+    token: NetworkStateHolder.ChangeToken
   ) {
     stateHandler.apply {
       val (_, depInfo) = masterDeputy ?: return
       if(node.nodeId != depInfo?.second && node.ipAddress == depInfo?.first) return
-      val newDep = findNewMasterDeputyPair(node.nodeId) ?: return
+      val (ms, newDep) = findNewMasterDeputyPair(node.nodeId) ?: return
       
       /**
        * choose new deputy

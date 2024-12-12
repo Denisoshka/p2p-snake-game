@@ -8,6 +8,7 @@ import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
+import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
@@ -24,18 +25,18 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(
   MasterStateInitializer::class.java.name
 )
-private const val joinPerUpdateQ: Int = 10
 
 object MasterStateInitializer {
+  const val JoinPerUpdateQ: Int = 10
   fun prepareMasterContext(
-    gameEngine: GameContext,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
     clusterNodesHandler: ClusterNodesHandler,
   ): MasterState {
+    val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = init(
-      gameEngine,
+      eng,
       gameConfig,
       gamePlayerInfo
     )
@@ -45,7 +46,7 @@ object MasterStateInitializer {
     Logger.info { "master inited" }
     return MasterState(
       gameConfig = gameConfig,
-      gameEngine = gameEngine,
+      gameEngine = eng,
       stateHandler = stateHolder,
       clusterNodesHandler = clusterNodesHandler,
       gamePlayerInfo = gamePlayerInfo,
@@ -54,7 +55,6 @@ object MasterStateInitializer {
   }
   
   fun prepareMasterFromState(
-    gameEngine: GameContext,
     state: SnakesProto.GameMessage.StateMsg,
     clusterNodesHandler: ClusterNodesHandler,
     gameConfig: InternalGameConfig,
@@ -62,8 +62,9 @@ object MasterStateInitializer {
     initScope: CoroutineScope,
     stateHolder: NetworkStateHolder,
   ): MasterState {
+    val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = initFromState(
-      gameEngine,
+      eng,
       gameConfig,
       gamePlayerInfo,
       clusterNodesHandler,
@@ -77,7 +78,7 @@ object MasterStateInitializer {
     Logger.info { "master inited" }
     return MasterState(
       gameConfig = gameConfig,
-      gameEngine = gameEngine,
+      gameEngine = eng,
       stateHandler = stateHolder,
       clusterNodesHandler = clusterNodesHandler,
       gamePlayerInfo = gamePlayerInfo,

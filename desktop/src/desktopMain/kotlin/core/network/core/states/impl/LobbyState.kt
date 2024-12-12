@@ -16,7 +16,6 @@ private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
   private val ncStateMachine: NetworkStateHolder,
-  private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
 ) : LobbyStateT {
   override fun requestJoinToGame(

@@ -1,11 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.connection.game.ClusterNodeT
+import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
@@ -66,7 +66,8 @@ class PassiveState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNodeT
+    node: ClusterNode,
+    token: NetworkStateHolder.ChangeToken
   ) {
     TODO("Not yet implemented")
   }

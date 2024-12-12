@@ -123,7 +123,9 @@ class GameEngine(
   }
   
   override fun initGame(
-    config: GameConfig, playerInfo: GamePlayerInfo, state: SnakesProto.GameMessage.StateMsg?
+    config: GameConfig,
+    playerInfo: GamePlayerInfo,
+    state: SnakesProto.GameMessage.StateMsg?
   ): List<ActiveEntity> {
     val ret = ArrayList<ActiveEntity>()
     
@@ -141,11 +143,10 @@ class GameEngine(
   
   override fun initGame(
     config: GameConfig,
-    playerInfo: SnakesProto.GameMessage.StateMsg?,
     gamePlayerInfo: GamePlayerInfo
   ): List<ActiveEntity> {
-    val sn = spawnNewSnake(playerInfo.playerId) ?: throw RuntimeException(
-      "snake not found"
+    val sn = spawnNewSnake(gamePlayerInfo.playerId) ?: throw RuntimeException(
+      "snake not found, да ебись ты в рот"
     )
     return listOf(sn);
   }
@@ -174,6 +175,7 @@ class GameEngine(
   override fun addSideEntity(entity: Entity) {
     sideEffectEntity.add(entity)
   }
+  
   
   private fun checkUpdateApplesPreprocess() {
     val applesQ = entities.count { it.type == GameType.Apple }

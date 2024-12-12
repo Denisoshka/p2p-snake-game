@@ -1,7 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
 import core.network.core.connection.game.impl.ClusterNode
 import core.network.core.connection.game.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -131,7 +130,8 @@ class ActiveState(
   }
   
   override suspend fun handleNodeDetach(
-    node: ClusterNodeT<Node.MsgInfo>
+    node: ClusterNode,
+    token: NetworkStateHolder.ChangeToken
   ) {
     stateHolder.apply {
       val (msInfo, depInfo) = masterDeputy ?: return
@@ -147,7 +147,7 @@ class ActiveState(
             Logger.warn {
               "during activeDeputyHandleMasterDetach from :${ActiveState::class} to ${MasterState::class} latestGameState is null"
             }
-            switchToLobby(Event.State.ByController.SwitchToLobby)
+            switchToLobby(Event.State.ByController.SwitchToLobby, token)
           }
           
           else -> masterNow(state, depInfo)
@@ -162,12 +162,13 @@ class ActiveState(
     }
   }
   
-  private suspend fun masterNow(
+  private fun masterNow(
     state: SnakesProto.GameMessage.StateMsg,
-    depInfo: Pair<InetSocketAddress, Int>
+    depInfo: Pair<InetSocketAddress, Int>,
+    token: NetworkStateHolder.ChangeToken
   ) {
     stateHolder.apply {
-      reconfigureMasterDeputy(depInfo to null)
+      reconfigureMasterDeputy(depInfo to null, token)
       
       val config = this@ActiveState.gameConfig
       val gamePlayerInfo = GamePlayerInfo(config.playerName, nodeId)
