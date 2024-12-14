@@ -5,10 +5,10 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEnt
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
 class LocalObserverContext(
@@ -16,16 +16,15 @@ class LocalObserverContext(
   private val localNode: LocalNode,
   private var lastUpdateSeq: Long = 0L,
 ) : NodePayloadT {
-  
   @Synchronized
   override fun handleEvent(
-    event: SteerMsg,
+    event: SnakesProto.GameMessage.SteerMsg,
     seq: Long,
     node: ClusterNode?
   ): Boolean {
-    if(seq <= lastUpdateSeq) return false
-    lastUpdateSeq = seq
-    snake.changeState(event)
+    snake.changeState(
+      MessageUtils.MessageProducer.DirectionFromProto(event.direction)
+    )
     return true
   }
   
@@ -36,7 +35,6 @@ class LocalObserverContext(
   override fun observableDetached(node: ClusterNode?) {
     localNode.detach()
   }
-  
   
   override fun shootContextState(
     state: SnakesProto.GameState.Builder,

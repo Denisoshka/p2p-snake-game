@@ -30,6 +30,10 @@ class ActiveState(
   private val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   private val gameController: GameController = stateHolder.gameController
   
+  override fun submitSteerMsg(steerMsg: SnakesProto.GameMessage.SteerMsg) {
+    Utils.onNonMasterSubmitSteer(stateHolder, nodesHolder, steerMsg)
+  }
+  
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -119,7 +123,7 @@ class ActiveState(
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    Utils.nonLobbyOnPingMsg(
+    Utils.nonLobbyNonMasterOnPingMsg(
       stateHolder = stateHolder,
       nodesHolder = nodesHolder,
       localNode = localNode,
@@ -267,7 +271,6 @@ class ActiveState(
       senderId = localNode.nodeId,
       receiverId = ms.second,
       senderRole = SnakesProto.NodeRole.VIEWER,
-      receiverRole = null,
     )
     nodesHolder[ms.first]?.let {
       it.sendToNode(msg)
@@ -280,7 +283,6 @@ class ActiveState(
       localNode = localNode,
       gameConfig = gameConfig,
       stateHolder = stateHolder,
-      nodesHolder = nodesHolder
     )
   }
   

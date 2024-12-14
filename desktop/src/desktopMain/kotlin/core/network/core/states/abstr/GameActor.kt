@@ -4,6 +4,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import java.net.InetSocketAddress
 
 interface GameActor : BaseActor {
+  fun submitSteerMsg(steerMsg: SnakesProto.GameMessage.SteerMsg)
   fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )

@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.DEPUTY
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.MASTER
@@ -130,6 +131,15 @@ object MessageUtils {
       return SnakesProto.GameMessage.newBuilder().setJoin(join).build()
     }
     
+    fun getSteerMsg(
+      msgSeq: Long, steerMsg: SnakesProto.GameMessage.SteerMsg
+    ): SnakesProto.GameMessage {
+      return SnakesProto.GameMessage.newBuilder().apply {
+        setSteer(steerMsg)
+        setMsgSeq(msgSeq)
+      }.build()
+    }
+    
     fun getMessageForNewMaster(
       message: SnakesProto.GameMessage, senderId: Int, receiverId: Int
     ): SnakesProto.GameMessage {
@@ -158,14 +168,30 @@ object MessageUtils {
     
     fun nodeRoleToProto(
       role: NodeRole
-    )
-      
-      : SnakesProto.NodeRole {
+    ): SnakesProto.NodeRole {
       return when(role) {
         VIEWER -> SnakesProto.NodeRole.VIEWER
         NORMAL -> SnakesProto.NodeRole.NORMAL
         DEPUTY -> SnakesProto.NodeRole.DEPUTY
         MASTER -> SnakesProto.NodeRole.MASTER
+      }
+    }
+    
+    fun DirectionFromProto(dir: SnakesProto.Direction): Direction {
+      return when(dir) {
+        SnakesProto.Direction.UP    -> Direction.UP
+        SnakesProto.Direction.DOWN  -> Direction.DOWN
+        SnakesProto.Direction.LEFT  -> Direction.LEFT
+        SnakesProto.Direction.RIGHT -> Direction.RIGHT
+      }
+    }
+    
+    fun DirectionToProto(dir: Direction): SnakesProto.Direction {
+      return when(dir) {
+        Direction.UP    -> SnakesProto.Direction.UP
+        Direction.DOWN  -> SnakesProto.Direction.DOWN
+        Direction.LEFT  -> SnakesProto.Direction.LEFT
+        Direction.RIGHT -> SnakesProto.Direction.RIGHT
       }
     }
   }

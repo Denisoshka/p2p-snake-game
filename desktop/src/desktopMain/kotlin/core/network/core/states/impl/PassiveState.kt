@@ -37,7 +37,7 @@ class PassiveState(
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    Utils.nonLobbyOnPingMsg(
+    Utils.nonLobbyNonMasterOnPingMsg(
       stateHolder = stateHolder,
       nodesHolder = nodesHolder,
       localNode = localNode,
@@ -64,6 +64,10 @@ class PassiveState(
       ipAddress = ipAddress,
       message = message
     )
+  }
+  
+  override fun submitSteerMsg(steerMsg: SnakesProto.GameMessage.SteerMsg) {
+    /**not handle*/
   }
   
   override fun roleChangeHandle(
@@ -107,8 +111,7 @@ class PassiveState(
   }
   
   override fun errorHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
     /**not handle*/
   }

@@ -72,7 +72,7 @@ object Utils {
     }
   }
   
-  fun nonLobbyOnPingMsg(
+  fun nonLobbyNonMasterOnPingMsg(
     stateHolder: StateHolder,
     nodesHolder: ClusterNodesHolder,
     localNode: LocalNode,
@@ -125,25 +125,22 @@ object Utils {
       )
     }
   }
-  
-  suspend fun onJoinGameAck(
-    stateMachine: NetworkStateHolder, event: Event.State.ByInternal.JoinReqAck
-  ) {
-    Logger.trace { "join to game with $event" }
-    when(event.onEventAck.playerRole) {
-      NodeRole.VIEWER -> {
-        joinAsViewer(event)
-      }
-      
-      NodeRole.NORMAL -> {
-        joinAsActive(event)
-      }
-      
-      else            -> {
-        Logger.error { "incorrect $event" }
-        throw IllegalChangeStateAttempt("incorrect $event")
-      }
+  fun onNonMasterSubmitSteer(
+    stateHolder: StateHolder,
+    nodesHolder: ClusterNodesHolder,
+    steerMsg: SnakesProto.GameMessage.SteerMsg
+  ){
+    val (ms, _) = stateHolder.masterDeputy ?: return
+    nodesHolder[ms.first]?.let {
+      val steer = MessageUtils.MessageProducer.getSteerMsg(
+        stateHolder.nextSeqNum, steerMsg
+      )
+      it.sendToNode(steer)
+      it.addMessageForAck(steer)
     }
+  }
+  fun onMasterSubmitSteer(  ){
+  
   }
   
   fun atFromMasterNodeDeputyNow(

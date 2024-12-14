@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
@@ -24,9 +24,9 @@ class MasterState(
   val stateHolder: StateHolder,
   val localNode: LocalNode,
   val gameEngine: GameContext,
-  val internalGameConfig: InternalGameConfig,
+  val gameConfig: InternalGameConfig,
 ) : NodeState.MasterStateT, GameActor {
-  val gameController: GameController = stateHolder.gameController
+  private val gameController: GameController = stateHolder.gameController
   val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   
   init {
@@ -35,8 +35,7 @@ class MasterState(
   }
   
   override fun joinHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
     val joinMsg = message.join
     try {
@@ -72,11 +71,26 @@ class MasterState(
   
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
-  ) = stateHolder.onPingMsg(ipAddress, message, nodeId)
+  ) {
+    nodesHolder[ipAddress]?.let {
+      val ack = MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, localNode.nodeId, localNode.nodeId
+      )
+      it.sendToNode(ack)
+    }
+  }
   
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
-  )
+  ) {
+    Utils.nonLobbyOnAck(
+      nodesHolder = nodesHolder, ipAddress = ipAddress, message = message
+    )
+  }
+  
+  override fun submitSteerMsg(steerMsg: SnakesProto.GameMessage.SteerMsg) {
+    localNode.payload.handleEvent(steerMsg, 0)
+  }
   
   
   override fun roleChangeHandle(
@@ -93,10 +107,15 @@ class MasterState(
   }
   
   override fun steerHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    TODO("Not yet implemented")
+    nodesHolder[ipAddress]?.let {
+      it.payload.handleEvent(message.steer, message.msgSeq, null)
+      val ack = MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, localNode.nodeId, it.nodeId
+      )
+      it.sendToNode(ack)
+    }
   }
   
   override fun errorHandle(
@@ -107,19 +126,13 @@ class MasterState(
   override fun announcementHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    TODO("Not yet implemented")
+    /**not handle*/
   }
   
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    TODO("Not yet implemented")
-  }
-  
-  fun submitSteerMsg(steerMsg: SteerMsg) {
-    player.handleEvent(
-      steerMsg, stateHolder.nextSeqNum
-    )
+    /**not handle*/
   }
   
   
@@ -128,9 +141,9 @@ class MasterState(
   ): NodeState {
     gameEngine.shutdown()
     nodesHolder.shutdown()
+    gameController.openLobby()
     return LobbyState(
       stateHolder
-    
     )
   }
   
@@ -138,6 +151,7 @@ class MasterState(
     changeAccessToken: Any
   ): NodeState {
     val (_, depInfo) = stateHolder.masterDeputy!!
+    gameEngine.shutdown()
     if(depInfo != null) {
       val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
         stateHolder.nextSeqNum,
@@ -150,20 +164,18 @@ class MasterState(
         it.sendToNode(msg)
         it.addMessageForAck(msg)
       }
-      PassiveState(
-        nodeId = localNode.nodeId,
-        gameConfig = internalGameConfig,
+      return PassiveState(
         stateHolder = stateHolder,
-        nodesHolder = nodesHolder,
+        localNode = localNode,
+        gameConfig = gameConfig,
       ).apply {
-        stateHolder.setupNewState(this, changeAccessToken)
         nodesHolder.filter {
           it.value.nodeId != depInfo.second || it.value.nodeId != localNode.nodeId
         }.forEach { it.value.shutdown() }
         localNode.detach()
       }
     } else {
-      toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
+      return toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
     }
   }
   

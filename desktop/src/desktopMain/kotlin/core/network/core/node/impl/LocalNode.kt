@@ -2,6 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
@@ -44,11 +45,11 @@ class LocalNode(
     set(value) {
       field = 0
     }
-  override val payload: NodePayloadT?
+  override val payload: NodePayloadT
     get() = TODO("Not yet implemented")
   override val nodeState: Node.NodeState
     get() = TODO("Not yet implemented")
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, DefaultObserverContext?>>
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>>
     get() {
       TODO()
     }
@@ -86,7 +87,7 @@ class LocalNode(
               if(nodeState == Node.NodeState.Terminated) {
                 return@onReceive
               }
-              payload?.observerDetached()
+              payload.observerDetached()
               stateHolder.set(state to DefaultObserverContext)
               this@LocalNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@LocalNode)
@@ -104,8 +105,8 @@ class LocalNode(
                 "${this@LocalNode} receive switch to $state state"
               }
               onTerminatedHandler.close()
-              payload?.observerDetached()
-              stateHolder.set(state to null)
+              payload.observerDetached()
+              stateHolder.set(state to PlugObserver)
               this@LocalNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@LocalNode)
               }
@@ -134,7 +135,7 @@ class LocalNode(
     return emptyList()
   }
   
-  override fun addAllMessageForAck(messages: List<Node.MsgInfo>) {
+  override fun addAllMessageForAck(messages: Iterable<SnakesProto.GameMessage>) {
   }
   
   companion object LocalIp {

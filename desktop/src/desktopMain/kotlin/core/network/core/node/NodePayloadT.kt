@@ -2,13 +2,12 @@ package d.zhdanov.ccfit.nsu.core.network.core.node
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
   fun handleEvent(
-    event: SteerMsg, seq: Long, node: ClusterNode? = null
+    event: SnakesProto.GameMessage.SteerMsg, seq: Long, node: ClusterNode? = null
   ): Boolean
   
   fun observerDetached(node: ClusterNode? = null)

@@ -50,7 +50,7 @@ object MasterStateUtils {
     try {
       Logger.info { "master inited" }
       return MasterState(
-        internalGameConfig = gameConfig,
+        gameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,
         nodesHolder = clusterNodesHolder,
@@ -85,7 +85,7 @@ object MasterStateUtils {
       )
       Logger.info { "master inited" }
       return MasterState(
-        internalGameConfig = gameConfig,
+        gameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,
         nodesHolder = clusterNodesHolder,
