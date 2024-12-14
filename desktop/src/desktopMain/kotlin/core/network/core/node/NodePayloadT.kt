@@ -7,7 +7,10 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
-  fun handleEvent(event: SteerMsg, seq: Long, node: ClusterNode? = null)
+  fun handleEvent(
+    event: SteerMsg, seq: Long, node: ClusterNode? = null
+  ): Boolean
+  
   fun observerDetached(node: ClusterNode? = null)
   fun observableDetached(node: ClusterNode? = null)
   fun shootContextState(

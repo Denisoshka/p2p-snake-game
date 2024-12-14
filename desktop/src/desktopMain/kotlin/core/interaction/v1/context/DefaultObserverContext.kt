@@ -9,7 +9,12 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import java.net.InetSocketAddress
 
 object DefaultObserverContext : NodePayloadT {
-  override fun handleEvent(event: SteerMsg, seq: Long, node: ClusterNode?) {
+  override fun handleEvent(
+    event: SteerMsg,
+    seq: Long,
+    node: ClusterNode?
+  ): Boolean {
+    return false
   }
   
   override fun observerDetached(node: ClusterNode?) {

@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.MasterStateUtils
-import core.network.core.states.utils.StateUtils
+import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
@@ -39,17 +39,17 @@ class ActiveState(
     }
     
     if(MessageUtils.RoleChangeIdentifier.fromDeputyDeputyMasterNow(message)) {
-      StateUtils.atfromDeputyDeputyMasterNow(message)
+      Utils.atfromDeputyDeputyMasterNow(message)
     } else if(MessageUtils.RoleChangeIdentifier.fromMasterPlayerDead(message)) {
-      StateUtils.atFromMasterPlayerDead(
+      Utils.atFromMasterPlayerDead(
         localNode, nodesHolder, stateHolder, message, ipAddress,
       )
     } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeDeputyNow(message)) {
-      StateUtils.atFromMasterNodeDeputyNow(
+      Utils.atFromMasterNodeDeputyNow(
         localNode, nodesHolder, stateHolder, message, ipAddress,
       )
     } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeMasterNow(message)) {
-      StateUtils.atFromMasterNodeMasterNow(
+      Utils.atFromMasterNodeMasterNow(
         localNode, nodesHolder, stateHolder, message, ipAddress,
       )
     } else {
@@ -82,6 +82,10 @@ class ActiveState(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
     /**not handle*/
+  }
+  
+  override fun processDetachedNode(node: ClusterNodeT<Node.MsgInfo>) {
+    TODO("Not yet implemented")
   }
   
   override fun pingHandle(
@@ -161,7 +165,7 @@ class ActiveState(
         nodeState = Node.NodeState.Passive,
         nodeId = depInfo.second,
         ipAddress = depInfo.first,
-        clusterNodesHandler = nodesHolder,
+        clusterNodesHolder = nodesHolder,
       )
       /**
        * да и хуй с ним, нам его имя нахуй не нужно
@@ -268,6 +272,30 @@ class ActiveState(
       clusterNodesHandler = nodesHolder,
     ).apply {
       stateHolder.setupNewState(this, changeAccessToken)
+    }
+  }
+  
+  override fun atNodeDetachPostProcess(
+    node: ClusterNodeT<Node.MsgInfo>,
+    msInfo: Pair<InetSocketAddress, Int>,
+    dpInfo: Pair<InetSocketAddress, Int>?,
+    changeAccessToken: Any
+  ) {
+    if(node.nodeId != localNode.nodeId) return
+    /**
+     * в этом стейте можем отъебнуть только мы, тогда мы просто говорим
+     * мастеру что мы становимся вивером
+     */
+    nodesHolder[msInfo.first]?.let {
+      val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
+        msgSeq = stateHolder.nextSeqNum,
+        senderId = localNode.nodeId,
+        receiverId = msInfo.second,
+        senderRole = SnakesProto.NodeRole.VIEWER,
+        receiverRole = SnakesProto.NodeRole.MASTER,
+      )
+      it.sendToNode(msg)
+      it.addMessageForAck(msg)
     }
   }
 }

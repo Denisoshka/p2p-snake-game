@@ -7,10 +7,10 @@ import java.net.InetSocketAddress
 
 
 interface NodeState {
-  fun atNodeDetach(
+  fun atNodeDetachPostProcess(
     node: ClusterNodeT<Node.MsgInfo>,
     msInfo: Pair<InetSocketAddress, Int>,
-    dpInfo: Pair<InetSocketAddress, Int>,
+    dpInfo: Pair<InetSocketAddress, Int>?,
     changeAccessToken: Any
   )
   

@@ -224,7 +224,7 @@ object MasterStateUtils {
           return@async ClusterNode(
             nodeId = it.id,
             ipAddress = InetSocketAddress(it.ipAddress!!, it.port),
-            clusterNodesHandler = clusterNodesHandler,
+            clusterNodesHolder = clusterNodesHandler,
             nodeState = nodeState,
             name = it.name
           ).apply {

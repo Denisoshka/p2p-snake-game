@@ -31,13 +31,13 @@ class ClusterNode(
   nodeState: Node.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
-  private val clusterNodesHandler: ClusterNodesHandler,
+  private val clusterNodesHolder: ClusterNodesHandler,
   override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
   
-  private val thresholdDelay = clusterNodesHandler.thresholdDelay
+  private val thresholdDelay = clusterNodesHolder.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
   
@@ -47,7 +47,7 @@ class ClusterNode(
     get() = stateHolder.get().second
   override val nodeState: Node.NodeState
     get() = stateHolder.get().first
-  private val resendDelay = clusterNodesHandler.resendDelay
+  private val resendDelay = clusterNodesHolder.resendDelay
   private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>> =
     when(nodeState) {
       Node.NodeState.Active  -> {
@@ -64,19 +64,19 @@ class ClusterNode(
     }
   
   /**
-   * Use this valuee within the scope of synchronized([msgForAcknowledge]).
+   * Use this value within the scope of synchronized([msgForAcknowledge]).
    */
   private val msgForAcknowledge: TreeMap<SnakesProto.GameMessage, Node.MsgInfo> =
     TreeMap(MessageUtils.messageComparator)
   
   override fun sendToNode(msg: SnakesProto.GameMessage) {
-    clusterNodesHandler.sendUnicast(msg, ipAddress)
+    clusterNodesHolder.sendUnicast(msg, ipAddress)
   }
   
   private fun sendPingIfNecessary(nextDelay: Long, now: Long) {
     if(!(nextDelay == resendDelay && now - lastSend >= resendDelay)) return
     
-    val seq = clusterNodesHandler.nextSeqNum
+    val seq = clusterNodesHolder.nextSeqNum
     val ping = MessageUtils.MessageProducer.getPingMsg(seq)
     
     addMessageForAck(ping)
@@ -109,6 +109,8 @@ class ClusterNode(
       lastSend = System.currentTimeMillis()
     }
   }
+  
+  
   
   override fun detach() {
     onPassiveHandler.trySend(Node.NodeState.Passive).onSuccess {
@@ -147,7 +149,7 @@ class ClusterNode(
               }
               payload.observerDetached()
               stateHolder.set(state to DefaultObserverContext)
-              this@ClusterNode.clusterNodesHandler.apply {
+              this@ClusterNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@ClusterNode)
               }
             }
@@ -165,7 +167,7 @@ class ClusterNode(
               onTerminatedHandler.close()
               payload.observerDetached()
               stateHolder.set(state to PlugObserver)
-              this@ClusterNode.clusterNodesHandler.apply {
+              this@ClusterNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@ClusterNode)
               }
             }
@@ -176,7 +178,11 @@ class ClusterNode(
                   nextDelay = onProcessing()
                 }
                 
-                Node.NodeState.Terminated                     -> {}
+                Node.NodeState.Terminated                     -> {
+                  /**
+                   * по идее сюда вообще никогда не должны попасть
+                   */
+                }
               }
             }
           }

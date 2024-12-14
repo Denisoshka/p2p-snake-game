@@ -18,10 +18,15 @@ class LocalObserverContext(
 ) : NodePayloadT {
   
   @Synchronized
-  override fun handleEvent(event: SteerMsg, seq: Long, node: ClusterNode?) {
-    if(seq <= lastUpdateSeq) return
+  override fun handleEvent(
+    event: SteerMsg,
+    seq: Long,
+    node: ClusterNode?
+  ): Boolean {
+    if(seq <= lastUpdateSeq) return false
     lastUpdateSeq = seq
     snake.changeState(event)
+    return true
   }
   
   override fun observerDetached(node: ClusterNode?) {

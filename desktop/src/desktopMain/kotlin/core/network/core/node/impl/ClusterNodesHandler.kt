@@ -1,12 +1,12 @@
 package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodeContext
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,7 @@ private val Logger = KotlinLogging.logger(ClusterNodesHandler::class.java.name)
 
 class ClusterNodesHandler(
   stateDelayMs: Int,
-  private val ncStateMachine: NetworkStateHolder,
+  private val stateHolder: StateHolder,
 ) : NodeContext<ClusterNodeT<Node.MsgInfo>>,
     Iterable<Map.Entry<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>> {
   var stateDelayMs: Int = stateDelayMs
@@ -40,7 +40,7 @@ class ClusterNodesHandler(
   private val nodesByIp =
     ConcurrentHashMap<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>()
   override val nextSeqNum
-    get() = ncStateMachine.nextSeqNum
+    get() = stateHolder.nextSeqNum
   
   /**
    * @throws IllegalNodeHandlerAlreadyInitialized
@@ -59,7 +59,7 @@ class ClusterNodesHandler(
   
   override fun sendUnicast(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
-  ) = ncStateMachine.sendUnicast(msg, nodeAddress)
+  ) = stateHolder.sendUnicast(msg, nodeAddress)
   
   override fun registerNode(node: ClusterNodeT<Node.MsgInfo>): ClusterNodeT<Node.MsgInfo> {
     val ret = nodesByIp.putIfAbsent(node.ipAddress, node)
@@ -70,20 +70,21 @@ class ClusterNodesHandler(
       }
       return node
     }
-    throw IllegalNodeRegisterAttempt("node already registered")
+    return ret
+//    throw IllegalNodeRegisterAttempt("node already registered")
   }
   
   override suspend fun handleNodeTermination(
     node: ClusterNodeT<Node.MsgInfo>
   ) {
     nodesByIp.remove(node.ipAddress)
-    ncStateMachine.terminateNode(node)
+    stateHolder.handleDeadNode(node)
   }
   
   override suspend fun handleNodeDetach(
     node: ClusterNodeT<Node.MsgInfo>
   ) {
-    ncStateMachine.detachNode(node)
+    stateHolder.handleDetachedNode(node)
   }
   
   override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNodeT<Node.MsgInfo>>> {

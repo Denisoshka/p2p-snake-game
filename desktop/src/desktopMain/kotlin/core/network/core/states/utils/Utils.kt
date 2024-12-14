@@ -17,9 +17,10 @@ import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
 
-private val Logger = KotlinLogging.logger { StateUtils::class.java }
+private val Logger = KotlinLogging.logger { Utils::class.java }
+private val PortValuesRange = 1..65535
 
-object StateUtils {
+object Utils {
   private suspend fun checkMsInfoInState(
     curMsDp: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
     state: SnakesProto.GameState
@@ -38,26 +39,7 @@ object StateUtils {
     curMsDp: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>,
     state: SnakesProto.GameState
   ): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>? {
-    val (curMs, curDp) = curMsDp
-    val stateDp = state.players.playersList.find {
-      it.role == SnakesProto.NodeRole.DEPUTY
-    }
-    if(stateDp == null) {
-      Logger.trace { "deputy absent in state $state" }
-      return (curMs to null)
-    } else if(stateDp.id != curDp?.second) {
-      try {
-        Logger.trace {
-          "setup new deputy (id:${stateDp.id}, addr:${stateDp.ipAddress}, port:${stateDp.id})"
-        }
-        val ipAddr = InetSocketAddress(stateDp.ipAddress, stateDp.port)
-        return curMs to (ipAddr to stateDp.id)
-      } catch(e: Exception) {
-        Logger.error(e) { "during setup new deputy (id:${stateDp.id}, addr:${stateDp.ipAddress}, port:${stateDp.id})" }
-      }
-      return null
-    }
-    return curMsDp
+  
   }
   
   fun submitState(
@@ -234,8 +216,11 @@ object StateUtils {
     /**думаю просто дождемся пока мастер умрет*/
   }
   
-  fun findDeputyInState(msId: Int, state: SnakesProto.GameState) {
-    state.players.playersList.filter {  }
-    
+  fun findDeputyInState(
+    msId: Int, state: SnakesProto.GameState
+  ): SnakesProto.GamePlayer? {
+    return state.players.playersList.firstOrNull {
+      it.id != msId && it.ipAddress.isNotBlank() && it.port in PortValuesRange && it.role == SnakesProto.NodeRole.NORMAL
+    }
   }
 }

@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
@@ -67,16 +68,15 @@ class StateHolder(
     detachNodeChannel.send(node)
   }
   
-  private fun handleNodeDetach(node: ClusterNodeT<Node.MsgInfo>) {
+  private fun handleNodeDetach(
+    node: ClusterNodeT<Node.MsgInfo>, accessToken: Any
+  ) {
     val (msInfo, dpInfo) = masterDeputy!!
     /**
      * Вообще тк у нас исполнение в подобных функциях линейно то нужно
      * использовать !! тк оно не будет занулено
      */
     
-    /**вообщем у нас в нодах есть наша локальная
-     * нода и она может попасть в ноды которые
-     * мы detach поэтому есть доп чеки*/
     if(node.nodeId == msInfo.second) {
       atMasterDetached(node, msInfo, dpInfo)
     } else if(localNode.nodeId == msInfo.second && node.nodeId == dpInfo?.second) {
@@ -84,11 +84,16 @@ class StateHolder(
     } else if(node.nodeId == msInfo.second && localNode.nodeId == dpInfo?.second) {
       atMasterDetachedByDeputy(node, msInfo, dpInfo)
     }
-    networkState.atNodeDetach(node)
+    networkState.atNodeDetachPostProcess(
+      node = node,
+      msInfo = msInfo,
+      dpInfo = dpInfo,
+      changeAccessToken = accessToken
+    )
   }
   
   private fun findNewDeputy(oldDeputy: ClusterNodeT<Node.MsgInfo>?): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
-    val (ms, dp) = this.masterDeputy!!
+    val (ms, _) = this.masterDeputy!!
     /**
      * TODO нужно подумать про чек на мастер
      *  по идее у него уже не будет [ActiveObserverContext] и мы его просто
@@ -120,13 +125,21 @@ class StateHolder(
       while(isActive) {
         try {
           select {
-            detachNodeChannel.onReceive {
-            
+            detachNodeChannel.onReceive { node ->
+              Logger.trace { "$node detached" }
+              handleNodeDetach(node)
             }
-            deadNodeChannel.onReceive {
-            
+            deadNodeChannel.onReceive { node ->
+              Logger.trace { "$node deactivated" }
+              handleNodeDetach(node)
+            }
+            contextEventChannel.onReceive { event ->
+              Logger.trace { "$event received" }
+              TODO()
             }
           }
+        } catch(e: Exception) {
+          Logger.error(e) { }
         }
       }
     } catch(e: IllegalChangeStateAttempt) {
@@ -148,7 +161,7 @@ class StateHolder(
         nodeState = Node.NodeState.Passive,
         nodeId = dpInfo.second,
         ipAddress = dpInfo.first,
-        clusterNodesHandler = nodesHolder,
+        clusterNodesHolder = nodesHolder,
       ).apply(nodesHolder::registerNode)
       
       msNode.getUnacknowledgedMessages().map { (ms, _) ->
@@ -159,7 +172,8 @@ class StateHolder(
         forEach(newMsNode::sendToNode)
         newMsNode.addAllMessageForAck(this)
       }
-      TODO("нужно сделать чек не наша ли это нода")
+
+//      TODO нужно сделать чек не наша ли это нода, проверяем позже
     } else {
       networkState.toLobby(Event.State.ByController.SwitchToLobby, TODO())
     }
@@ -204,26 +218,41 @@ class StateHolder(
       netState.toLobby(Event.State.ByController.SwitchToLobby, changeToken)
     } else if(netState is ActiveState) {
       netState.toMaster(changeToken, gameState)
-//      val oldMsNewDpInfo = findNewDeputy(node)
-//      val (_, newDepInfo) = oldMsNewDpInfo
+      
+      val newDep = Utils.findDeputyInState(
+        localNode.nodeId, gameState
+      )
+      val newDepInfo = newDep?.let {
+        InetSocketAddress(it.ipAddress, it.port) to it.id
+      }
       masterDeputyHolder.set(
         (localNode.ipAddress to localNode.nodeId) to newDepInfo
       )
+      
       newDepInfo?.let {
-        val newDepNode = ClusterNode()
-        val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
-          msgSeq = nextSeqNum,
-          senderId = msInfo.second,
-          receiverId = newDepInfo.second,
-          receiverRole = SnakesProto.NodeRole.DEPUTY
-        )
-        sendToNode(msg)
-        addMessageForAck(msg)
+        ClusterNode(
+          nodeState = Node.NodeState.Active,
+          nodeId = it.second,
+          ipAddress = it.first,
+          clusterNodesHolder = nodesHolder,
+          name = newDep.name
+        ).apply {
+          nodesHolder.registerNode(this)
+          val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
+            msgSeq = nextSeqNum,
+            senderId = msInfo.second,
+            receiverId = newDepInfo.second,
+            senderRole = SnakesProto.NodeRole.MASTER,
+            receiverRole = SnakesProto.NodeRole.DEPUTY
+          )
+          sendToNode(msg)
+          addMessageForAck(msg)
+        }
       }
     } else {
       throw IllegalChangeStateAttempt(
-        ActiveState::class.java.name,
         netState::class.java.name,
+        MasterState::class.java.name,
       )
     }
   }

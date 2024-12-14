@@ -21,7 +21,7 @@ object ActiveStateUtils {
       nodeState = Node.NodeState.Passive,
       nodeId = masterId,
       ipAddress = destAddr,
-      clusterNodesHandler = clusterNodesHandler,
+      clusterNodesHolder = clusterNodesHandler,
       name = ""
     )
     clusterNodesHandler.registerNode(masterNode)

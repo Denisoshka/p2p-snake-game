@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
-import core.network.core.states.utils.StateUtils
+import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
@@ -35,8 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -49,14 +47,6 @@ class NetworkStateHolder(
   override val unicastNetHandler: UnicastNetHandler,
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
   private val stateContextDispatcherScope = CoroutineScope(Dispatchers.Default)
-  
-  
-  @Volatile var internalNodeId = 0
-  
-  private val nodeHandlers = NodeHandlers(
-    netNodesHandler = NetNodeHandler(this),
-    clusterNodesHandler = ClusterNodesHandler(TODO(), TODO(), TODO())
-  )
   
   private val nodeChannels = NodeChannels(
     deadNodeChannel = ,
@@ -164,7 +154,7 @@ class NetworkStateHolder(
     node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
   ) {
     when(val st = networkState) {
-      is GameStateT -> st.atNodeDetach(node, changeAccessToken)
+      is GameStateT -> st.atNodeDetachPostProcess(node, changeAccessToken)
     }
   }
   
@@ -211,7 +201,7 @@ class NetworkStateHolder(
                 }
                 
                 is Event.State.ByInternal.JoinReqAck      -> {
-                  StateUtils.onJoinGameAck(stateMachine, event)
+                  Utils.onJoinGameAck(stateMachine, event)
                 }
                 
                 is Event.State.ByController.SwitchToLobby -> {

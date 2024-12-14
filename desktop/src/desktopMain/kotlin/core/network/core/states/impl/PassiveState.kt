@@ -2,7 +2,6 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.states.GameActor
@@ -50,7 +49,7 @@ class PassiveState(
   }
   
   override fun steerHandle(
-    ipAddress: InetSocketAddress, message: GameMessage, msgT: MessageType
+    ipAddress: InetSocketAddress, message: GameMessage
   ) {
   }
   
