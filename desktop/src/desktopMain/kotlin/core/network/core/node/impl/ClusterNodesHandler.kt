@@ -1,12 +1,12 @@
-package core.network.core.connection.game.impl
+package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
-import core.network.core.connection.Node
-import core.network.core.connection.NodeContext
-import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.NodeContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,13 +62,15 @@ class ClusterNodesHandler(
   ) = ncStateMachine.sendUnicast(msg, nodeAddress)
   
   override fun registerNode(node: ClusterNodeT<Node.MsgInfo>): ClusterNodeT<Node.MsgInfo> {
-    nodesByIp.putIfAbsent(node.ipAddress, node)?.let {
-      with(it) {
+    val ret = nodesByIp.putIfAbsent(node.ipAddress, node)
+    if(ret == null) {
+      with(node) {
         nodesScope?.startObservation()
           ?: throw IllegalNodeRegisterAttempt("nodesScope absent")
       }
-      return it
-    } ?: throw IllegalNodeRegisterAttempt("node already registered")
+      return node
+    }
+    throw IllegalNodeRegisterAttempt("node already registered")
   }
   
   override suspend fun handleNodeTermination(

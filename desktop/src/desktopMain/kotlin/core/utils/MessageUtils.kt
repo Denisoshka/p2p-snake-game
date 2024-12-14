@@ -130,6 +130,21 @@ object MessageUtils {
       return SnakesProto.GameMessage.newBuilder().setJoin(join).build()
     }
     
+    fun getMessageForNewMaster(
+      message: SnakesProto.GameMessage, senderId: Int, receiverId: Int
+    ): SnakesProto.GameMessage {
+      return when(message.typeCase) {
+        SnakesProto.GameMessage.TypeCase.ACK, SnakesProto.GameMessage.TypeCase.ROLE_CHANGE -> {
+          message.toBuilder().setSenderId(senderId).setReceiverId(receiverId)
+            .build()
+        }
+        
+        else                                                                               -> {
+          message
+        }
+      }
+    }
+    
     @Throws(IllegalNodeRoleException::class)
     fun nodeRolefromProto(role: SnakesProto.NodeRole): NodeRole {
       return when(role) {
@@ -143,7 +158,9 @@ object MessageUtils {
     
     fun nodeRoleToProto(
       role: NodeRole
-    ): SnakesProto.NodeRole {
+    )
+      
+      : SnakesProto.NodeRole {
       return when(role) {
         VIEWER -> SnakesProto.NodeRole.VIEWER
         NORMAL -> SnakesProto.NodeRole.NORMAL

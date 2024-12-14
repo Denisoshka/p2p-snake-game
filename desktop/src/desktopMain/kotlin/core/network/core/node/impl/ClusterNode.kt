@@ -1,11 +1,13 @@
-package core.network.core.connection.game.impl
+package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -27,10 +29,10 @@ private val Logger = KotlinLogging.logger { ClusterNode::class.java }
 
 class ClusterNode(
   nodeState: Node.NodeState,
-  override val name: String,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
-  private val clusterNodesHandler: ClusterNodesHandler
+  private val clusterNodesHandler: ClusterNodesHandler,
+  override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
@@ -38,22 +40,22 @@ class ClusterNode(
   private val thresholdDelay = clusterNodesHandler.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
-  override val running: Boolean
-    get() = (payload != null)
   
-  override val payload: ObserverContext?
+  override val running: Boolean
+    get() = (payload !is PlugObserver)
+  override val payload: NodePayloadT
     get() = stateHolder.get().second
   override val nodeState: Node.NodeState
     get() = stateHolder.get().first
   private val resendDelay = clusterNodesHandler.resendDelay
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>> =
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>> =
     when(nodeState) {
       Node.NodeState.Active  -> {
-        AtomicReference(Pair(Node.NodeState.Active, null))
+        AtomicReference(Pair(Node.NodeState.Active, PlugObserver))
       }
       
       Node.NodeState.Passive -> {
-        AtomicReference(Pair(Node.NodeState.Passive, ObserverContext(this)))
+        AtomicReference(Pair(Node.NodeState.Passive, DefaultObserverContext))
       }
       
       else                   -> {
@@ -99,12 +101,10 @@ class ClusterNode(
     }
   }
   
-  override fun addAllMessageForAck(messages: List<Node.MsgInfo>) {
+  override fun addAllMessageForAck(messages: Iterable<SnakesProto.GameMessage>) {
     synchronized(msgForAcknowledge) {
       messages.forEach {
-        msgForAcknowledge[it.req] = it.apply {
-          lastReceive = System.currentTimeMillis()
-        }
+        msgForAcknowledge[it] = Node.MsgInfo(it, System.currentTimeMillis())
       }
       lastSend = System.currentTimeMillis()
     }
@@ -145,8 +145,8 @@ class ClusterNode(
               if(nodeState == Node.NodeState.Terminated) {
                 return@onReceive
               }
-              payload?.observerTerminated()
-              stateHolder.set(state to ObserverContext(this@ClusterNode))
+              payload.observerDetached()
+              stateHolder.set(state to DefaultObserverContext)
               this@ClusterNode.clusterNodesHandler.apply {
                 handleNodeDetach(this@ClusterNode)
               }
@@ -163,8 +163,8 @@ class ClusterNode(
                 "${this@ClusterNode} receive switch to $state state"
               }
               onTerminatedHandler.close()
-              payload?.observerTerminated()
-              stateHolder.set(state to null)
+              payload.observerDetached()
+              stateHolder.set(state to PlugObserver)
               this@ClusterNode.clusterNodesHandler.apply {
                 handleNodeDetach(this@ClusterNode)
               }
@@ -192,7 +192,7 @@ class ClusterNode(
    * [Node.NodeState.Terminated]
    * */
   override fun getUnacknowledgedMessages(): List<Node.MsgInfo> {
-    if(nodeState < Node.NodeState.Terminated) {
+    if(nodeState < Node.NodeState.Passive) {
       throw IllegalUnacknowledgedMessagesGetAttempt()
     }
     return synchronized(msgForAcknowledge) {

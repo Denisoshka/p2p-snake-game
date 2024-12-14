@@ -1,30 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states
 
-import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import java.net.InetSocketAddress
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 
-interface PassiveStateT : NetworkStateT, Switches.FromPassive {
-  val gameConfig: InternalGameConfig
-  override fun joinHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
-  ) {
-  }
-
-  override fun announcementHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
-  ) {
-  }
-
-  override fun steerHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
-  ) {
-  }
+interface PassiveStateT : NodeState {
+  fun toLobby(
+    event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
+  )
 }

@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
-import core.network.core.connection.game.impl.ClusterNode
-import core.network.core.connection.game.impl.ClusterNodesHandler
-import core.network.core.connection.game.impl.LocalNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
@@ -12,7 +12,6 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -153,9 +152,6 @@ class MasterState(
       nodesHolder[depInfo.first]?.let {
         it.sendToNode(msg)
         it.addMessageForAck(msg)
-        /**
-         * ну если мастера вдруг не будет то мы обратимся к deputy
-         * */
       }
       PassiveState(
         nodeId = localNode.nodeId,
@@ -167,6 +163,7 @@ class MasterState(
         nodesHolder.filter {
           it.value.nodeId != depInfo.second || it.value.nodeId != localNode.nodeId
         }.forEach { it.value.shutdown() }
+        localNode.detach()
       }
     } else {
       toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
@@ -189,7 +186,7 @@ class MasterState(
     return (masterInfo to newDeputyInfo)
   }
   
-  override fun handleNodeDetach(
+  override fun atNodeDetach(
     node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
   ) {
     val (_, depInfo) = stateHolder.masterDeputy!!

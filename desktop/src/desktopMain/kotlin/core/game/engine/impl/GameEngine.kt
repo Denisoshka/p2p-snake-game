@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
-import core.network.core.connection.game.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
@@ -9,7 +9,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer

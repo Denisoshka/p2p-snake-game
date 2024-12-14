@@ -1,10 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
-import core.network.core.connection.game.impl.ClusterNode
-import core.network.core.connection.game.impl.ClusterNodesHandler
-import core.network.core.connection.game.impl.LocalNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.StateUtils
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -14,9 +14,8 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.GameStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
-import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.LobbyState
@@ -33,6 +32,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.selects.select
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,7 +42,6 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val Logger = KotlinLogging.logger(NetworkStateHolder::class.java.name)
 private val kPortRange = 1..65535
-private const val kChannelSize = 10
 
 class NetworkStateHolder(
   private val netController: NetworkController,
@@ -51,12 +50,6 @@ class NetworkStateHolder(
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
   private val stateContextDispatcherScope = CoroutineScope(Dispatchers.Default)
   
-  private val seqNumProvider = AtomicLong(0)
-  private val nextNodeIdProvider = AtomicInteger(0)
-  val nextSeqNum
-    get() = seqNumProvider.incrementAndGet()
-  val nextNodeId
-    get() = nextNodeIdProvider.incrementAndGet()
   
   @Volatile var internalNodeId = 0
   
@@ -66,19 +59,18 @@ class NetworkStateHolder(
   )
   
   private val nodeChannels = NodeChannels(
-    deadNodeChannel = Channel(kChannelSize),
+    deadNodeChannel = ,
     updateNodesInfo = Channel(kChannelSize),
     detachNodeChannel = Channel(kChannelSize),
     reconfigureContextChannel = Channel(kChannelSize)
   )
   
-  override val networkState: NetworkStateT
+  override val networkState: NodeState
     get() = networkStateHolder.get()
   
-  private val networkStateHolder: AtomicReference<NetworkStateT> =
-    AtomicReference(
-      LobbyState(this, gameController, nodeHandlers.netNodesHandler)
-    )
+  private val networkStateHolder: AtomicReference<NodeState> = AtomicReference(
+    LobbyState(this, gameController, nodeHandlers.netNodesHandler)
+  )
   
   private val latestGameStateHolder =
     AtomicReference<SnakesProto.GameMessage.StateMsg?>()
@@ -159,10 +151,11 @@ class NetworkStateHolder(
   }
   
   suspend fun reconfigureContext(event: Event.State) {
+    runBlocking { }
     nodeChannels.reconfigureContextChannel.send(event)
   }
   
-  fun setupNewState(state: NetworkStateT, changeAccessToken: Any) {
+  fun setupNewState(state: NodeState, changeAccessToken: Any) {
     checkChangeAccess(changeAccessToken)
     networkStateHolder.set(state)
   }
@@ -171,21 +164,14 @@ class NetworkStateHolder(
     node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
   ) {
     when(val st = networkState) {
-      is GameStateT -> st.handleNodeDetach(node, changeAccessToken)
+      is GameStateT -> st.atNodeDetach(node, changeAccessToken)
     }
   }
   
   /**
-   * вообще не трогать в иных местах кроме как nodesNonLobbyWatcherRoutine,
-   * потому что это костыль чтобы не было гонки данных изза кривого доступа к
-   * функциям которые меняют состояние
-   * */
-  private val changeAccessToken = Any()
-  
-  /**
    * Мы меняем состояние кластера в одной функции так что исполнение линейно
    */
-  private fun CoroutineScope.nodesNonLobbyWatcherRoutine(
+  private fun CoroutineScope.clusterObserverActor(
     stateMachine: NetworkStateHolder
   ) = launch {
     try {
@@ -199,6 +185,7 @@ class NetworkStateHolder(
               }
               stateMachine.handleDetachNode(node, changeAccessToken)
             }
+            
             
             stateMachine.nodeChannels.deadNodeChannel.onReceive { node ->
               Logger.trace {
@@ -363,10 +350,7 @@ class NetworkStateHolder(
   }
   
   private data class NodeChannels(
-    val deadNodeChannel: Channel<ClusterNodeT<Node.MsgInfo>>,
-    val detachNodeChannel: Channel<ClusterNodeT<Node.MsgInfo>>,
-    val updateNodesInfo: Channel<Event.InternalGameEvent>,
-    val reconfigureContextChannel: Channel<Event.State>
+  
   )
   
   private data class NodeHandlers(

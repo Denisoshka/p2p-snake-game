@@ -1,15 +1,15 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
-import core.network.core.connection.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.states.NetworkStateT
-import core.network.core.connection.game.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import java.net.InetSocketAddress
 
-interface NetworkStateContext : NetworkStateT {
-  val networkState: NetworkStateT
+interface NetworkStateContext : NodeState {
+  val networkState: NodeState
   val unicastNetHandler: UnicastNetHandler
   
   suspend fun detachNode(node: ClusterNodeT<Node.MsgInfo>)

@@ -1,6 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import core.network.core.connection.game.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import core.network.core.connection.lobby.impl.NetNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.ActiveStateUtils
@@ -8,7 +8,7 @@ import core.network.core.states.utils.MasterStateUtils
 import core.network.core.states.utils.PassiveStateUtils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
@@ -62,13 +62,11 @@ class LobbyState(
   override fun pingHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
-    msgT: MessageType
   ) = stateHolder.onPingMsg(ipAddress, message, me)
   
   override fun ackHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
-    msgT: MessageType
   ) {
     val node = netNodesHandler[ipAddress] ?: return
     val onAckMsg = node.ackMessage(message) ?: return
@@ -80,12 +78,7 @@ class LobbyState(
     }
   }
   
-  override fun announcementHandle(
-    ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
-  ) {
-  }
+  
   
   override fun errorHandle(
     ipAddress: InetSocketAddress,

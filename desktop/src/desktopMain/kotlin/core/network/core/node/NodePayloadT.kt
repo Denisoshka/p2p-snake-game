@@ -1,27 +1,26 @@
-package d.zhdanov.ccfit.nsu.core.interaction.v1.context
+package d.zhdanov.ccfit.nsu.core.network.core.node
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import java.net.InetSocketAddress
 
 interface NodePayloadT {
-//  val name: String
-  val score: Int
-  val node: ClusterNode
-  fun handleEvent(event: SteerMsg, seq: Long)
-  fun observerTerminated()
+  fun handleEvent(event: SteerMsg, seq: Long, node: ClusterNode? = null)
+  fun observerDetached(node: ClusterNode? = null)
+  fun observableDetached(node: ClusterNode? = null)
   fun shootContextState(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
-    deputyAddrId: Pair<InetSocketAddress, Int>?
+    deputyAddrId: Pair<InetSocketAddress, Int>?,
+    node: ClusterNode? = null
   )
   
   fun getNodeRole(
+    node: ClusterNode,
     masterAddrId: Pair<InetSocketAddress, Int>,
-    deputyAddrId: Pair<InetSocketAddress, Int>?
+    deputyAddrId: Pair<InetSocketAddress, Int>?,
   ) = when(node.nodeId) {
     masterAddrId.second  -> NodeRole.MASTER
     deputyAddrId?.second -> NodeRole.DEPUTY
@@ -29,7 +28,7 @@ interface NodePayloadT {
       when(node.nodeState) {
         Node.NodeState.Passive -> NodeRole.NORMAL
         Node.NodeState.Active  -> NodeRole.VIEWER
-        else                    -> null
+        else                   -> null
       }
     }
   }

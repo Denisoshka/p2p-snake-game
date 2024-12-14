@@ -1,15 +1,15 @@
 package core.network.core.states.utils
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.impl.ClusterNode
-import core.network.core.connection.game.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
@@ -54,8 +54,6 @@ object MasterStateUtils {
         gameEngine = eng,
         stateHolder = stateHolder,
         nodesHolder = clusterNodesHandler,
-        gamePlayerInfo = gamePlayerInfo,
-        player = player,
         nodesInitScope = scope
       )
     } catch(e: Exception) {

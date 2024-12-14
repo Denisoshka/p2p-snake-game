@@ -1,4 +1,4 @@
-package core.network.core.connection
+package d.zhdanov.ccfit.nsu.core.network.core.node
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import kotlinx.coroutines.CoroutineScope
@@ -16,7 +16,7 @@ interface Node<T> {
   fun sendToNode(msg: SnakesProto.GameMessage)
   fun ackMessage(message: SnakesProto.GameMessage): T?
   fun addMessageForAck(message: SnakesProto.GameMessage)
-  fun addAllMessageForAck(messages: List<T>)
+  fun addAllMessageForAck(messages: Iterable<SnakesProto.GameMessage>)
   fun CoroutineScope.startObservation(): Job
   
   //  fun markAsPassive()

@@ -1,10 +1,10 @@
-package core.network.core.connection.game.impl
+package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -48,7 +48,7 @@ class LocalNode(
     get() = TODO("Not yet implemented")
   override val nodeState: Node.NodeState
     get() = TODO("Not yet implemented")
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, ObserverContext?>>
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, DefaultObserverContext?>>
     get() {
       TODO()
     }
@@ -86,8 +86,8 @@ class LocalNode(
               if(nodeState == Node.NodeState.Terminated) {
                 return@onReceive
               }
-              payload?.observerTerminated()
-              stateHolder.set(state to ObserverContext(this@LocalNode))
+              payload?.observerDetached()
+              stateHolder.set(state to DefaultObserverContext)
               this@LocalNode.clusterNodesHandler.apply {
                 handleNodeDetach(this@LocalNode)
               }
@@ -104,7 +104,7 @@ class LocalNode(
                 "${this@LocalNode} receive switch to $state state"
               }
               onTerminatedHandler.close()
-              payload?.observerTerminated()
+              payload?.observerDetached()
               stateHolder.set(state to null)
               this@LocalNode.clusterNodesHandler.apply {
                 handleNodeDetach(this@LocalNode)

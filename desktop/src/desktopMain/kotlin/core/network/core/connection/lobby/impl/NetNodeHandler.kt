@@ -1,6 +1,6 @@
 package core.network.core.connection.lobby.impl
 
-import core.network.core.connection.NodeContext
+import d.zhdanov.ccfit.nsu.core.network.core.node.NodeContext
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeHandlerAlreadyInitialized

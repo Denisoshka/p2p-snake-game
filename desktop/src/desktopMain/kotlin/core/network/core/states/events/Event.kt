@@ -1,12 +1,11 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.events
 
-import core.network.core.connection.Node
-import core.network.core.connection.game.ClusterNodeT
-import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage.RoleChangeMsg
 import d.zhdanov.ccfit.nsu.controllers.dto.GameAnnouncement
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
