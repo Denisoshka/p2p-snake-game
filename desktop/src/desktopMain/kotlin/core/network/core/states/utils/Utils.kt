@@ -11,10 +11,12 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ContextEvent
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger { Utils::class.java }
@@ -55,7 +57,7 @@ object Utils {
     player.shootContextState(state, ms, dp)
     
     for((_, node) in clusterNodesHandler) {
-      node.payload?.shootContextState(state, ms, dp)
+      node.payload.shootContextState(state, ms, dp)
     }
     state.apply { stateOrder = stateSeq }.build()
     val stateMsg = SnakesProto.GameMessage.StateMsg.newBuilder().apply {
@@ -128,92 +130,69 @@ object Utils {
     }
   }
   
-  /**
-   * @throws IllegalChangeStateAttempt
-   * */
-  private fun passiveHandleNodeDetach(
-    st: PassiveState, node: ClusterNodeT<Node.MsgInfo>
-  ) {
-    stateHolder.apply {
-      val (msInfo, depInfo) = stateHolder.masterDeputy ?: return
-      if(msInfo.second != node.nodeId) throw IllegalChangeStateAttempt(
-        "non master node $node in passiveHandleNodeDetach"
-      )
-      
-      if(depInfo == null) {
-        
-        reconfigureContext(Event.ControllerEvent.SwitchToLobby)
-      } else {
-        normalChangeInfoDeputyToMaster(depInfo, node)
-      }
-    }
-  }
-  
   fun atFromMasterNodeDeputyNow(
+    master: Pair<InetSocketAddress, Int>,
+    deputy: Pair<InetSocketAddress, Int>?,
     localNode: LocalNode,
-    nodesHolder: ClusterNodesHandler,
-    stateHolder: NetworkStateHolder,
+    stateHolder: StateHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
-  ) {
-    val (ms, _) = stateHolder.masterDeputy ?: return
-    if(ms.second != message.senderId || ipAddress != ms.first) return
-    if(message.receiverId != localNode.nodeId) return
-    
+  ): Boolean {
+    if(master.second != message.senderId || ipAddress != master.first) return false
+    if(message.receiverId != localNode.nodeId) return false
+    if(deputy?.second == localNode.nodeId) return true
+    runBlocking {
+      stateHolder.handleContextEvent(ContextEvent.Internal.DeputyNow(localNode))
+    }
+    return true
   }
   
   fun atFromMasterPlayerDead(
+    master: Pair<InetSocketAddress, Int>,
     localNode: LocalNode,
-    nodesHolder: ClusterNodesHandler,
-    stateHolder: NetworkStateHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
-  ) {
-    val (ms, _) = stateHolder.masterDeputy ?: return
-    if(!correctMasterInfo(message, ms, ipAddress)) return
-    if(message.receiverId != localNode.nodeId) return
-    
+  ): Boolean {
+    if(message.receiverId != localNode.nodeId) return false
+    if(master.second != message.senderId || ipAddress != master.first) return false
     localNode.detach()
+    return true
   }
   
   fun atFromMasterNodeMasterNow(
+    master: Pair<InetSocketAddress, Int>,
+    deputy: Pair<InetSocketAddress, Int>?,
     localNode: LocalNode,
     nodesHolder: ClusterNodesHandler,
-    stateHolder: NetworkStateHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
-  ) {
-    val (ms, dp) = stateHolder.masterDeputy ?: return
-    if(!correctMasterInfo(message, ms, ipAddress)) return
-    if(dp?.second != message.receiverId) return
-    if(dp.second != localNode.nodeId) return
-    
-    val msNode = nodesHolder[ipAddress]
-    if(msNode == null) {
-      Logger.warn { "atFromMasterNodeMasterNow master absend" }
-      return
-    }
-    
-    msNode.apply {
-      Logger.trace { "atFromMasterNodeMasterNow $msNode detached" }
-      detach()
-    }
+  ): Boolean {
+    if(master.second != message.senderId || ipAddress != master.first) return false
+    if(deputy?.second != message.receiverId) return false
+    if(deputy.second != localNode.nodeId) return false
+    nodesHolder[ipAddress]?.detach()
+    return true
   }
+  
+  fun atFromDeputyDeputyMasterNow(
+    master: Pair<InetSocketAddress, Int>,
+    deputy: Pair<InetSocketAddress, Int>?,
+    nodesHolder: ClusterNodesHandler,
+    message: SnakesProto.GameMessage,
+    ipAddress: InetSocketAddress,
+  ): Boolean {
+    if(message.senderId != deputy?.second || ipAddress != deputy.first) return false
+    nodesHolder[master.first]?.detach()
+    return true
+  }
+  
   
   private fun correctMasterInfo(
     message: SnakesProto.GameMessage,
     ms: Pair<InetSocketAddress, Int>,
     ipAddress: InetSocketAddress
-  ) = (ms.second == message.senderId && ipAddress == ms.first)
-  
-  
-  fun atFromDeputyDeputyMasterNow(
-    stateHolder: NetworkStateHolder,
-    nodesHolder: ClusterNodesHandler,
-    message: SnakesProto.GameMessage,
-    ipAddress: InetSocketAddress,
-  ) {
-    /**думаю просто дождемся пока мастер умрет*/
+  ): Boolean {
+    return ms.second == message.senderId && ipAddress == ms.first
   }
   
   fun findDeputyInState(

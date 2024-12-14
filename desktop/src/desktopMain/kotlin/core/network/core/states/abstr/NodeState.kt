@@ -1,21 +1,67 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
 
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import java.net.InetSocketAddress
 
 
-interface NodeState {
+sealed interface NodeState {
+  /**
+   * @return next state if necessary
+   * */
   fun atNodeDetachPostProcess(
     node: ClusterNodeT<Node.MsgInfo>,
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>?,
-    changeAccessToken: Any
-  )
+    accessToken: Any
+  ): NodeState?
   
-  fun cleanup()
-  fun toLobby(
-    event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
-  )
+  interface LobbyStateT : NodeState {
+    fun toMaster(
+      changeAccessToken: Any,
+      nodesHandler: ClusterNodesHandler,
+      event: Event.State.ByController.LaunchGame
+    ): NodeState
+    
+    fun toActive(
+      nodesHandler: ClusterNodesHandler,
+      event: Event.State.ByInternal.JoinReqAck,
+      changeAccessToken: Any,
+    ): NodeState
+    
+    fun toPassive(
+      clusterNodesHandler: ClusterNodesHandler,
+      event: Event.State.ByInternal.JoinReqAck,
+      changeAccessToken: Any
+    ): NodeState
+  }
+  
+  interface MasterStateT : NodeState {
+    fun toPassive(
+      changeAccessToken: Any
+    ): NodeState
+    
+    fun toLobby(
+      event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
+    ): NodeState
+  }
+  
+  interface PassiveStateT : NodeState {
+    fun toLobby(
+      event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
+    ): NodeState
+  }
+  
+  interface ActiveStateT : NodeState {
+    fun toMaster(
+      gameState: SnakesProto.GameState, accessToken: Any
+    ): NodeState
+    
+    fun toPassive(
+      changeAccessToken: Any
+    ): NodeState
+  }
 }

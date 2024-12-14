@@ -1,9 +1,9 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 
 sealed class ContextEvent {
   sealed class Controller : ContextEvent() {
@@ -11,10 +11,10 @@ sealed class ContextEvent {
       val internalGameConfig: InternalGameConfig,
     ) : Controller()
     
-    data object ExitGame : Controller() {}
+    data object ExitGame : Controller()
   }
   
-  sealed class Internal {
+  sealed class Internal : ContextEvent() {
     data class DeputyNow(val candidate: ClusterNodeT<Node.MsgInfo>) : Internal()
     
     data class NewState(val state: SnakesProto.GameState) : Internal()

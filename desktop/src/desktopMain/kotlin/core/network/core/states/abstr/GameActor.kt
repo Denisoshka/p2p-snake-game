@@ -1,22 +1,22 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states
+package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import java.net.InetSocketAddress
 
-interface BaseActor {
-  fun pingHandle(
+interface GameActor : BaseActor {
+  fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun ackHandle(
+  fun steerHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun errorHandle(
+  fun stateHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun announcementHandle(
+  fun joinHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
 }

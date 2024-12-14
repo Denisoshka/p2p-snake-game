@@ -1,26 +1,22 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states
+package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import java.net.InetSocketAddress
 
-interface GameActor : BaseActor {
-  fun roleChangeHandle(
+interface BaseActor {
+  fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun steerHandle(
+  fun ackHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun stateHandle(
+  fun errorHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
   
-  fun joinHandle(
+  fun announcementHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   )
-  
-  fun processDetachedNode(node: ClusterNodeT<Node.MsgInfo>)
 }

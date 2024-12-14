@@ -1,7 +1,9 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
+import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
@@ -11,7 +13,6 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.AbstractStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,9 @@ private val Logger = KotlinLogging.logger { StateHolder::class.java }
 private const val kChannelSize = 10
 
 class StateHolder(
+  val gameController: GameController,
   val nodesHolder: ClusterNodesHandler,
+  val netNodesHandler: NetNodeHandler,
 ) : AbstractStateHolder {
   @Volatile var localNode: LocalNode = TODO()
   
@@ -36,11 +39,11 @@ class StateHolder(
   override val gameState: SnakesProto.GameState?
     get() = gameStateHolder.get()
   
-  private val networkStateHolder: AtomicReference<NodeState> = AtomicReference(
+  private val stateHolder: AtomicReference<NodeState> = AtomicReference(
     LobbyState(TODO(), TODO(), TODO())
   )
   override val networkState: NodeState
-    get() = networkStateHolder.get()
+    get() = stateHolder.get()
   
   override val masterDeputy: Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?>?
     get() = masterDeputyHolder.get()
@@ -81,18 +84,15 @@ class StateHolder(
      * master
      */
     if(node.nodeId == msInfo.second) {
-      atMasterDetached(node, msInfo, dpInfo)
+      atMasterDetached(node, msInfo, dpInfo, accessToken)
     } else if(localNode.nodeId == msInfo.second && node.nodeId == dpInfo?.second) {
       atDeputyDetached(node, msInfo, dpInfo)
     } else if(node.nodeId == msInfo.second && localNode.nodeId == dpInfo?.second) {
       atMasterDetachedByDeputy(node, msInfo, dpInfo)
     }
     networkState.atNodeDetachPostProcess(
-      node = node,
-      msInfo = msInfo,
-      dpInfo = dpInfo,
-      changeAccessToken = accessToken
-    )
+      node, msInfo, dpInfo, accessToken
+    )?.let { stateHolder.set(it) }
   }
   
   private fun findNewDeputy(oldDeputy: ClusterNodeT<Node.MsgInfo>?): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
@@ -121,7 +121,7 @@ class StateHolder(
    * потому что это костыль чтобы не было гонки данных изза кривого доступа к
    * функциям которые меняют состояние
    * */
-  private val acessToken = Any()
+  private val accessToken = Any()
   private fun CoroutineScope.clusterObserverActor() = launch {
     try {
       Logger.info { "${StateHolder::class.java} routine launched" }
@@ -130,15 +130,15 @@ class StateHolder(
           select {
             detachNodeChannel.onReceive { node ->
               Logger.trace { "$node detached" }
-              handleNodeDetach(node)
+              handleNodeDetach(node, accessToken)
             }
             deadNodeChannel.onReceive { node ->
               Logger.trace { "$node deactivated" }
-              handleNodeDetach(node)
+              handleNodeDetach(node, accessToken)
             }
             contextEventChannel.onReceive { event ->
               Logger.trace { "$event received" }
-              TODO()
+              
             }
           }
         } catch(e: Exception) {
@@ -189,9 +189,10 @@ class StateHolder(
     masterDeputyHolder.set(newMsDpInfo)
     newDepInfo?.let {
       /**
-       * может быть такая ситуация что у нас депути тоже отключитлся во время
-       * исполнения сего обряда, тогда когда он придет сюда то перевыберется
-       * новый депути и так до бесконечности пока будут кандидаты
+       *  Может быть такая ситуация что у нас депути тоже отключитлся во
+       *  время исполнения сего обряда, тогда когда он придет сюда то
+       *  перевыберется  новый депути и так до бесконечности пока будут
+       *  кандидаты
        * */
       nodesHolder[it.first]?.apply {
         val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
@@ -211,48 +212,15 @@ class StateHolder(
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>,
   ) {
-    val gameState = gameState
-    val netState = networkState
-    if(gameState == null) {
-      Logger.info { "state is null" }
-      netState.toLobby(Event.State.ByController.SwitchToLobby, acessToken)
-    } else if(netState is ActiveState) {
-      netState.toMaster(acessToken, gameState)
-      
+    gameState?.apply {
       val newDep = Utils.findDeputyInState(
-        localNode.nodeId, gameState
+        localNode.nodeId, this
       )
       val newDepInfo = newDep?.let {
         InetSocketAddress(it.ipAddress, it.port) to it.id
       }
       masterDeputyHolder.set(
         (localNode.ipAddress to localNode.nodeId) to newDepInfo
-      )
-      
-      newDepInfo?.let {
-        ClusterNode(
-          nodeState = Node.NodeState.Active,
-          nodeId = it.second,
-          ipAddress = it.first,
-          clusterNodesHolder = nodesHolder,
-          name = newDep.name
-        ).apply {
-          nodesHolder.registerNode(this)
-          val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
-            msgSeq = nextSeqNum,
-            senderId = msInfo.second,
-            receiverId = newDepInfo.second,
-            senderRole = SnakesProto.NodeRole.MASTER,
-            receiverRole = SnakesProto.NodeRole.DEPUTY
-          )
-          sendToNode(msg)
-          addMessageForAck(msg)
-        }
-      }
-    } else {
-      throw IllegalChangeStateAttempt(
-        netState::class.java.name,
-        MasterState::class.java.name,
       )
     }
   }

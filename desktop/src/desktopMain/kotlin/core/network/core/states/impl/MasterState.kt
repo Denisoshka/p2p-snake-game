@@ -1,23 +1,20 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.GameActor
-import d.zhdanov.ccfit.nsu.core.network.core.states.MasterStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.GameActor
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
 import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger(MasterState::class.java.name)
@@ -28,9 +25,9 @@ class MasterState(
   val stateHolder: StateHolder,
   val localNode: LocalNode,
   val gameEngine: GameContext,
+  val gameController: GameController,
   val internalGameConfig: InternalGameConfig,
-  private val nodesInitScope: CoroutineScope,
-) : MasterStateT, GameActor {
+) : NodeState.MasterStateT, GameActor {
   
   init {
     Logger.info { "$this init" }
@@ -39,8 +36,7 @@ class MasterState(
   
   override fun joinHandle(
     ipAddress: InetSocketAddress,
-    message: SnakesProto.GameMessage,
-    msgT: MessageType
+    message: SnakesProto.GameMessage
   ) {
     val joinMsg = message.join
     try {
@@ -96,6 +92,13 @@ class MasterState(
     }
   }
   
+  override fun steerHandle(
+    ipAddress: InetSocketAddress,
+    message: SnakesProto.GameMessage
+  ) {
+    TODO("Not yet implemented")
+  }
+  
   override fun errorHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   ) {
@@ -113,37 +116,27 @@ class MasterState(
     TODO("Not yet implemented")
   }
   
-  override fun joinHandle(
-    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
-  ) {
-    TODO("Not yet implemented")
-  }
-  
-  override fun processDetachedNode(node: ClusterNodeT<Node.MsgInfo>) {
-    TODO("Not yet implemented")
-  }
-  
   fun submitSteerMsg(steerMsg: SteerMsg) {
     player.handleEvent(
       steerMsg, stateHolder.nextSeqNum
     )
   }
   
-  override fun cleanup() {
-    Logger.info { "$this cleanup" }
-    gameEngine.shutdown()
-    nodesInitScope.cancel()
-  }
   
   override fun toLobby(
     event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
-  ) {
+  ): NodeState {
+    gameEngine.shutdown()
+    nodesHolder.shutdown()
+    return LobbyState(
+      stateHolder
     
+    )
   }
   
   override fun toPassive(
     changeAccessToken: Any
-  ) {
+  ): NodeState {
     val (_, depInfo) = stateHolder.masterDeputy!!
     if(depInfo != null) {
       val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
@@ -174,28 +167,12 @@ class MasterState(
     }
   }
   
-  fun findNewDeputy(
-    oldDeputyId: Int?
-  ): Pair<Pair<InetSocketAddress, Int>, Pair<InetSocketAddress, Int>?> {
-    val (masterInfo, _) = stateHolder.masterDeputy
-      ?: throw IllegalChangeStateAttempt("current master deputy absent")
-    
-    val deputyCandidate = nodesHolder.find {
-      it.value.nodeState == Node.NodeState.Active && it.value.payload != null && it.value.nodeId != oldDeputyId
-    }?.value
-    
-    val newDeputyInfo = deputyCandidate?.let {
-      Pair(it.ipAddress, it.nodeId)
-    }
-    return (masterInfo to newDeputyInfo)
-  }
-  
   override fun atNodeDetachPostProcess(
     node: ClusterNodeT<Node.MsgInfo>,
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>?,
-    changeAccessToken: Any
-  ) {
+    accessToken: Any
+  ): NodeState? {
     if(node.nodeId == localNode.nodeId) {
       /**
        * Ну вообще у нас может отвалиться либо наша нода, когда мы становимся
@@ -217,14 +194,14 @@ class MasterState(
           it.sendToNode(msg)
           it.addMessageForAck(msg)
         }
-        toPassive(changeAccessToken)
+        return toPassive(accessToken)
       } else {
-        toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
+        return toLobby(Event.State.ByController.SwitchToLobby, accessToken)
       }
     } else if(node.nodeId != localNode.nodeId) {
       /**
        * Либо отъебнули не мы и тогда все ок, просто говорим что чел умер
-       * */
+       **/
       val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
         msgSeq = stateHolder.nextSeqNum,
         senderId = localNode.nodeId,
@@ -235,5 +212,6 @@ class MasterState(
       node.sendToNode(msg)
       node.addMessageForAck(msg)
     }
+    return null
   }
 }

@@ -11,8 +11,8 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.ActiveStateT
-import d.zhdanov.ccfit.nsu.core.network.core.states.GameActor
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.GameActor
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -26,7 +26,7 @@ class ActiveState(
   private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
   private val stateHolder: StateHolder,
-) : ActiveStateT, GameActor {
+) : NodeState.ActiveStateT, GameActor {
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -38,31 +38,53 @@ class ActiveState(
       return
     }
     
+    val (ms, dp) = stateHolder.masterDeputy ?: return
+    var ack: SnakesProto.GameMessage? = null
     if(MessageUtils.RoleChangeIdentifier.fromDeputyDeputyMasterNow(message)) {
-      Utils.atfromDeputyDeputyMasterNow(message)
-    } else if(MessageUtils.RoleChangeIdentifier.fromMasterPlayerDead(message)) {
-      Utils.atFromMasterPlayerDead(
-        localNode, nodesHolder, stateHolder, message, ipAddress,
-      )
-    } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeDeputyNow(message)) {
-      Utils.atFromMasterNodeDeputyNow(
-        localNode, nodesHolder, stateHolder, message, ipAddress,
-      )
-    } else if(MessageUtils.RoleChangeIdentifier.fromMasterNodeMasterNow(message)) {
-      Utils.atFromMasterNodeMasterNow(
-        localNode, nodesHolder, stateHolder, message, ipAddress,
-      )
-    } else {
-      Logger.debug {
-        "irrelevant ${
-          message.typeCase
-        } receiverRole : ${
-          message.roleChange.receiverRole
-        } senderRole : ${
-          message.roleChange.senderRole
-        }"
+      if(Utils.atFromDeputyDeputyMasterNow(
+          ms, dp, nodesHolder, message, ipAddress
+        )
+      ) {
+        ack = MessageUtils.MessageProducer.getAckMsg(
+          message.msgSeq, dp!!.second, localNode.nodeId
+        )
       }
     }
+    if(MessageUtils.RoleChangeIdentifier.fromMasterPlayerDead(message)) {
+      if(Utils.atFromMasterPlayerDead(
+          ms, localNode, message, ipAddress,
+        )
+      ) {
+        ack = ack ?: MessageUtils.MessageProducer.getAckMsg(
+          message.msgSeq, ms.second, localNode.nodeId
+        )
+      }
+    }
+    if(MessageUtils.RoleChangeIdentifier.fromMasterNodeDeputyNow(message)) {
+      Utils.atFromMasterNodeDeputyNow(
+        ms, dp, localNode, stateHolder, message, ipAddress,
+      )
+      ack = ack ?: MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, ms.second, localNode.nodeId
+      )
+    }
+    if(MessageUtils.RoleChangeIdentifier.fromMasterNodeMasterNow(message)) {
+      Utils.atFromMasterNodeMasterNow(
+        ms, dp, localNode, nodesHolder, message, ipAddress,
+      )
+      ack = ack ?: MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, ms.second, localNode.nodeId
+      )
+    }
+    if(ack != null) {
+    
+    } else {
+      Logger.trace {
+        "receive ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
+      }
+    }
+    
+    
   }
   
   override fun steerHandle(
@@ -179,8 +201,28 @@ class ActiveState(
   }
   
   override fun toMaster(
-    accessToken: Any, gameState: SnakesProto.GameState?
+    gameState: SnakesProto.GameState, accessToken: Any
   ) {
+    newDepInfo?.let {
+      ClusterNode(
+        nodeState = Node.NodeState.Active,
+        nodeId = it.second,
+        ipAddress = it.first,
+        clusterNodesHolder = nodesHolder,
+        name = newDep.name
+      ).apply {
+        nodesHolder.registerNode(this)
+        val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
+          msgSeq = nextSeqNum,
+          senderId = msInfo.second,
+          receiverId = newDepInfo.second,
+          senderRole = SnakesProto.NodeRole.MASTER,
+          receiverRole = SnakesProto.NodeRole.DEPUTY
+        )
+        sendToNode(msg)
+        addMessageForAck(msg)
+      }
+    }
     val newMs = localNode.ipAddress to localNode.nodeId
     stateHolder.reconfigureMasterDeputy(newMs to null, accessToken)
     val gamePlayerInfo = GamePlayerInfo(
@@ -279,23 +321,47 @@ class ActiveState(
     node: ClusterNodeT<Node.MsgInfo>,
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>?,
-    changeAccessToken: Any
+    accessToken: Any
   ) {
-    if(node.nodeId != localNode.nodeId) return
     /**
-     * В этом стейте можем отъебнуть только мы, тогда мы просто говорим
-     * мастеру что мы становимся вивером
-     */
-    nodesHolder[msInfo.first]?.let {
-      val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
-        msgSeq = stateHolder.nextSeqNum,
-        senderId = localNode.nodeId,
-        receiverId = msInfo.second,
-        senderRole = SnakesProto.NodeRole.VIEWER,
-        receiverRole = SnakesProto.NodeRole.MASTER,
-      )
-      it.sendToNode(msg)
-      it.addMessageForAck(msg)
+     * Здесь есть несколько вариантов развития событий,
+     * 1) Отъебнули мы, тогда говорим мастеру что мы теперь вивер,
+     * 2) Отъебнул мастер, тогда смотрим на депути
+     * 2.1) Мы депути
+     * 2.1.1) Есть стейт, то мы мастер
+     * 2.1.2) Нет стейта, то мы ливаем нахуй
+     * 2.2) Если депути не мы то мы остаемся и депути вообще существует то
+     * остаемся в том же стейте
+     * 2.3) Если депути нет то мы выходим в лобби, ибо че за хуйня
+     * */
+    if(node.nodeId == localNode.nodeId) {
+      /**
+       * В этом стейте можем отъебнуть только мы, тогда мы просто говорим
+       * мастеру, что мы становимся вивером
+       */
+      nodesHolder[msInfo.first]?.let {
+        val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
+          msgSeq = stateHolder.nextSeqNum,
+          senderId = localNode.nodeId,
+          receiverId = msInfo.second,
+          senderRole = SnakesProto.NodeRole.VIEWER,
+          receiverRole = SnakesProto.NodeRole.MASTER,
+        )
+        it.sendToNode(msg)
+        it.addMessageForAck(msg)
+      }
+      toPassive(accessToken)
+    } else if(node.nodeId == msInfo.second) {
+      if(dpInfo != null && dpInfo.second == localNode.nodeId) {
+        val state = stateHolder.gameState
+        if(state != null) {
+          toMaster(state, accessToken)
+        } else {
+          toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+        }
+      } else if(dpInfo != null) {
+        toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+      }
     }
   }
 }

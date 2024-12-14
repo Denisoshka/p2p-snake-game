@@ -14,7 +14,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.LobbyStateT
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState

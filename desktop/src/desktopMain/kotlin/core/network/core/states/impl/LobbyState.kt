@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import core.network.core.connection.lobby.impl.NetNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.ActiveStateUtils
@@ -10,8 +9,10 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
-import d.zhdanov.ccfit.nsu.core.network.core.states.LobbyStateT
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -20,11 +21,11 @@ import java.net.InetSocketAddress
 private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
-  private val stateHolder: NetworkStateHolder,
+  private val stateHolder: StateHolder,
   private val gameController: GameController,
   private val netNodesHandler: NetNodeHandler,
-) : LobbyStateT {
-  override fun requestJoinToGame(
+) : NodeState.LobbyStateT {
+  fun requestJoinToGame(
     event: Event.State.ByController.JoinReq
   ) {
     val addr = InetSocketAddress(
@@ -79,7 +80,6 @@ class LobbyState(
   }
   
   
-  
   override fun errorHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -94,15 +94,12 @@ class LobbyState(
     }
   }
   
-  override fun cleanup() {
-    netNodesHandler.shutdown()
-  }
   
   override fun toMaster(
     changeAccessToken: Any,
     nodesHandler: ClusterNodesHandler,
     event: Event.State.ByController.LaunchGame
-  ) {
+  ): NodeState {
     try {
       val playerInfo = GamePlayerInfo(event.internalGameConfig.playerName, 0)
       nodesHandler.launch()
@@ -125,7 +122,7 @@ class LobbyState(
     nodesHandler: ClusterNodesHandler,
     event: Event.State.ByInternal.JoinReqAck,
     changeAccessToken: Any
-  ) {
+  ): NodeState {
     try {
       val destAddr = InetSocketAddress(
         event.onEventAck.gameAnnouncement.host,
@@ -153,7 +150,7 @@ class LobbyState(
     clusterNodesHandler: ClusterNodesHandler,
     event: Event.State.ByInternal.JoinReqAck,
     changeAccessToken: Any
-  ) {
+  ): NodeState {
     try {
       val destAddr = InetSocketAddress(
         event.onEventAck.gameAnnouncement.host,
@@ -173,6 +170,15 @@ class LobbyState(
       clusterNodesHandler.shutdown()
       throw e
     }
+  }
+  
+  override fun atNodeDetachPostProcess(
+    node: ClusterNodeT<Node.MsgInfo>,
+    msInfo: Pair<InetSocketAddress, Int>,
+    dpInfo: Pair<InetSocketAddress, Int>?,
+    accessToken: Any
+  ): NodeState? {
+    TODO("Not yet implemented")
   }
   
   companion object LobbyStateDelayProvider {
