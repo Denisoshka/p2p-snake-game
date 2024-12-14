@@ -196,7 +196,7 @@ class MasterState(
     dpInfo: Pair<InetSocketAddress, Int>?,
     changeAccessToken: Any
   ) {
-    if(node.nodeId == localNode.nodeId && dpInfo != null) {
+    if(node.nodeId == localNode.nodeId) {
       /**
        * Ну вообще у нас может отвалиться либо наша нода, когда мы становимся
        * вивером, тогда мы должны просто сказать что мы отваливаемся,
@@ -205,16 +205,21 @@ class MasterState(
        * это не воднует, в протоколе не описани что делать), если он не
        * пришлет нам нихуя, то мы из пассив уйдем в лобби
        **/
-      nodesHolder[dpInfo.first]?.let {
-        val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
-          msgSeq = stateHolder.nextSeqNum,
-          senderId = localNode.nodeId,
-          receiverId = dpInfo.second,
-          senderRole = SnakesProto.NodeRole.VIEWER,
-          receiverRole = SnakesProto.NodeRole.MASTER,
-        )
-        it.sendToNode(msg)
-        it.addMessageForAck(msg)
+      if(dpInfo != null) {
+        nodesHolder[dpInfo.first]?.let {
+          val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
+            msgSeq = stateHolder.nextSeqNum,
+            senderId = localNode.nodeId,
+            receiverId = dpInfo.second,
+            senderRole = SnakesProto.NodeRole.VIEWER,
+            receiverRole = SnakesProto.NodeRole.MASTER,
+          )
+          it.sendToNode(msg)
+          it.addMessageForAck(msg)
+        }
+        toPassive(changeAccessToken)
+      } else {
+        toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
       }
     } else if(node.nodeId != localNode.nodeId) {
       /**

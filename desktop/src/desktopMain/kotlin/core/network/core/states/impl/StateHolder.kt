@@ -72,11 +72,14 @@ class StateHolder(
     node: ClusterNodeT<Node.MsgInfo>, accessToken: Any
   ) {
     val (msInfo, dpInfo) = masterDeputy!!
+    
     /**
      * Вообще тк у нас исполнение в подобных функциях линейно то нужно
      * использовать !! тк оно не будет занулено
+     *
+     * Чисто напоминание для себя что мы не можем быть одновременно deputy и
+     * master
      */
-    
     if(node.nodeId == msInfo.second) {
       atMasterDetached(node, msInfo, dpInfo)
     } else if(localNode.nodeId == msInfo.second && node.nodeId == dpInfo?.second) {
@@ -118,7 +121,7 @@ class StateHolder(
    * потому что это костыль чтобы не было гонки данных изза кривого доступа к
    * функциям которые меняют состояние
    * */
-  private val changeToken = Any()
+  private val acessToken = Any()
   private fun CoroutineScope.clusterObserverActor() = launch {
     try {
       Logger.info { "${StateHolder::class.java} routine launched" }
@@ -153,6 +156,7 @@ class StateHolder(
     msNode: ClusterNodeT<Node.MsgInfo>,
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>?,
+    accessToken: Any,
   ) {
     if(dpInfo != null) {
       masterDeputyHolder.set(dpInfo to null)
@@ -172,10 +176,6 @@ class StateHolder(
         forEach(newMsNode::sendToNode)
         newMsNode.addAllMessageForAck(this)
       }
-
-//      TODO нужно сделать чек не наша ли это нода, проверяем позже
-    } else {
-      networkState.toLobby(Event.State.ByController.SwitchToLobby, TODO())
     }
   }
   
@@ -215,9 +215,9 @@ class StateHolder(
     val netState = networkState
     if(gameState == null) {
       Logger.info { "state is null" }
-      netState.toLobby(Event.State.ByController.SwitchToLobby, changeToken)
+      netState.toLobby(Event.State.ByController.SwitchToLobby, acessToken)
     } else if(netState is ActiveState) {
-      netState.toMaster(changeToken, gameState)
+      netState.toMaster(acessToken, gameState)
       
       val newDep = Utils.findDeputyInState(
         localNode.nodeId, gameState
