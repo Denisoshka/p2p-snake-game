@@ -5,7 +5,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ContextEvent
@@ -43,7 +43,7 @@ object Utils {
   fun submitState(
     player: LocalObserverContext,
     stateSeq: Int,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     stateHolder: StateHolder,
     state: SnakesProto.GameState.Builder,
   ) {
@@ -52,7 +52,7 @@ object Utils {
     val (ms, dp) = msdp
     player.shootContextState(state, ms, dp)
     
-    for((_, node) in clusterNodesHandler) {
+    for((_, node) in clusterNodesHolder) {
       node.payload.shootContextState(state, ms, dp)
     }
     state.apply { stateOrder = stateSeq }.build()
@@ -60,7 +60,7 @@ object Utils {
       setState(state)
     }.build()
     
-    for((_, node) in clusterNodesHandler) {
+    for((_, node) in clusterNodesHolder) {
       node.payload ?: continue
       
       val msg = MessageUtils.MessageProducer.getStateMsg(
@@ -72,9 +72,9 @@ object Utils {
     }
   }
   
-  fun nonLobbyPingMsg(
+  fun nonLobbyOnPingMsg(
     stateHolder: StateHolder,
-    nodesHolder: ClusterNodesHandler,
+    nodesHolder: ClusterNodesHolder,
     localNode: LocalNode,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -90,7 +90,7 @@ object Utils {
   }
   
   fun nonLobbyOnAck(
-    nodesHolder: ClusterNodesHandler,
+    nodesHolder: ClusterNodesHolder,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
   ) {
@@ -103,20 +103,27 @@ object Utils {
    * */
   fun onStateMsg(
     stateHolder: StateHolder,
+    nodesHolder: ClusterNodesHolder,
+    localNode: LocalNode,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage
-  ): Pair<InetSocketAddress, Int>? {
-    val (ms, _) = stateHolder.masterDeputy ?: return null
-    if(ms.first != ipAddress) return null
-    val curState = stateHolder.gameState ?: return null
+  ) {
+    val (ms, _) = stateHolder.masterDeputy ?: return
+    if(ms.first != ipAddress) return
+    val curState = stateHolder.gameState ?: return
     val newStateSeq = message.state.state.stateOrder
-    if(curState.stateOrder >= newStateSeq) return ms
+    if(curState.stateOrder >= newStateSeq) return
+    val ack = MessageUtils.MessageProducer.getAckMsg(
+      msgSeq = message.msgSeq,
+      senderId = ms.second,
+      receiverId = localNode.nodeId
+    )
+    nodesHolder[ipAddress]?.sendToNode(ack)
     runBlocking {
       stateHolder.handleContextEvent(
         ContextEvent.Internal.NewState(message.state.state)
       )
     }
-    return ms
   }
   
   suspend fun onJoinGameAck(
@@ -172,7 +179,7 @@ object Utils {
     master: Pair<InetSocketAddress, Int>,
     deputy: Pair<InetSocketAddress, Int>?,
     localNode: LocalNode,
-    nodesHolder: ClusterNodesHandler,
+    nodesHolder: ClusterNodesHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
   ): Boolean {
@@ -186,7 +193,7 @@ object Utils {
   fun atFromDeputyDeputyMasterNow(
     master: Pair<InetSocketAddress, Int>,
     deputy: Pair<InetSocketAddress, Int>?,
-    nodesHolder: ClusterNodesHandler,
+    nodesHolder: ClusterNodesHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
   ): Boolean {

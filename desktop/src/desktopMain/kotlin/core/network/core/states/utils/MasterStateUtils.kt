@@ -2,7 +2,7 @@ package core.network.core.states.utils
 
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
@@ -37,7 +37,7 @@ object MasterStateUtils {
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
   ): MasterState {
     val eng = GameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = init(
@@ -53,7 +53,7 @@ object MasterStateUtils {
         internalGameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,
-        nodesHolder = clusterNodesHandler,
+        nodesHolder = clusterNodesHolder,
         nodesInitScope = scope
       )
     } catch(e: Exception) {
@@ -64,7 +64,7 @@ object MasterStateUtils {
   
   fun prepareMasterFromState(
     state: SnakesProto.GameMessage.StateMsg,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
@@ -76,7 +76,7 @@ object MasterStateUtils {
         gameEngine = eng,
         gameConfig = gameConfig,
         gamePlayerInfo = gamePlayerInfo,
-        clusterNodesHandler = clusterNodesHandler,
+        clusterNodesHolder = clusterNodesHolder,
         initScope = scope,
         state = state
       )
@@ -88,7 +88,7 @@ object MasterStateUtils {
         internalGameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,
-        nodesHolder = clusterNodesHandler,
+        nodesHolder = clusterNodesHolder,
         gamePlayerInfo = gamePlayerInfo,
         player = player,
         nodesInitScope = scope
@@ -115,11 +115,11 @@ object MasterStateUtils {
   private fun initNodes(
     state: SnakesProto.GameMessage.StateMsg,
     initScope: CoroutineScope,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
   ) = state.let {
     with(MasterStateUtils) {
       initScope.restoreNodes(
-        it, clusterNodesHandler
+        it, clusterNodesHolder
       )
     }
   }
@@ -137,11 +137,11 @@ object MasterStateUtils {
     gameEngine: GameContext,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     initScope: CoroutineScope,
     state: SnakesProto.GameMessage.StateMsg,
   ): Map<Int, ActiveEntity> {
-    val nodes = initNodes(state, initScope, clusterNodesHandler)
+    val nodes = initNodes(state, initScope, clusterNodesHolder)
     val ret = gameEngine.initGame(
       gameConfig.gameSettings, gamePlayerInfo, state
     ).associateBy { it.id }
@@ -200,7 +200,7 @@ object MasterStateUtils {
   
   private fun CoroutineScope.restoreNodes(
     state: SnakesProto.GameMessage.StateMsg,
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
   ): List<Deferred<ClusterNode?>> {
     return state.state.players.playersList.filter {
       it.role != SnakesProto.NodeRole.MASTER && it.role != null
@@ -224,11 +224,11 @@ object MasterStateUtils {
           return@async ClusterNode(
             nodeId = it.id,
             ipAddress = InetSocketAddress(it.ipAddress!!, it.port),
-            clusterNodesHolder = clusterNodesHandler,
+            clusterNodesHolder = clusterNodesHolder,
             nodeState = nodeState,
             name = it.name
           ).apply {
-            clusterNodesHandler.registerNode(this)
+            clusterNodesHolder.registerNode(this)
           }
         } catch(e: Exception) {
           Logger.error(e) {

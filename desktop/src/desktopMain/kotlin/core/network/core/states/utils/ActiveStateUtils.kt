@@ -2,7 +2,7 @@ package core.network.core.states.utils
 
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
@@ -10,7 +10,7 @@ import java.net.InetSocketAddress
 
 object ActiveStateUtils {
   fun prepareActiveState(
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     stateHolder: NetworkStateHolder,
     destAddr: InetSocketAddress,
     internalGameConfig: InternalGameConfig,
@@ -21,14 +21,14 @@ object ActiveStateUtils {
       nodeState = Node.NodeState.Passive,
       nodeId = masterId,
       ipAddress = destAddr,
-      clusterNodesHolder = clusterNodesHandler,
+      clusterNodesHolder = clusterNodesHolder,
       name = ""
     )
-    clusterNodesHandler.registerNode(masterNode)
+    clusterNodesHolder.registerNode(masterNode)
     return ActiveState(
       internalGameConfig = internalGameConfig,
       stateHolder = stateHolder,
-      nodesHolder = clusterNodesHandler,
+      nodesHolder = clusterNodesHolder,
       nodeId = playerId
     )
   }

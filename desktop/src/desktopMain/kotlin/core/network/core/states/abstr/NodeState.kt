@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import java.net.InetSocketAddress
 
@@ -22,18 +22,18 @@ sealed interface NodeState {
   interface LobbyStateT : NodeState {
     fun toMaster(
       changeAccessToken: Any,
-      nodesHandler: ClusterNodesHandler,
+      nodesHandler: ClusterNodesHolder,
       event: Event.State.ByController.LaunchGame
     ): NodeState
     
     fun toActive(
-      nodesHandler: ClusterNodesHandler,
+      nodesHandler: ClusterNodesHolder,
       event: Event.State.ByInternal.JoinReqAck,
       changeAccessToken: Any,
     ): NodeState
     
     fun toPassive(
-      clusterNodesHandler: ClusterNodesHandler,
+      clusterNodesHolder: ClusterNodesHolder,
       event: Event.State.ByInternal.JoinReqAck,
       changeAccessToken: Any
     ): NodeState
@@ -62,6 +62,10 @@ sealed interface NodeState {
     
     fun toPassive(
       changeAccessToken: Any
+    ): NodeState
+    
+    fun toLobby(
+      event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
     ): NodeState
   }
 }

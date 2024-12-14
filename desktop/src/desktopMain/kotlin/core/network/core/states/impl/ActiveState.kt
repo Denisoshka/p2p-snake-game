@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.GameActor
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
@@ -27,7 +27,7 @@ class ActiveState(
   private val gameConfig: InternalGameConfig,
 ) : NodeState.ActiveStateT, GameActor {
   private val netNodesHandler: NetNodeHandler = stateHolder.netNodesHandler
-  private val nodesHolder: ClusterNodesHandler = stateHolder.nodesHolder
+  private val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   private val gameController: GameController = stateHolder.gameController
   
   override fun roleChangeHandle(
@@ -35,7 +35,7 @@ class ActiveState(
     message: SnakesProto.GameMessage,
   ) {
     if(!MessageUtils.RoleChangeIdentifier.correctRoleChangeMsg(message)) {
-      Logger.debug {
+      Logger.trace {
         "incorrect typeCase ${message.typeCase} has receiverId ${message.hasReceiverId()} has senderId ${message.hasSenderId()} "
       }
       return
@@ -101,14 +101,13 @@ class ActiveState(
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    Utils.onStateMsg(stateHolder, ipAddress, message)?.let {
-      val ack = MessageUtils.MessageProducer.getAckMsg(
-        msgSeq = message.msgSeq,
-        senderId = it.second,
-        receiverId = localNode.nodeId
-      )
-      nodesHolder[ipAddress]?.sendToNode(ack)
-    }
+    Utils.onStateMsg(
+      stateHolder = stateHolder,
+      nodesHolder = nodesHolder,
+      localNode = localNode,
+      ipAddress = ipAddress,
+      message = message
+    )
   }
   
   override fun joinHandle(
@@ -120,7 +119,7 @@ class ActiveState(
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    Utils.nonLobbyPingMsg(
+    Utils.nonLobbyOnPingMsg(
       stateHolder = stateHolder,
       nodesHolder = nodesHolder,
       localNode = localNode,
@@ -176,7 +175,7 @@ class ActiveState(
   
   override fun toMaster(
     gameState: SnakesProto.GameState, accessToken: Any
-  ) {
+  ): NodeState {
     newDepInfo?.let {
       ClusterNode(
         nodeState = Node.NodeState.Active,
@@ -209,7 +208,7 @@ class ActiveState(
     try {
       MasterStateUtils.prepareMasterFromState(
         state = gameState,
-        clusterNodesHandler = nodesHolder,
+        clusterNodesHolder = nodesHolder,
         gameConfig = internalGameConfig,
         gamePlayerInfo = gamePlayerInfo,
         stateHolder = stateHolder
@@ -251,17 +250,13 @@ class ActiveState(
     }
   }
   
-  /*private fun toLobby(
+  override fun toLobby(
     event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
-  ) {
+  ): LobbyState {
     nodesHolder.shutdown()
-    LobbyState(
-      stateHolder = stateHolder,
-      netNodesHandler = netNodesHandler,
-      gameController = gameController,
-    ).apply { stateHolder.setupNewState(this, changeAccessToken) }
     gameController.openLobby()
-  }*/
+    return LobbyState(stateHolder = stateHolder)
+  }
   
   override fun toPassive(
     changeAccessToken: Any
@@ -281,14 +276,12 @@ class ActiveState(
        * ну если мастера вдруг не будет то мы обратимся к deputy
        * */
     }
-    PassiveState(
-      nodeId = localNode.nodeId,
-      gameConfig = internalGameConfig,
+    return PassiveState(
+      localNode = localNode,
+      gameConfig = gameConfig,
       stateHolder = stateHolder,
-      clusterNodesHandler = nodesHolder,
-    ).apply {
-      stateHolder.setupNewState(this, changeAccessToken)
-    }
+      nodesHolder = nodesHolder
+    )
   }
   
   override fun atNodeDetachPostProcess(
@@ -319,7 +312,6 @@ class ActiveState(
           senderId = localNode.nodeId,
           receiverId = msInfo.second,
           senderRole = SnakesProto.NodeRole.VIEWER,
-          receiverRole = SnakesProto.NodeRole.MASTER,
         )
         it.sendToNode(msg)
         it.addMessageForAck(msg)
@@ -328,10 +320,10 @@ class ActiveState(
     } else if(node.nodeId == msInfo.second) {
       if(dpInfo != null && dpInfo.second == localNode.nodeId) {
         val state = stateHolder.gameState
-        if(state != null) {
-          return toMaster(state, accessToken)
+        return if(state != null) {
+          toMaster(state, accessToken)
         } else {
-          return toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+          toLobby(Event.State.ByController.SwitchToLobby, accessToken)
         }
       } else if(dpInfo != null) {
         return toLobby(Event.State.ByController.SwitchToLobby, accessToken)

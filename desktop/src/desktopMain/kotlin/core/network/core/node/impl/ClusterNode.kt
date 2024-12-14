@@ -31,7 +31,7 @@ class ClusterNode(
   nodeState: Node.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
-  private val clusterNodesHolder: ClusterNodesHandler,
+  private val clusterNodesHolder: ClusterNodesHolder,
   override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()

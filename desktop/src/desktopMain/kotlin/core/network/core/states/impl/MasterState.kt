@@ -8,7 +8,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.GameActor
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
@@ -21,13 +21,13 @@ private val Logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val JoinInUpdateQ = 10
 
 class MasterState(
-  val nodesHolder: ClusterNodesHandler,
   val stateHolder: StateHolder,
   val localNode: LocalNode,
   val gameEngine: GameContext,
-  val gameController: GameController,
   val internalGameConfig: InternalGameConfig,
 ) : NodeState.MasterStateT, GameActor {
+  val gameController: GameController = stateHolder.gameController
+  val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   
   init {
     Logger.info { "$this init" }
@@ -76,7 +76,7 @@ class MasterState(
   
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
-  ) = stateHolder.nonLobbyOnAck(ipAddress, message, msgT)
+  )
   
   
   override fun roleChangeHandle(
@@ -154,7 +154,7 @@ class MasterState(
         nodeId = localNode.nodeId,
         gameConfig = internalGameConfig,
         stateHolder = stateHolder,
-        clusterNodesHandler = nodesHolder,
+        nodesHolder = nodesHolder,
       ).apply {
         stateHolder.setupNewState(this, changeAccessToken)
         nodesHolder.filter {

@@ -9,7 +9,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttemp
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.AbstractStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
@@ -31,7 +31,7 @@ private const val kChannelSize = 10
 
 class StateHolder(
   val gameController: GameController,
-  val nodesHolder: ClusterNodesHandler,
+  val nodesHolder: ClusterNodesHolder,
   val netNodesHandler: NetNodeHandler,
   private val unicastNetHandler: UnicastNetHandler,
 ) : AbstractStateHolder {
@@ -65,7 +65,6 @@ class StateHolder(
   ) = unicastNetHandler.sendUnicastMessage(msg, nodeAddress)
   
   
-  
   suspend fun handleContextEvent(event: ContextEvent) {
     contextEventChannel.send(event)
   }
@@ -85,7 +84,7 @@ class StateHolder(
     
     /**
      * Вообще тк у нас исполнение в подобных функциях линейно то нужно
-     * использовать !! тк оно не будет занулено
+     * использовать !! так как оно не будет занулено
      *
      * Чисто напоминание для себя что мы не можем быть одновременно deputy и
      * master

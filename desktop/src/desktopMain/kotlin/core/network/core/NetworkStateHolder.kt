@@ -3,7 +3,7 @@ package d.zhdanov.ccfit.nsu.core.network.core
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.Utils
@@ -341,7 +341,7 @@ class NetworkStateHolder(
   )
   
   private data class NodeHandlers(
-    val clusterNodesHandler: ClusterNodesHandler,
+    val clusterNodesHolder: ClusterNodesHolder,
     val netNodesHandler: NetNodeHandler
   )
   

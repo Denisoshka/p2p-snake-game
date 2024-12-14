@@ -11,7 +11,7 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -22,9 +22,10 @@ private val Logger = KotlinLogging.logger(LobbyState::class.java.name)
 
 class LobbyState(
   private val stateHolder: StateHolder,
-  private val gameController: GameController,
-  private val netNodesHandler: NetNodeHandler,
 ) : NodeState.LobbyStateT {
+  private val gameController: GameController = stateHolder.gameController
+  private val netNodesHandler: NetNodeHandler = stateHolder.netNodesHandler
+  
   fun requestJoinToGame(
     event: Event.State.ByController.JoinReq
   ) {
@@ -97,14 +98,14 @@ class LobbyState(
   
   override fun toMaster(
     changeAccessToken: Any,
-    nodesHandler: ClusterNodesHandler,
+    nodesHandler: ClusterNodesHolder,
     event: Event.State.ByController.LaunchGame
   ): NodeState {
     try {
       val playerInfo = GamePlayerInfo(event.internalGameConfig.playerName, 0)
       nodesHandler.launch()
       MasterStateUtils.prepareMasterContext(
-        clusterNodesHandler = nodesHandler,
+        clusterNodesHolder = nodesHandler,
         gamePlayerInfo = playerInfo,
         gameConfig = event.internalGameConfig,
         stateHolder = stateHolder,
@@ -119,7 +120,7 @@ class LobbyState(
   }
   
   override fun toActive(
-    nodesHandler: ClusterNodesHandler,
+    nodesHandler: ClusterNodesHolder,
     event: Event.State.ByInternal.JoinReqAck,
     changeAccessToken: Any
   ): NodeState {
@@ -130,7 +131,7 @@ class LobbyState(
       )
       nodesHandler.launch()
       ActiveStateUtils.prepareActiveState(
-        clusterNodesHandler = nodesHandler,
+        clusterNodesHolder = nodesHandler,
         stateHolder = stateHolder,
         destAddr = destAddr,
         internalGameConfig = event.internalGameConfig,
@@ -147,7 +148,7 @@ class LobbyState(
   
   
   override fun toPassive(
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     event: Event.State.ByInternal.JoinReqAck,
     changeAccessToken: Any
   ): NodeState {
@@ -156,10 +157,10 @@ class LobbyState(
         event.onEventAck.gameAnnouncement.host,
         event.onEventAck.gameAnnouncement.port
       )
-      clusterNodesHandler.launch()
+      clusterNodesHolder.launch()
       PassiveStateUtils.createPassiveState(
         stateHolder = stateHolder,
-        clusterNodesHandler = clusterNodesHandler,
+        clusterNodesHolder = clusterNodesHolder,
         destAddr = destAddr,
         internalGameConfig = event.internalGameConfig,
         masterId = event.senderId,
@@ -167,7 +168,7 @@ class LobbyState(
       ).apply { stateHolder.setupNewState(this, changeAccessToken) }
     } catch(e: Exception) {
       Logger.error(e) { "unexpected error during switch to passive game" }
-      clusterNodesHandler.shutdown()
+      clusterNodesHolder.shutdown()
       throw e
     }
   }

@@ -2,7 +2,7 @@ package core.network.core.states.utils
 
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
@@ -10,7 +10,7 @@ import java.net.InetSocketAddress
 
 object PassiveStateUtils {
   fun createPassiveState(
-    clusterNodesHandler: ClusterNodesHandler,
+    clusterNodesHolder: ClusterNodesHolder,
     stateHolder: NetworkStateHolder,
     destAddr: InetSocketAddress,
     internalGameConfig: InternalGameConfig,
@@ -21,15 +21,15 @@ object PassiveStateUtils {
       nodeState = Node.NodeState.Passive,
       nodeId = masterId,
       ipAddress = destAddr,
-      clusterNodesHolder = clusterNodesHandler,
+      clusterNodesHolder = clusterNodesHolder,
       name = ""
     )
-    clusterNodesHandler.registerNode(masterNode)
+    clusterNodesHolder.registerNode(masterNode)
     return PassiveState(
       nodeId = playerId,
       stateHolder = stateHolder,
       gameConfig = internalGameConfig,
-      clusterNodesHandler = clusterNodesHandler
+      nodesHolder = clusterNodesHolder
     )
   }
 }

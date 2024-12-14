@@ -25,7 +25,7 @@ class LocalNode(
   nodeState: Node.NodeState,
   override val nodeId: Int,
   override val name: String,
-  private val clusterNodesHandler: ClusterNodesHandler
+  private val clusterNodesHolder: ClusterNodesHolder
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
@@ -88,7 +88,7 @@ class LocalNode(
               }
               payload?.observerDetached()
               stateHolder.set(state to DefaultObserverContext)
-              this@LocalNode.clusterNodesHandler.apply {
+              this@LocalNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@LocalNode)
               }
             }
@@ -106,7 +106,7 @@ class LocalNode(
               onTerminatedHandler.close()
               payload?.observerDetached()
               stateHolder.set(state to null)
-              this@LocalNode.clusterNodesHandler.apply {
+              this@LocalNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@LocalNode)
               }
             }

@@ -15,9 +15,9 @@ import kotlinx.coroutines.isActive
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 
-private val Logger = KotlinLogging.logger(ClusterNodesHandler::class.java.name)
+private val Logger = KotlinLogging.logger(ClusterNodesHolder::class.java.name)
 
-class ClusterNodesHandler(
+class ClusterNodesHolder(
   stateDelayMs: Int,
   private val stateHolder: StateHolder,
 ) : NodeContext<ClusterNodeT<Node.MsgInfo>>,
