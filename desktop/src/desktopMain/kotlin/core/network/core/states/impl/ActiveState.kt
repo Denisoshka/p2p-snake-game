@@ -5,6 +5,7 @@ import core.network.core.states.utils.MasterStateUtils
 import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
@@ -22,11 +23,13 @@ private val Logger = KotlinLogging.logger(ActiveState::class.java.name)
 
 class ActiveState(
   private val localNode: LocalNode,
-  private val nodesHolder: ClusterNodesHandler,
-  private val gameController: GameController,
-  private val netNodesHandler: NetNodeHandler,
   private val stateHolder: StateHolder,
+  private val gameConfig: InternalGameConfig,
 ) : NodeState.ActiveStateT, GameActor {
+  private val netNodesHandler: NetNodeHandler = stateHolder.netNodesHandler
+  private val nodesHolder: ClusterNodesHandler = stateHolder.nodesHolder
+  private val gameController: GameController = stateHolder.gameController
+  
   override fun roleChangeHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
@@ -76,15 +79,17 @@ class ActiveState(
         message.msgSeq, ms.second, localNode.nodeId
       )
     }
-    if(ack != null) {
     
+    if(ack != null) {
+      Logger.trace {
+        "apply ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
+      }
+      stateHolder.sendUnicast(ack, ipAddress)
     } else {
       Logger.trace {
-        "receive ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
+        "receive incorrect ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
       }
     }
-    
-    
   }
   
   override fun steerHandle(
@@ -96,8 +101,14 @@ class ActiveState(
   override fun stateHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    
-    TODO("Not yet implemented")
+    Utils.onStateMsg(stateHolder, ipAddress, message)?.let {
+      val ack = MessageUtils.MessageProducer.getAckMsg(
+        msgSeq = message.msgSeq,
+        senderId = it.second,
+        receiverId = localNode.nodeId
+      )
+      nodesHolder[ipAddress]?.sendToNode(ack)
+    }
   }
   
   override fun joinHandle(
@@ -106,20 +117,22 @@ class ActiveState(
     /**not handle*/
   }
   
-  override fun processDetachedNode(node: ClusterNodeT<Node.MsgInfo>) {
-    TODO("Not yet implemented")
-  }
-  
   override fun pingHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    TODO("Not yet implemented")
+    Utils.nonLobbyPingMsg(
+      stateHolder = stateHolder,
+      nodesHolder = nodesHolder,
+      localNode = localNode,
+      ipAddress = ipAddress,
+      message = message
+    )
   }
   
   override fun ackHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
-    TODO("Not yet implemented")
+    Utils.nonLobbyOnAck(nodesHolder, ipAddress, message)
   }
   
   override fun errorHandle(
@@ -134,47 +147,7 @@ class ActiveState(
     /**not handle*/
   }
   
-  override fun cleanup() {
-  }
-  
-  override fun atNodeDetach(
-    node: ClusterNodeT<Node.MsgInfo>, changeAccessToken: Any
-  ) {
-    val (msInfo, depInfo) = stateHolder.masterDeputy!!
-    if(depInfo == null) {
-      Logger.warn { "activeHandleNodeDetach depInfo absent" }
-      this.toLobby(Event.State.ByController.SwitchToLobby, changeAccessToken)
-    } else if(node.nodeId == msInfo.second && localNode.nodeId == depInfo.second && node.ipAddress == msInfo.first) {
-      val state = stateHolder.latestGameState
-      if(state == null) {
-        Logger.warn {
-          "during activeDeputyHandleMasterDetach from :${ActiveState::class} to ${MasterState::class} latestGameState is null"
-        }
-        this.toLobby(
-          Event.State.ByController.SwitchToLobby, changeAccessToken
-        )
-      } else {
-        this.toMaster(
-          gameState = state, accessToken = changeAccessToken
-        )
-      }
-    } else if(node.nodeId == msInfo.second && localNode.nodeId != depInfo.second && node.ipAddress == msInfo.first) {
-
-//      normalChangeDeputyToMaster(depInfo, node, changeAccessToken)
-    }
-  }
-  
-  fun deputyNow(
-    state: SnakesProto.GameMessage.StateMsg,
-    depInfo: Pair<InetSocketAddress, Int>,
-    changeStateAccessToken: Any
-  ) {
-    stateHolder.apply {
-      
-    }
-  }
-  
-  fun normalChangeDeputyToMaster(
+  /*fun normalChangeDeputyToMaster(
     depInfo: Pair<InetSocketAddress, Int>,
     masterNode: ClusterNodeT<Node.MsgInfo>,
     changeStateAccessToken: Any
@@ -189,16 +162,17 @@ class ActiveState(
         ipAddress = depInfo.first,
         clusterNodesHolder = nodesHolder,
       )
-      /**
-       * да и хуй с ним, нам его имя нахуй не нужно
-       * */
+      */
+  /**
+   * да и хуй с ним, нам его имя нахуй не нужно
+   * *//*
       nodesHolder.registerNode(newMasterClusterNode)
       newMasterClusterNode.apply {
         unacknowledgedMessages.forEach { newMasterClusterNode.sendToNode(it.req) }
         addAllMessageForAck(unacknowledgedMessages)
       }
     }
-  }
+  }*/
   
   override fun toMaster(
     gameState: SnakesProto.GameState, accessToken: Any
@@ -277,7 +251,7 @@ class ActiveState(
     }
   }
   
-  override fun toLobby(
+  /*private fun toLobby(
     event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
   ) {
     nodesHolder.shutdown()
@@ -287,11 +261,11 @@ class ActiveState(
       gameController = gameController,
     ).apply { stateHolder.setupNewState(this, changeAccessToken) }
     gameController.openLobby()
-  }
+  }*/
   
   override fun toPassive(
     changeAccessToken: Any
-  ) {
+  ): NodeState {
     val (ms, dp) = stateHolder.masterDeputy!!/*вообще такого не должно происходить)*/
     val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
       stateHolder.nextSeqNum,
@@ -322,7 +296,7 @@ class ActiveState(
     msInfo: Pair<InetSocketAddress, Int>,
     dpInfo: Pair<InetSocketAddress, Int>?,
     accessToken: Any
-  ) {
+  ): NodeState? {
     /**
      * Здесь есть несколько вариантов развития событий,
      * 1) Отъебнули мы, тогда говорим мастеру что мы теперь вивер,
@@ -350,18 +324,19 @@ class ActiveState(
         it.sendToNode(msg)
         it.addMessageForAck(msg)
       }
-      toPassive(accessToken)
+      return toPassive(accessToken)
     } else if(node.nodeId == msInfo.second) {
       if(dpInfo != null && dpInfo.second == localNode.nodeId) {
         val state = stateHolder.gameState
         if(state != null) {
-          toMaster(state, accessToken)
+          return toMaster(state, accessToken)
         } else {
-          toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+          return toLobby(Event.State.ByController.SwitchToLobby, accessToken)
         }
       } else if(dpInfo != null) {
-        toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+        return toLobby(Event.State.ByController.SwitchToLobby, accessToken)
       }
     }
+    return null
   }
 }

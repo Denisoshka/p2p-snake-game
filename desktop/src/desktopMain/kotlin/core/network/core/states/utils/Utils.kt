@@ -2,17 +2,13 @@ package core.network.core.states.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ContextEvent
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.PassiveState
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -76,38 +72,51 @@ object Utils {
     }
   }
   
-  fun onPingMsg(
-    clusterNodesHandler: ClusterNodesHandler,
+  fun nonLobbyPingMsg(
+    stateHolder: StateHolder,
+    nodesHolder: ClusterNodesHandler,
+    localNode: LocalNode,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
-    nodeId: Int
   ) {
-    clusterNodesHandler[ipAddress]?.let {
+    val (ms, _) = stateHolder.masterDeputy ?: return
+    if(ms.first != ipAddress) return
+    nodesHolder[ipAddress]?.let {
       val ack = MessageUtils.MessageProducer.getAckMsg(
-        message.msgSeq, nodeId, it.nodeId
+        message.msgSeq, ms.second, localNode.nodeId
       )
       it.sendToNode(ack)
     }
   }
   
   fun nonLobbyOnAck(
-    clusterNodesHandler: ClusterNodesHandler,
+    nodesHolder: ClusterNodesHandler,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
-    msgT: MessageType
   ) {
-    clusterNodesHandler[ipAddress]?.ackMessage(message)
+    nodesHolder[ipAddress]?.ackMessage(message)
   }
   
+  /**
+   * @return `masterInfo` `Pair<InetSocketAddress, Int>?` if message
+   * submitted, else `null`
+   * */
   fun onStateMsg(
     stateHolder: StateHolder,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage
-  ) {
-    val (ms, _) = stateHolder.masterDeputy ?: return
-    if(ms.first != ipAddress) return
-    val stateSeq = message.state.state.stateOrder
-    
+  ): Pair<InetSocketAddress, Int>? {
+    val (ms, _) = stateHolder.masterDeputy ?: return null
+    if(ms.first != ipAddress) return null
+    val curState = stateHolder.gameState ?: return null
+    val newStateSeq = message.state.state.stateOrder
+    if(curState.stateOrder >= newStateSeq) return ms
+    runBlocking {
+      stateHolder.handleContextEvent(
+        ContextEvent.Internal.NewState(message.state.state)
+      )
+    }
+    return ms
   }
   
   suspend fun onJoinGameAck(

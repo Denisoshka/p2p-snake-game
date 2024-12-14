@@ -45,6 +45,7 @@ class NetworkStateHolder(
   private val netController: NetworkController,
   private val gameController: GameController,
   override val unicastNetHandler: UnicastNetHandler,
+  
 ) : NetworkStateContext, StateConsumer, GameSessionHandler {
   private val stateContextDispatcherScope = CoroutineScope(Dispatchers.Default)
   
@@ -110,10 +111,6 @@ class NetworkStateHolder(
     val st = this.networkStateHolder.get();
     if(st !is MasterState) return
     val msdp = masterDeputyHolder.get() ?: return
-  }
-  
-  override fun cleanup() {
-    TODO("Not yet implemented, da i naxyi nyzhno")
   }
   
   override fun sendUnicast(

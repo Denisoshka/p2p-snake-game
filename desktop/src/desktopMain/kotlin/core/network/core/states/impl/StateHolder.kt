@@ -13,6 +13,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHandler
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.AbstractStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,7 @@ class StateHolder(
   val gameController: GameController,
   val nodesHolder: ClusterNodesHandler,
   val netNodesHandler: NetNodeHandler,
+  private val unicastNetHandler: UnicastNetHandler,
 ) : AbstractStateHolder {
   @Volatile var localNode: LocalNode = TODO()
   
@@ -57,6 +59,11 @@ class StateHolder(
   private val nextNodeIdProvider = AtomicInteger(0)
   val nextNodeId
     get() = nextNodeIdProvider.incrementAndGet()
+  
+  fun sendUnicast(
+    msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
+  ) = unicastNetHandler.sendUnicastMessage(msg, nodeAddress)
+  
   
   
   suspend fun handleContextEvent(event: ContextEvent) {
@@ -189,9 +196,9 @@ class StateHolder(
     masterDeputyHolder.set(newMsDpInfo)
     newDepInfo?.let {
       /**
-       *  Может быть такая ситуация что у нас депути тоже отключитлся во
+       *  Может быть такая ситуация, что у нас депути тоже отключитлся во
        *  время исполнения сего обряда, тогда когда он придет сюда то
-       *  перевыберется  новый депути и так до бесконечности пока будут
+       *  перевыберется новый депути и так до бесконечности пока будут
        *  кандидаты
        * */
       nodesHolder[it.first]?.apply {
