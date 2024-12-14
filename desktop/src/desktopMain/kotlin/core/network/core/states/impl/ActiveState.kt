@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.MasterStateUtils
 import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
@@ -26,7 +25,6 @@ class ActiveState(
   private val stateHolder: StateHolder,
   private val gameConfig: InternalGameConfig,
 ) : NodeState.ActiveStateT, GameActor {
-  private val netNodesHandler: NetNodeHandler = stateHolder.netNodesHandler
   private val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   private val gameController: GameController = stateHolder.gameController
   
@@ -150,36 +148,13 @@ class ActiveState(
     /**not handle*/
   }
   
-  /*fun normalChangeDeputyToMaster(
-    depInfo: Pair<InetSocketAddress, Int>,
-    masterNode: ClusterNodeT<Node.MsgInfo>,
-    changeStateAccessToken: Any
-  ) {
-    stateHolder.apply {
-      reconfigureMasterDeputy(depInfo to null, changeStateAccessToken)
-      val unacknowledgedMessages = masterNode.getUnacknowledgedMessages()
-      
-      val newMasterClusterNode = ClusterNode(
-        nodeState = Node.NodeState.Passive,
-        nodeId = depInfo.second,
-        ipAddress = depInfo.first,
-        clusterNodesHolder = nodesHolder,
-      )
-      */
-  /**
-   * да и хуй с ним, нам его имя нахуй не нужно
-   * *//*
-      nodesHolder.registerNode(newMasterClusterNode)
-      newMasterClusterNode.apply {
-        unacknowledgedMessages.forEach { newMasterClusterNode.sendToNode(it.req) }
-        addAllMessageForAck(unacknowledgedMessages)
-      }
-    }
-  }*/
-  
   override fun toMaster(
     gameState: SnakesProto.GameState, accessToken: Any
   ): NodeState {
+    val (newMs, newDp) = stateHolder.masterDeputy!!
+    newDp?.let {
+    
+    }
     newDepInfo?.let {
       ClusterNode(
         nodeState = Node.NodeState.Active,
@@ -265,7 +240,8 @@ class ActiveState(
   override fun toPassive(
     changeAccessToken: Any
   ): NodeState {
-    val (ms, dp) = stateHolder.masterDeputy!!/*вообще такого не должно происходить)*/
+    val (ms, dp) = stateHolder.masterDeputy!!
+    /**там вообще null не должно происходить)*/
     val msg = MessageUtils.MessageProducer.getRoleChangeMsg(
       stateHolder.nextSeqNum,
       senderId = localNode.nodeId,

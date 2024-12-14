@@ -1,6 +1,5 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
@@ -8,10 +7,12 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.*
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.Channel
@@ -39,7 +40,7 @@ class GameEngine(
   
   private fun spawnNewSnake(
     id: Int, direction: Direction? = null
-  ): SnakeEntity? {
+  ): ObservableSnakeEntity? {
     val coords = map.findFreeSquare() ?: return null
     val dir = direction ?: directions[Random.nextInt(directions.size)]
     return SnakeEntity(coords.first, coords.second, dir, id)

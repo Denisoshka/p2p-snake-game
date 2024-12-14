@@ -21,7 +21,6 @@ open class SnakeEntity(
   constructor(x: Int, y: Int, direction: Direction, id: Int) : this(
     direction, id
   ) {
-    TODO("implement this")
   }
   
   override var alive: Boolean = true

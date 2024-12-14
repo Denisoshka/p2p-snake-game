@@ -7,13 +7,27 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 
 class ObservableSnakeEntity(direction: Direction, id: Int) :
   SnakeEntity(direction, id), ObservableEntity {
+  
+  constructor(x: Int, y: Int, direction: Direction, id: Int) : this(
+     direction, id
+  ) {
+  }
+  
   private val subscribers: MutableList<() -> Unit> = mutableListOf()
   override fun addObserver(action: () -> Unit) {
-    subscribers.add(action)
+    synchronized(subscribers) {
+      if(super.snakeState == SnakeState.ZOMBIE) {
+        action()
+      } else {
+        subscribers.add(action)
+      }
+    }
   }
   
   override fun observableExpired() {
-    subscribers.forEach { it() }
+    synchronized(subscribers) {
+      subscribers.forEach { it() }
+    }
   }
   
   override fun observerExpired() {
