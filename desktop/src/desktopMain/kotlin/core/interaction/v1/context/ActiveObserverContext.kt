@@ -20,12 +20,12 @@ class ActiveObserverContext(
   override fun handleEvent(
     event: SnakesProto.GameMessage.SteerMsg, seq: Long, node: ClusterNode?
   ): Boolean {
-    if(seq <= lastUpdateSeq) return true
+    if(seq <= lastUpdateSeq) return false
     lastUpdateSeq = seq
     snake.changeState(
       MessageUtils.MessageProducer.DirectionFromProto(event.direction)
     )
-    return false
+    return true
   }
   
   override fun observerDetached(node: ClusterNode?) {

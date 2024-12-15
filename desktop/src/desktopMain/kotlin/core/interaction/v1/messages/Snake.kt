@@ -1,8 +1,8 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.messages
 
 data class Snake(
-  var snakeState: SnakeState = SnakeState.ALIVE,
-  var playerId: Int,
-  var cords: List<Coord>,
-  var direction: Direction
+  val snakeState: SnakeState = SnakeState.ALIVE,
+  val playerId: Int,
+  val cords: List<Coord>,
+  val direction: Direction
 )

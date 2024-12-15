@@ -1,154 +1,169 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity.active
 
+import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Snake
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import kotlin.random.Random
 
 private const val FoodSpawnChance = 0.5
 
+
 open class SnakeEntity(
-  @Volatile var direction: Direction,
   override val id: Int,
+  @Volatile var direction: Direction,
+  private val gameContext: GameContext,
+  x: Int? = null,
+  y: Int? = null,
 ) : ActiveEntity {
-  
-  constructor(x: Int, y: Int, direction: Direction, id: Int) : this(
-    direction, id
-  ) {
-  }
-  
+  private var prevDir: Direction = direction
   override var alive: Boolean = true
   override val type: GameType = GameType.Snake
-  override val hitBox: MutableList<EntityOnMapInfo> = ArrayList(2)
-  var score: Int = 0
+  private var eaten = false
+  final override val hitBox: MutableList<GameMap.Cell> = ArrayList(2)
   @Volatile var snakeState = SnakeState.ALIVE
+  var score: Int = 0
+    private set
+  override val head = hitBox.first()
   
-  override fun restoreState(offsets: List<Coord>) {
-    if(hitBox.isNotEmpty()) throw RuntimeException("братан змея уже готова")
-    
-    val currentPoint = offsets.first()
-    for(nextOffset in offsets.drop(1)) {
-      val nextX = currentPoint.x + nextOffset.x
-      val nextY = currentPoint.y + nextOffset.y
-      
-      if(currentPoint.x != nextX && currentPoint.y == nextY) {
-        val rangeX = if(nextX > currentPoint.x) {
-          currentPoint.x..nextX
-        } else {
-          currentPoint.x downTo nextX
-        }
-        
-        for(x in rangeX.drop(1)) {
-          hitBox.add(EntityOnMapInfo(x, currentPoint.y))
-        }
-      } else if(currentPoint.y != nextY && currentPoint.x == nextX) {
-        val rangeY = if(nextY > currentPoint.y) {
-          currentPoint.y..nextY
-        } else {
-          currentPoint.y downTo nextY
-        }
-        
-        for(y in rangeY.drop(1)) {
-          hitBox.add(EntityOnMapInfo(currentPoint.x, y))
-        }
-      }
-      currentPoint.x = nextX
-      currentPoint.y = nextY
-      
-      hitBox.add(EntityOnMapInfo(nextX, nextY))
+  init {
+    if(x != null && y != null) {
+      hitBox.add(GameMap.Cell(x, y))
+      hitBox.add(GameMap.Cell(x - direction.dx, y - direction.dy))
     }
   }
   
-  override fun shootState(state: StateMsg) {
-    val head = hitBox.first()
-    val cordsShoot = ArrayList<Coord>()
-    cordsShoot.add(Coord(head.x, head.y))
-    var curPoint = hitBox.first()
-    var offsetX = 0;
-    var offsetY = 0;
-    for(nextPoint in hitBox.drop(1)) {
-      if(curPoint.x != nextPoint.x && curPoint.y == nextPoint.y) {
-        offsetX += nextPoint.x - curPoint.x
-      } else if(curPoint.y != nextPoint.y && curPoint.x == nextPoint.x) {
-        offsetY += nextPoint.y - curPoint.y
-      } else {
-        if(offsetX != 0) cordsShoot.add(Coord(offsetX, 0))
-        else if(offsetY != 0) cordsShoot.add(Coord(0, offsetY))
-        
-        offsetX = 0
-        offsetY = 0
-        
-        if(curPoint.x != nextPoint.x && curPoint.y == nextPoint.y) {
-          offsetX = nextPoint.x - curPoint.x
-        } else if(curPoint.y != nextPoint.y && curPoint.x == nextPoint.x) {
-          offsetY = nextPoint.y - curPoint.y
-        }
-      }
-      curPoint = nextPoint
+  constructor(
+    snake: SnakesProto.GameState.Snake, score: Int, gameContext: GameContext,
+  ) : this(
+    snake.playerId, Direction.fromProto(snake.headDirection), gameContext
+  ) {
+    this.score = score
+    this.snakeState = SnakeState.fromProto(snake.state)
+    restoreHitBox(snake.pointsList)
+  }
+  
+  private fun restoreHitBox(offsets: List<SnakesProto.GameState.Coord>) {
+    if(hitBox.isNotEmpty()) throw RuntimeException("ну и пиздец")
+    for(offset in offsets) {
+      hitBox.add(GameMap.Cell(offset.x, offset.y))
     }
-    if(offsetX != 0) cordsShoot.add(Coord(offsetX, 0))
-    else if(offsetY != 0) cordsShoot.add(Coord(0, offsetY))
-    
-    val shoot = Snake(snakeState, id, cordsShoot, direction)
-    state.snakes.add(shoot)
+  }
+  
+  override fun shootState(state: SnakesProto.GameState.Builder) {
+    val cordsShoot = hitBox.map {
+      SnakesProto.GameState.Coord.newBuilder().setX(it.x).setY(it.y)
+    }
+    val snakeBuilder = MessageUtils.MessageProducer.getSnakeMsgBuilder(
+      playerId = id,
+      headWithOffsets = cordsShoot,
+      snakeState = snakeState,
+      direction = direction
+    )
+    state.apply {
+      snakesBuilderList.add(snakeBuilder)
+    }
   }
   
   override fun atDead(context: GameEngine) {
-    for(cord in hitBox) {
+    hitBoxTravel { x, y ->
       if(Random.nextDouble() < FoodSpawnChance) {
-        context.addSideEntity(AppleEntity(cord.x, cord.y))
+        context.sideEffectEntity.add(AppleEntity(x, y))
       }
     }
   }
   
-  fun getScore(): Int {
-    return score
-  }
-  
   override fun update(context: GameEngine, sideEffects: List<Entity>) {
-    hitBox.removeLast()
-
-//  todo мб нужно сделать так чтобы здесь выделялась новая точка и не было
-//   проблем с снятием снапшота
+    if(directionChanged()) {
+      head.y += direction.dx
+      head.x += direction.dx
+      
+    } else {
     
-    hitBox.add(0, point)
-    TODO("fix this")
+    }
+    
+    if(!eaten) {
+    
+    }
   }
   
   override fun checkCollisions(
     entity: Entity, context: GameEngine
   ) {
-    if(!alive) return
-    val head = hitBox.first()
-    
-    if(entity.hitBox.any { point -> point.x == head.x && point.y == head.y }) {
-      when(entity) {
-        is SnakeEntity -> {
-          if(this === entity) {
-            TODO()
-          } else {
-            entity.score++
+    when(entity) {
+      is SnakeEntity -> {
+        entity.hitBoxTravel { x, y ->
+          if(head.x == x && head.y == y) {
+            if(entity !== this) {
+              entity.score++
+            }
             alive = false
+            return@hitBoxTravel
           }
         }
-        
-        is AppleEntity -> if(entity.alive) ++score
-        else           -> {}
+        if(entity !== this && head.x == entity.head.x && head.y == entity.head.y) {
+          alive = false
+        }
+      }
+      
+      is AppleEntity -> {
+        if(entity.alive) {
+          eaten = true
+          ++score
+        }
       }
     }
   }
   
   fun changeState(direction: Direction) {
-    if(!isOpposite(direction)) this.direction = direction
+    if(!isOpposite(direction)) {
+      this.prevDir = this.direction
+      this.direction = direction
+    }
+  }
+  
+  override fun hitBoxTravel(function: (x: Int, y: Int) -> Unit) {
+    var x = head.x
+    var y = head.y
+//    function(x, y)
+    hitBox.drop(1).forEach {
+      if(it.y != 0) {
+        var offY = it.y
+        while(offY != 0) {
+          if(offY > 0) {
+            y = gameContext.gameMap.getFixedY(y + 1)
+            --offY
+          } else {
+            y = gameContext.gameMap.getFixedY(y - 1)
+            ++offY
+          }
+          function(x, y)
+        }
+      } else {
+        var offX = it.x
+        while(offX != 0) {
+          if(offX > 0) {
+            x = gameContext.gameMap.getFixedX(x + 1)
+            --offX
+          } else {
+            x = gameContext.gameMap.getFixedX(x - 1)
+            ++offX
+          }
+          function(x, y)
+        }
+      }
+    }
   }
   
   private fun isOpposite(newDirection: Direction): Boolean {
     return direction.opposite() == newDirection
   }
+  
+  private fun directionChanged(): Boolean = direction != prevDir
 }

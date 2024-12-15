@@ -5,13 +5,9 @@ import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 
-class ObservableSnakeEntity(direction: Direction, id: Int) :
-  SnakeEntity(direction, id), ObservableEntity {
+class ObservableSnakeEntity(id: Int, direction: Direction) :
+  SnakeEntity(id, direction), ObservableEntity {
   
-  constructor(x: Int, y: Int, direction: Direction, id: Int) : this(
-     direction, id
-  ) {
-  }
   
   private val subscribers: MutableList<() -> Unit> = mutableListOf()
   override fun addObserver(action: () -> Unit) {

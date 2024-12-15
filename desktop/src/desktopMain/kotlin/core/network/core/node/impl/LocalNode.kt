@@ -47,6 +47,11 @@ class LocalNode(
     }
   override val payload: NodePayloadT
     get() = TODO("Not yet implemented")
+  
+  override fun mountObservable() {
+    TODO("Not yet implemented")
+  }
+  
   override val nodeState: Node.NodeState
     get() = TODO("Not yet implemented")
   private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>>
@@ -59,11 +64,10 @@ class LocalNode(
   }
   
   override fun ackMessage(message: SnakesProto.GameMessage): Node.MsgInfo? {
-    TODO("Not yet implemented")
+    return null
   }
   
   override fun addMessageForAck(message: SnakesProto.GameMessage) {
-    TODO("Not yet implemented")
   }
   
   @Synchronized

@@ -3,12 +3,8 @@ package d.zhdanov.ccfit.nsu.core.utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.DEPUTY
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.MASTER
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.NORMAL
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole.VIEWER
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
-import d.zhdanov.ccfit.nsu.core.network.exceptions.IllegalNodeRoleException
 
 object MessageUtils {
   private val ackMsg: SnakesProto.GameMessage.AckMsg =
@@ -75,12 +71,12 @@ object MessageUtils {
       msgSeq: Long,
       senderId: Int,
       receiverId: Int,
-      senderRole: SnakesProto.NodeRole? = null,
-      receiverRole: SnakesProto.NodeRole? = null,
+      senderRole: NodeRole? = null,
+      receiverRole: NodeRole? = null,
     ): SnakesProto.GameMessage {
       val roleCng = SnakesProto.GameMessage.RoleChangeMsg.newBuilder().apply {
-        senderRole?.let { setSenderRole(it) }
-        receiverRole?.let { setReceiverRole(it) }
+        senderRole?.let { setSenderRole(it.toProto()) }
+        receiverRole?.let { setReceiverRole(it.toProto()) }
       }.build()
       
       return SnakesProto.GameMessage.newBuilder().apply {
@@ -120,7 +116,7 @@ object MessageUtils {
       playerType: SnakesProto.PlayerType,
       playerName: String,
       gameName: String,
-      nodeRole: SnakesProto.NodeRole
+      nodeRole: NodeRole
     ): SnakesProto.GameMessage {
       val join = SnakesProto.GameMessage.JoinMsg.newBuilder().apply {
         setPlayerType(playerType)
@@ -140,6 +136,39 @@ object MessageUtils {
       }.build()
     }
     
+    fun getSnakeMsgBuilder(
+      playerId: Int,
+      headWithOffsets: List<SnakesProto.GameState.Coord.Builder>,
+      snakeState: SnakeState,
+      direction: Direction
+    ): SnakesProto.GameState.Snake.Builder {
+      return SnakesProto.GameState.Snake.newBuilder().apply {
+        setPlayerId(playerId)
+        setState(snakeState.toProto())
+        pointsBuilderList.addAll(headWithOffsets)
+        headDirection = direction.toProto()
+      }
+    }
+    
+    fun getCoordBuilder(x: Int, y: Int): SnakesProto.GameState.Coord.Builder {
+      return SnakesProto.GameState.Coord.newBuilder().setX(x).setY(y)
+    }
+    
+    fun getCoord(x: Int, y: Int): SnakesProto.GameState.Coord {
+      return getCoordBuilder(x, y).build()
+    }
+    
+    fun getSnakeMsg(
+      playerId: Int,
+      headWithOffsets: List<SnakesProto.GameState.Coord.Builder>,
+      snakeState: SnakeState,
+      direction: Direction
+    ): SnakesProto.GameState.Snake {
+      return getSnakeMsgBuilder(
+        playerId, headWithOffsets, snakeState, direction
+      ).build()
+    }
+    
     fun getMessageForNewMaster(
       message: SnakesProto.GameMessage, senderId: Int, receiverId: Int
     ): SnakesProto.GameMessage {
@@ -152,46 +181,6 @@ object MessageUtils {
         else                                                                               -> {
           message
         }
-      }
-    }
-    
-    @Throws(IllegalNodeRoleException::class)
-    fun nodeRolefromProto(role: SnakesProto.NodeRole): NodeRole {
-      return when(role) {
-        SnakesProto.NodeRole.NORMAL -> NORMAL
-        SnakesProto.NodeRole.MASTER -> MASTER
-        SnakesProto.NodeRole.DEPUTY -> DEPUTY
-        SnakesProto.NodeRole.VIEWER -> VIEWER
-        else                        -> throw IllegalNodeRoleException(role.toString())
-      }
-    }
-    
-    fun nodeRoleToProto(
-      role: NodeRole
-    ): SnakesProto.NodeRole {
-      return when(role) {
-        VIEWER -> SnakesProto.NodeRole.VIEWER
-        NORMAL -> SnakesProto.NodeRole.NORMAL
-        DEPUTY -> SnakesProto.NodeRole.DEPUTY
-        MASTER -> SnakesProto.NodeRole.MASTER
-      }
-    }
-    
-    fun DirectionFromProto(dir: SnakesProto.Direction): Direction {
-      return when(dir) {
-        SnakesProto.Direction.UP    -> Direction.UP
-        SnakesProto.Direction.DOWN  -> Direction.DOWN
-        SnakesProto.Direction.LEFT  -> Direction.LEFT
-        SnakesProto.Direction.RIGHT -> Direction.RIGHT
-      }
-    }
-    
-    fun DirectionToProto(dir: Direction): SnakesProto.Direction {
-      return when(dir) {
-        Direction.UP    -> SnakesProto.Direction.UP
-        Direction.DOWN  -> SnakesProto.Direction.DOWN
-        Direction.LEFT  -> SnakesProto.Direction.LEFT
-        Direction.RIGHT -> SnakesProto.Direction.RIGHT
       }
     }
   }

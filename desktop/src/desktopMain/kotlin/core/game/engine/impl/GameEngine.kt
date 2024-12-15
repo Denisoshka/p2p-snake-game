@@ -28,8 +28,8 @@ class GameEngine(
 ) : GameContext {
   val map: GameMap = ArrayGameMap(gameConfig.width, gameConfig.height)
   
-  private val sideEffectEntity: MutableList<Entity> = ArrayList()
-  private val entities: MutableList<Entity> = ArrayList()
+  override val sideEffectEntity: MutableList<Entity> = ArrayList()
+  override val entities: MutableList<Entity> = ArrayList()
   
   private val executor = Executors.newSingleThreadExecutor()
   private val directions = Direction.entries.toTypedArray()
@@ -126,7 +126,7 @@ class GameEngine(
   override fun initGame(
     config: GameConfig,
     playerInfo: GamePlayerInfo,
-    state: SnakesProto.GameMessage.StateMsg?
+    state: SnakesProto.GameMessage.StateMsg
   ): List<ActiveEntity> {
     val ret = ArrayList<ActiveEntity>()
     

@@ -110,11 +110,12 @@ class MasterState(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
   ) {
     nodesHolder[ipAddress]?.let {
-      it.payload.handleEvent(message.steer, message.msgSeq, null)
-      val ack = MessageUtils.MessageProducer.getAckMsg(
-        message.msgSeq, localNode.nodeId, it.nodeId
-      )
-      it.sendToNode(ack)
+      if(it.payload.handleEvent(message.steer, message.msgSeq, null)) {
+        val ack = MessageUtils.MessageProducer.getAckMsg(
+          message.msgSeq, localNode.nodeId, it.nodeId
+        )
+        it.sendToNode(ack)
+      }
     }
   }
   
