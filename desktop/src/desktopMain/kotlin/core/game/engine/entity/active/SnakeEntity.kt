@@ -79,18 +79,52 @@ open class SnakeEntity(
     }
   }
   
+  private val afterHeadIndex = 1
   override fun update(context: GameEngine, sideEffects: List<Entity>) {
-    if(directionChanged()) {
-      head.y += direction.dx
-      head.x += direction.dx
-      
-    } else {
+    gameContext.gameMap.apply {
+      head.x = getFixedX(head.x + direction.dx)
+      head.y = getFixedY(head.y + direction.dy)
+    }
     
+    gameContext.gameMap.apply {
+      if(!directionChanged()) {
+        hitBox[afterHeadIndex].apply {
+          x += direction.dx
+          y += direction.dy
+        }
+      } else {
+        hitBox.add(
+          afterHeadIndex, GameMap.Cell(direction.dx, direction.dy)
+        )
+      }
     }
     
     if(!eaten) {
-    
+      val tail = hitBox.last()
+      if(tail.x != 0) {
+        if(tail.x > 0) {
+          --tail.x
+        } else {
+          ++tail.x
+        }
+        
+        if(tail.x == 0) {
+          hitBox.removeLast()
+        }
+      } else {
+        if(tail.y > 0) {
+          --tail.y
+        } else {
+          tail.y++
+        }
+        
+        if(tail.y == 0) {
+          hitBox.removeLast()
+        }
+      }
     }
+    eaten = false
+    prevDir = direction
   }
   
   override fun checkCollisions(
@@ -98,11 +132,8 @@ open class SnakeEntity(
   ) {
     when(entity) {
       is SnakeEntity -> {
-        entity.hitBoxTravel { x, y ->
+        hitBoxTravel { x, y ->
           if(head.x == x && head.y == y) {
-            if(entity !== this) {
-              entity.score++
-            }
             alive = false
             return@hitBoxTravel
           }

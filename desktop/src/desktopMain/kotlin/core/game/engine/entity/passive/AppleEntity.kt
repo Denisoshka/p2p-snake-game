@@ -32,6 +32,8 @@ class AppleEntity(
   
   override fun shootState(state: SnakesProto.GameState.Builder) {
     val xyi = hitBox.first()
+val     appleShot = Mess
+    state.foodsBuilderList.add()
     state.foods.add(Coord(xyi.x, xyi.y))
   }
   

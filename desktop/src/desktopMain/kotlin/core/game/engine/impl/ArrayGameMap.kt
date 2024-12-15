@@ -33,11 +33,11 @@ class ArrayGameMap(override var width: Int, override var height: Int) :
   }
   
   override fun getFixedX(x: Int): Int {
-    return (x + width) % width
+    return (x + width).mod(width)
   }
   
   override fun getFixedY(y: Int): Int {
-    return (y + height) % height
+    return (y + height).mod(height)
   }
   
   override fun findFreeSquare(size: Int): Pair<Int, Int>? {
