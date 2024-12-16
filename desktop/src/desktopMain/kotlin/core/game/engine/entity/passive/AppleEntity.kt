@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity.passive
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 class AppleEntity(
   x: Int,
   y: Int,
-  override val gameContext: GameContext
+  override val networkGameContext: NetworkGameContext
 ) : Entity {
   override val head = GameMap.Cell(x, y)
   override var type = GameType.Apple

@@ -1,6 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
@@ -31,15 +32,15 @@ class ClusterNode(
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   private val clusterNodesHolder: ClusterNodesHolder,
-  private val payloadT: NodePayloadT
+  payload: NodePayloadT,
   override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
   private val onObserverSupplier = Channel<Node.NodeState>()
   private val thresholdDelay = clusterNodesHolder.thresholdDelay
-  @Volatile override var lastReceive = System.currentTimeMillis()
-  @Volatile override var lastSend = System.currentTimeMillis()
+  override var lastReceive = System.currentTimeMillis()
+  override var lastSend = System.currentTimeMillis()
   
   override val running: Boolean
     get() = (payload !is PlugObserver)
@@ -50,17 +51,17 @@ class ClusterNode(
     get() = stateHolder.get().first
   private val resendDelay = clusterNodesHolder.resendDelay
   private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>> =
-    when(nodeState) {
-      Node.NodeState.Active  -> {
-        AtomicReference(Pair(Node.NodeState.Active, PlugObserver))
+    when(payload) {
+      is ActiveObserverContext  -> {
+        AtomicReference(Pair(Node.NodeState.Active, payload))
       }
       
-      Node.NodeState.Passive -> {
-        AtomicReference(Pair(Node.NodeState.Passive, DefaultObserverContext))
+      is DefaultObserverContext -> {
+        AtomicReference(Pair(Node.NodeState.Passive, payload))
       }
       
-      else                   -> {
-        throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
+      else                      -> {
+        throw IllegalNodeRegisterAttempt("illegal initial node state $payload")
       }
     }
   
@@ -148,7 +149,7 @@ class ClusterNode(
                 return@onReceive
               }
               payload.observerDetached()
-              stateHolder.set(state to DefaultObserverContext(this))
+              stateHolder.set(state to DefaultObserverContext(this@ClusterNode))
               this@ClusterNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@ClusterNode)
               }

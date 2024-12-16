@@ -4,7 +4,7 @@ import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
@@ -25,7 +25,7 @@ private const val RetryJoinLater = "retry join later"
 class MasterState(
   val stateHolder: StateHolder,
   val localNode: LocalNode,
-  val gameEngine: GameContext,
+  val gameEngine: NetworkGameContext,
   val gameConfig: InternalGameConfig,
 ) : NodeState.MasterStateT, GameActor {
   private val gameController: GameController = stateHolder.gameController

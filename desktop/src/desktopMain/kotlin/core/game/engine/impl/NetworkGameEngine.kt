@@ -1,13 +1,14 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
+import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.IdService
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
@@ -23,15 +24,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
+import java.net.InetSocketAddress
 import java.util.concurrent.Executors
 
-private val Logger = KotlinLogging.logger(GameEngine::class.java.name)
+private val Logger = KotlinLogging.logger(NetworkGameEngine::class.java.name)
 
-class GameEngine(
+class NetworkGameEngine(
   private val joinInStateQ: Int,
   private val stateConsumer: StateConsumer,
   private val gameConfig: GameConfig,
-) : GameContext {
+  private val idService: IdService,
+  override val registeredPlayers: MutableMap<InetSocketAddress, ObservableSnakeEntity>,
+) : NetworkGameContext {
   override val gameMap: GameMap = ArrayGameMap(
     gameConfig.width, gameConfig.height
   )
@@ -43,7 +47,7 @@ class GameEngine(
     Executors.newSingleThreadExecutor().asCoroutineDispatcher()
   )
   private val joinBacklog =
-    Channel<Pair<ClusterNodeT<Node.MsgInfo>, SnakesProto.GameMessage>>(
+    Channel<Pair<InetSocketAddress, SnakesProto.GameMessage>>(
       joinInStateQ
     )
   
@@ -87,10 +91,9 @@ class GameEngine(
     stateConsumer.submitAcceptedPlayer(playerInfo to sn)
   }
   
-  override fun offerPlayer(playerInfo: Pair<ClusterNodeT<Node.MsgInfo>, SnakesProto.GameMessage>): Boolean {
+  override fun offerPlayer(playerInfo: Pair<InetSocketAddress, SnakesProto.GameMessage>): Boolean {
     return joinBacklog.trySend(playerInfo).isSuccess
   }
-  
   
   private fun countNextStep(): Long {
     val startTime = System.currentTimeMillis()
@@ -150,7 +153,7 @@ class GameEngine(
   
   @Synchronized
   override fun shutdown() {
-    Logger.info { "${GameEngine::class.java.name} ${this::shutdown.name}" }
+    Logger.info { "${NetworkGameEngine::class.java.name} ${this::shutdown.name}" }
     executorScope.cancel()
     joinBacklog.close()
   }
@@ -189,7 +192,7 @@ class GameEngine(
   
   @Synchronized
   override fun launch() {
-    Logger.info { "${GameEngine::class.java.name} launched with config $gameConfig" }
+    Logger.info { "${NetworkGameEngine::class.java.name} launched with config $gameConfig" }
     executorScope.gameDispatcher()
   }
   

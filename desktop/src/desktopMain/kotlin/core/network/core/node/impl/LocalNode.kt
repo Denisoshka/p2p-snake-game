@@ -1,8 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
@@ -23,42 +25,51 @@ import kotlin.coroutines.cancellation.CancellationException
 private val Logger = KotlinLogging.logger { LocalNode::class.java }
 
 class LocalNode(
-  nodeState: Node.NodeState,
   override val nodeId: Int,
   override val name: String,
-  private val clusterNodesHolder: ClusterNodesHolder
+  private val clusterNodesHolder: ClusterNodesHolder,
+  payload: NodePayloadT,
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
   
   override val ipAddress: InetSocketAddress
-    get() = valLocalIpAddress
+    get() = LocalIpAddress
   override val running: Boolean
     get() = true
+  
   override var lastReceive: Long = 0
     get() = 0
     set(value) {
       field = 0
     }
+  
   override var lastSend: Long = 0
     get() = 0
     set(value) {
       field = 0
     }
-  override val payload: NodePayloadT
-    get() = TODO("Not yet implemented")
   
-  override fun mountObservable() {
-    TODO("Not yet implemented")
-  }
+  override val payload: NodePayloadT
+    get() = stateHolder.get().second
   
   override val nodeState: Node.NodeState
-    get() = TODO("Not yet implemented")
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>>
-    get() {
-      TODO()
-    }
+    get() = stateHolder.get().first
   
+  private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>> =
+    when(payload) {
+      is ActiveObserverContext  -> {
+        AtomicReference(Pair(Node.NodeState.Active, payload))
+      }
+      
+      is DefaultObserverContext -> {
+        AtomicReference(Pair(Node.NodeState.Passive, payload))
+      }
+      
+      else                      -> {
+        throw IllegalNodeRegisterAttempt("illegal initial node state $payload")
+      }
+    }
   
   override fun sendToNode(msg: SnakesProto.GameMessage) {
   }
@@ -92,7 +103,7 @@ class LocalNode(
                 return@onReceive
               }
               payload.observerDetached()
-              stateHolder.set(state to DefaultObserverContext)
+              stateHolder.set(state to DefaultObserverContext(this@LocalNode))
               this@LocalNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@LocalNode)
               }
@@ -143,6 +154,6 @@ class LocalNode(
   }
   
   companion object LocalIp {
-    val valLocalIpAddress = InetSocketAddress(InetAddress.getLocalHost(), 0)
+    val LocalIpAddress = InetSocketAddress(InetAddress.getLocalHost(), 0)
   }
 }

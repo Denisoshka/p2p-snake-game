@@ -6,6 +6,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
@@ -246,7 +247,7 @@ class ActiveState(
       stateHolder.nextSeqNum,
       senderId = localNode.nodeId,
       receiverId = ms.second,
-      senderRole = SnakesProto.NodeRole.VIEWER,
+      senderRole = NodeRole.VIEWER,
     )
     nodesHolder[ms.first]?.let {
       it.sendToNode(msg)

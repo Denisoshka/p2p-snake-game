@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 
 interface Entity {
@@ -9,7 +9,7 @@ interface Entity {
   val head: GameMap.Cell
   val type: GameType
   val alive: Boolean
-  val gameContext: GameContext
+  val networkGameContext: NetworkGameContext
   fun update()
   fun hitBoxTravel(function: (x: Int, y: Int) -> Unit)
   fun checkCollisions(entity: Entity)

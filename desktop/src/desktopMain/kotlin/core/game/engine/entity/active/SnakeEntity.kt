@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity.active
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
@@ -17,7 +17,7 @@ private val directions = Direction.entries.toTypedArray()
 
 open class SnakeEntity(
   override val id: Int,
-  override val gameContext: GameContext,
+  val networkGameContext: NetworkGameContext,
   x: Int,
   y: Int,
 ) : ActiveEntity {
@@ -40,9 +40,9 @@ open class SnakeEntity(
   }
   
   constructor(
-    snake: SnakesProto.GameState.Snake, score: Int, gameContext: GameContext,
+    snake: SnakesProto.GameState.Snake, score: Int, networkGameContext: NetworkGameContext,
   ) : this(
-    snake.playerId, gameContext, 0, 0
+    snake.playerId, networkGameContext, 0, 0
   ) {
     this.direction = Direction.fromProto(snake.headDirection)
     this.prevDir = direction
@@ -76,19 +76,19 @@ open class SnakeEntity(
   override fun atDead() {
     hitBoxTravel { x, y ->
       if(Random.nextDouble() < FoodSpawnChance) {
-        gameContext.sideEffectEntity.add(AppleEntity(x, y, gameContext))
+        networkGameContext.sideEffectEntity.add(AppleEntity(x, y, networkGameContext))
       }
     }
   }
   
   private val afterHeadIndex = 1
   override fun update() {
-    gameContext.gameMap.apply {
+    networkGameContext.gameMap.apply {
       head.x = getFixedX(head.x + direction.dx)
       head.y = getFixedY(head.y + direction.dy)
     }
     
-    gameContext.gameMap.apply {
+    networkGameContext.gameMap.apply {
       if(!directionChanged()) {
         hitBox[afterHeadIndex].apply {
           x += direction.dx
@@ -168,10 +168,10 @@ open class SnakeEntity(
         var offY = it.y
         while(offY != 0) {
           if(offY > 0) {
-            y = gameContext.gameMap.getFixedY(y + 1)
+            y = networkGameContext.gameMap.getFixedY(y + 1)
             --offY
           } else {
-            y = gameContext.gameMap.getFixedY(y - 1)
+            y = networkGameContext.gameMap.getFixedY(y - 1)
             ++offY
           }
           function(x, y)
@@ -180,10 +180,10 @@ open class SnakeEntity(
         var offX = it.x
         while(offX != 0) {
           if(offX > 0) {
-            x = gameContext.gameMap.getFixedX(x + 1)
+            x = networkGameContext.gameMap.getFixedX(x + 1)
             --offX
           } else {
-            x = gameContext.gameMap.getFixedX(x - 1)
+            x = networkGameContext.gameMap.getFixedX(x - 1)
             ++offX
           }
           function(x, y)
