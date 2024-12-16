@@ -1,13 +1,20 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe
 
+import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
-import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 
-class ObservableSnakeEntity(id: Int, direction: Direction) :
-  SnakeEntity(id, direction), ObservableEntity {
+class ObservableSnakeEntity : SnakeEntity, ObservableEntity {
+  constructor(
+    snake: SnakesProto.GameState.Snake,
+    score: Int,
+    gameContext: GameContext,
+  ) : super(snake, score, gameContext)
   
+  constructor(
+    id: Int, gameContext: GameContext, x: Int, y: Int,
+  ) : super(id, gameContext, x, y)
   
   private val subscribers: MutableList<() -> Unit> = mutableListOf()
   override fun addObserver(action: () -> Unit) {
@@ -30,8 +37,8 @@ class ObservableSnakeEntity(id: Int, direction: Direction) :
     super.snakeState = SnakeState.ZOMBIE
   }
   
-  override fun atDead(context: GameEngine) {
-    super.atDead(context)
+  override fun atDead() {
+    super.atDead()
     observableExpired()
   }
 }

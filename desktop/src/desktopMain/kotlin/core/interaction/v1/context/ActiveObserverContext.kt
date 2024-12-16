@@ -2,58 +2,62 @@ package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
 class ActiveObserverContext(
-  private val node: ClusterNode,
+  private val node: ClusterNodeT<Node.MsgInfo>,
   private val snake: ObservableSnakeEntity,
-  private var lastUpdateSeq: Long = 0,
 ) : NodePayloadT {
+  private var lastUpdateSeq: Long = 0
+  
+  init {
+    snake.addObserver { this.observableDetached() }
+  }
   
   @Synchronized
   override fun handleEvent(
-    event: SnakesProto.GameMessage.SteerMsg, seq: Long, node: ClusterNode?
+    event: SnakesProto.GameMessage.SteerMsg, seq: Long,
   ): Boolean {
     if(seq <= lastUpdateSeq) return false
     lastUpdateSeq = seq
-    snake.changeState(
-      MessageUtils.MessageProducer.DirectionFromProto(event.direction)
-    )
+    snake.changeState(Direction.fromProto(event.direction))
     return true
   }
   
-  override fun observerDetached(node: ClusterNode?) {
-    this.snake.snakeState = SnakeState.ZOMBIE
+  override fun observerDetached() {
+    snake.snakeState = SnakeState.ZOMBIE
   }
   
-  override fun observableDetached(node: ClusterNode?) {
-    this.node.detach()
+  override fun observableDetached() {
+    node.detach()
   }
   
   override fun shootContextState(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?,
-    node: ClusterNode?
   ) {
     this.node.apply {
       val nodeRole = getNodeRole(this, masterAddrId, deputyAddrId) ?: return
-      val pl = GamePlayer(
-        name = this.name,
-        id = this.nodeId,
-        ipAddress = this.ipAddress.address.hostAddress,
-        port = this.ipAddress.port,
+      val msbBldr = MessageUtils.MessageProducer.getGamePlayerMsg(
+        name = name,
+        id = nodeId,
+        ipAddress = ipAddress.address.hostAddress,
+        port = ipAddress.port,
         nodeRole = nodeRole,
         playerType = PlayerType.HUMAN,
-        score = snake.score,
+        score = snake.score
       )
-      state.players.add(pl)
+      state.apply {
+        playersBuilder.addPlayers(msbBldr)
+      }
     }
   }
 }

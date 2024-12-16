@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkController
+import d.zhdanov.ccfit.nsu.core.network.core.states.impl.NetworkController
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.NetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.bootstrap.Bootstrap

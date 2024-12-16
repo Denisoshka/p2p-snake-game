@@ -1,15 +1,10 @@
-package d.zhdanov.ccfit.nsu.core.network.core
+package d.zhdanov.ccfit.nsu.core.network.core.states.impl
 
-import d.zhdanov.ccfit.nsu.SnakesProto.GameMessage
+import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.MulticastNetHandler
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
-import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
-
-private val logger = KotlinLogging.logger {}
-private val PortRange = 0..65535
-
 
 class NetworkController(
 ) : AutoCloseable {
@@ -18,34 +13,34 @@ class NetworkController(
   private val messageHandler: NetworkStateHolder
 
   fun handleUnicastMessage(
-    message: GameMessage, ipAddress: InetSocketAddress
+    message: SnakesProto.GameMessage, ipAddress: InetSocketAddress
   ) {
     when(message.typeCase) {
-      GameMessage.TypeCase.PING        -> messageHandler.pingHandle(
+      SnakesProto.GameMessage.TypeCase.PING        -> messageHandler.pingHandle(
         ipAddress, message, MessageType.PingMsg
       )
 
-      GameMessage.TypeCase.STEER       -> messageHandler.steerHandle(
+      SnakesProto.GameMessage.TypeCase.STEER       -> messageHandler.steerHandle(
         ipAddress, message, MessageType.SteerMsg
       )
 
-      GameMessage.TypeCase.ACK         -> messageHandler.ackHandle(
+      SnakesProto.GameMessage.TypeCase.ACK         -> messageHandler.ackHandle(
         ipAddress, message, MessageType.AckMsg
       )
 
-      GameMessage.TypeCase.STATE       -> messageHandler.stateHandle(
+      SnakesProto.GameMessage.TypeCase.STATE       -> messageHandler.stateHandle(
         ipAddress, message, MessageType.StateMsg
       )
 
-      GameMessage.TypeCase.JOIN        -> messageHandler.joinHandle(
+      SnakesProto.GameMessage.TypeCase.JOIN        -> messageHandler.joinHandle(
         ipAddress, message, MessageType.JoinMsg
       )
 
-      GameMessage.TypeCase.ERROR       -> messageHandler.errorHandle(
+      SnakesProto.GameMessage.TypeCase.ERROR       -> messageHandler.errorHandle(
         ipAddress, message, MessageType.ErrorMsg
       )
 
-      GameMessage.TypeCase.ROLE_CHANGE -> messageHandler.roleChangeHandle(
+      SnakesProto.GameMessage.TypeCase.ROLE_CHANGE -> messageHandler.roleChangeHandle(
         ipAddress, message, MessageType.RoleChangeMsg
       )
 
@@ -54,10 +49,10 @@ class NetworkController(
   }
 
   fun handleMulticastMessage(
-    message: GameMessage, ipAddress: InetSocketAddress
+    message: SnakesProto.GameMessage, ipAddress: InetSocketAddress
   ) {
     when(message.typeCase) {
-      GameMessage.TypeCase.ANNOUNCEMENT -> messageHandler.announcementHandle(
+      SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT -> messageHandler.announcementHandle(
         ipAddress, message, MessageType.AnnouncementMsg
       )
 
@@ -66,7 +61,7 @@ class NetworkController(
   }
 
   fun sendUnicast(
-    msg: GameMessage, nodeAddress: InetSocketAddress
+    msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) = unicastNetHandler.sendUnicastMessage(msg, nodeAddress)
 
   override fun close() {

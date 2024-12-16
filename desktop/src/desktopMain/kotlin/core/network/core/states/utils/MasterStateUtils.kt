@@ -11,7 +11,6 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
 import io.github.oshai.kotlinlogging.KotlinLogging

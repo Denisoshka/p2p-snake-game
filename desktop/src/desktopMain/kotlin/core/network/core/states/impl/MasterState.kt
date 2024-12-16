@@ -5,6 +5,7 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
@@ -19,6 +20,7 @@ import java.net.InetSocketAddress
 
 private val Logger = KotlinLogging.logger(MasterState::class.java.name)
 private const val JoinInUpdateQ = 10
+private const val RetryJoinLater = "retry join later"
 
 class MasterState(
   val stateHolder: StateHolder,
@@ -50,20 +52,15 @@ class MasterState(
     }
     
     try {
-      nodesHolder[ipAddress]?.let {
-        return
+      when(joinMsg.requestedRole) {
+        SnakesProto.NodeRole.NORMAL -> {
+          handleActiveJoin(ipAddress, message)
+        }
+        
+        else                        -> {
+          handlePassiveJoin(ipAddress, message)
+        }
       }
-      val initialNodeState = when(joinMsg.requestedRole) {
-        SnakesProto.NodeRole.NORMAL -> Node.NodeState.Passive
-        else                        -> Node.NodeState.Active
-      }
-      ClusterNode(
-        nodeState = initialNodeState,
-        nodeId = stateHolder.nextNodeId,
-        ipAddress = ipAddress,
-        clusterNodesHolder = nodesHolder,
-        name = joinMsg.playerName,
-      ).apply { nodesHolder.registerNode(this) }
     } catch(e: Exception) {
       Logger.error(e) { "during node registration" }
     }
@@ -122,6 +119,7 @@ class MasterState(
   override fun errorHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,
   ) {
+    /**not handle*/
   }
   
   override fun announcementHandle(
@@ -158,8 +156,8 @@ class MasterState(
         stateHolder.nextSeqNum,
         senderId = localNode.nodeId,
         receiverId = depInfo.second,
-        senderRole = SnakesProto.NodeRole.VIEWER,
-        receiverRole = SnakesProto.NodeRole.MASTER,
+        senderRole = NodeRole.VIEWER,
+        receiverRole = NodeRole.MASTER,
       )
       nodesHolder[depInfo.first]?.let {
         it.sendToNode(msg)
@@ -201,8 +199,8 @@ class MasterState(
             msgSeq = stateHolder.nextSeqNum,
             senderId = localNode.nodeId,
             receiverId = dpInfo.second,
-            senderRole = SnakesProto.NodeRole.VIEWER,
-            receiverRole = SnakesProto.NodeRole.MASTER,
+            senderRole = NodeRole.VIEWER,
+            receiverRole = NodeRole.MASTER,
           )
           it.sendToNode(msg)
           it.addMessageForAck(msg)
@@ -219,12 +217,59 @@ class MasterState(
         msgSeq = stateHolder.nextSeqNum,
         senderId = localNode.nodeId,
         receiverId = node.nodeId,
-        senderRole = SnakesProto.NodeRole.MASTER,
-        receiverRole = SnakesProto.NodeRole.VIEWER
+        senderRole = NodeRole.MASTER,
+        receiverRole = NodeRole.VIEWER
       )
       node.sendToNode(msg)
       node.addMessageForAck(msg)
     }
     return null
+  }
+  
+  private fun handleActiveJoin(
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
+  ) {
+    ClusterNode(
+      nodeState = Node.NodeState.Passive,
+      nodeId = stateHolder.nextNodeId,
+      ipAddress = ipAddress,
+      clusterNodesHolder = nodesHolder,
+      name = message.join.playerName,
+    ).apply {
+      nodesHolder.registerNode(this)
+      if(!gameEngine.offerPlayer(this to message)) {
+        val err = MessageUtils.MessageProducer.getErrorMsg(
+          message.msgSeq, RetryJoinLater
+        )
+        sendToNode(err)
+        shutdown()
+      }
+    }
+  }
+  
+  private fun handlePassiveJoin(
+    ipAddress: InetSocketAddress, message: SnakesProto.GameMessage
+  ) {
+    nodesHolder[ipAddress]?.let {
+      if it.nodeState
+      MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, it.nodeId, localNode.nodeId
+      )
+      return
+    }
+    ClusterNode(
+      nodeState = Node.NodeState.Passive,
+      nodeId = stateHolder.nextNodeId,
+      ipAddress = ipAddress,
+      clusterNodesHolder = nodesHolder,
+      name = message.join.playerName,
+    ).apply {
+      nodesHolder.registerNode(this)
+      val ack = MessageUtils.MessageProducer.getAckMsg(
+        message.msgSeq, localNode.nodeId, this.nodeId
+      )
+      sendToNode(ack)
+      addMessageForAck(ack)
+    }
   }
 }

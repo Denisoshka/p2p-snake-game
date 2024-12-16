@@ -2,12 +2,8 @@ package core.network.core.states.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.core.NetworkStateHolder
-import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ContextEvent
 import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils

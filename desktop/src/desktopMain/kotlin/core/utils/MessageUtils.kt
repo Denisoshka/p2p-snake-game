@@ -3,6 +3,7 @@ package d.zhdanov.ccfit.nsu.core.utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 
@@ -181,6 +182,25 @@ object MessageUtils {
         else                                                                               -> {
           message
         }
+      }
+    }
+    
+    fun getGamePlayerMsg(
+      name: String,
+      id: Int,
+      ipAddress: String?,
+      port: Int?,
+      nodeRole: NodeRole,
+      playerType: PlayerType?,
+      score: Int
+    ): SnakesProto.GamePlayer.Builder {
+      return SnakesProto.GamePlayer.newBuilder().apply {
+        setName(name)
+        setId(id)
+        ipAddress?.let { setIpAddress(it) }
+        port?.let { setPort(it) }
+        setRole(nodeRole.toProto())
+        playerType?.let { setType(playerType.) }
       }
     }
   }

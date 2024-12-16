@@ -1,44 +1,47 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
+import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
+import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
-object DefaultObserverContext : NodePayloadT {
+class DefaultObserverContext(
+  private val node: ClusterNodeT<Node.MsgInfo>
+) : NodePayloadT {
   override fun handleEvent(
-    event: SnakesProto.GameMessage.SteerMsg,
-    seq: Long,
-    node: ClusterNode?
+    event: SnakesProto.GameMessage.SteerMsg, seq: Long
   ): Boolean {
     return false
   }
   
-  override fun observerDetached(node: ClusterNode?) {
+  override fun observerDetached() {
   }
   
-  override fun observableDetached(node: ClusterNode?) {
+  override fun observableDetached() {
   }
   
   override fun shootContextState(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?,
-    node: ClusterNode?
   ) {
-    node ?: return
-    val nodeRole = getNodeRole(node, masterAddrId, deputyAddrId) ?: return
-    val pl = GamePlayer(
-      name = node.name,
-      id = node.nodeId,
-      ipAddress = node.ipAddress.address.hostAddress,
-      port = node.ipAddress.port,
-      nodeRole = nodeRole,
-      playerType = PlayerType.HUMAN,
-      score = 0,
-    )
-    state.players.add(pl)
+    this.node.apply {
+      val nodeRole = getNodeRole(this, masterAddrId, deputyAddrId) ?: return
+      val msbBldr = MessageUtils.MessageProducer.getGamePlayerMsg(
+        name = name,
+        id = nodeId,
+        ipAddress = ipAddress.address.hostAddress,
+        port = ipAddress.port,
+        nodeRole = nodeRole,
+        playerType = PlayerType.HUMAN,
+        score = 0
+      )
+      state.apply {
+        playersBuilder.addPlayers(msbBldr)
+      }
+    }
   }
 }

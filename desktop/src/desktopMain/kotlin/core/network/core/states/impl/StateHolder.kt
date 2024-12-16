@@ -4,7 +4,9 @@ import core.network.core.connection.lobby.impl.NetNodeHandler
 import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
+import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
@@ -13,6 +15,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.AbstractStateHolder
 import d.zhdanov.ccfit.nsu.core.network.core.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -28,13 +31,14 @@ import java.util.concurrent.atomic.AtomicReference
 
 private val Logger = KotlinLogging.logger { StateHolder::class.java }
 private const val kChannelSize = 10
+private const val RetryJoinLater = "retry join later"
 
 class StateHolder(
   val gameController: GameController,
   val nodesHolder: ClusterNodesHolder,
   val netNodesHandler: NetNodeHandler,
   private val unicastNetHandler: UnicastNetHandler,
-) : AbstractStateHolder {
+) : AbstractStateHolder, StateConsumer {
   @Volatile var localNode: LocalNode = TODO()
   
   private val gameStateHolder = AtomicReference<SnakesProto.GameState?>()
@@ -55,10 +59,6 @@ class StateHolder(
   private val seqNumProvider = AtomicLong(0)
   val nextSeqNum
     get() = seqNumProvider.incrementAndGet()
-  
-  private val nextNodeIdProvider = AtomicInteger(0)
-  val nextNodeId
-    get() = nextNodeIdProvider.incrementAndGet()
   
   fun sendUnicast(
     msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
@@ -120,7 +120,6 @@ class StateHolder(
     Channel(kChannelSize)
   private val detachNodeChannel: Channel<ClusterNodeT<Node.MsgInfo>> =
     Channel(kChannelSize)
-  
   
   /**
    * вообще не трогать в иных местах кроме как nodesNonLobbyWatcherRoutine,
@@ -205,7 +204,7 @@ class StateHolder(
           msgSeq = nextSeqNum,
           senderId = msInfo.second,
           receiverId = newDepInfo.second,
-          receiverRole = SnakesProto.NodeRole.DEPUTY
+          receiverRole = NodeRole.DEPUTY
         )
         sendToNode(msg)
         addMessageForAck(msg)
@@ -228,6 +227,40 @@ class StateHolder(
       masterDeputyHolder.set(
         (localNode.ipAddress to localNode.nodeId) to newDepInfo
       )
+    }
+  }
+  
+  override fun submitState(state: SnakesProto.GameState.Builder) {
+    val (ms, dp) = masterDeputy ?: return
+    for((_, node) in nodesHolder) {
+      node.payload.shootContextState(state, ms, dp)
+    }
+    state.build()
+    for((_, node) in nodesHolder) {
+      node.
+    }
+  }
+  
+  override fun submitAcceptedPlayer(playerData: Pair<Pair<ClusterNodeT<Node.MsgInfo>, SnakesProto.GameMessage>, ObservableSnakeEntity?>) {
+    val (nodeInitMsg, entity) = playerData
+    val (node, initMsg) = nodeInitMsg
+    if(entity == null) {
+      node.apply {
+        val err = MessageUtils.MessageProducer.getErrorMsg(
+          nextSeqNum, RetryJoinLater
+        )
+        sendToNode(err)
+        shutdown()
+      }
+    } else {
+      node.apply {
+        val seq = initMsg.msgSeq
+        val ack = MessageUtils.MessageProducer.getAckMsg(
+          seq, node.nodeId, localNode.nodeId
+        )
+        sendToNode(ack)
+      }
+      node.mountPayload(ActiveObserverContext(node, entity))
     }
   }
 }

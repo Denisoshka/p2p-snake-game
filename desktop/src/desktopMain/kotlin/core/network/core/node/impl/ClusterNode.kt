@@ -28,15 +28,15 @@ import java.util.concurrent.atomic.AtomicReference
 private val Logger = KotlinLogging.logger { ClusterNode::class.java }
 
 class ClusterNode(
-  nodeState: Node.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   private val clusterNodesHolder: ClusterNodesHolder,
+  private val payloadT: NodePayloadT
   override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
   private val onTerminatedHandler = Channel<Node.NodeState>()
-  
+  private val onObserverSupplier = Channel<Node.NodeState>()
   private val thresholdDelay = clusterNodesHolder.thresholdDelay
   @Volatile override var lastReceive = System.currentTimeMillis()
   @Volatile override var lastSend = System.currentTimeMillis()
@@ -45,6 +45,7 @@ class ClusterNode(
     get() = (payload !is PlugObserver)
   override val payload: NodePayloadT
     get() = stateHolder.get().second
+  
   override val nodeState: Node.NodeState
     get() = stateHolder.get().first
   private val resendDelay = clusterNodesHolder.resendDelay
@@ -111,7 +112,6 @@ class ClusterNode(
   }
   
   
-  
   override fun detach() {
     onPassiveHandler.trySend(Node.NodeState.Passive).onSuccess {
       Logger.trace { "$this marked as passive" }
@@ -148,7 +148,7 @@ class ClusterNode(
                 return@onReceive
               }
               payload.observerDetached()
-              stateHolder.set(state to DefaultObserverContext)
+              stateHolder.set(state to DefaultObserverContext(this))
               this@ClusterNode.clusterNodesHolder.apply {
                 handleNodeDetach(this@ClusterNode)
               }
@@ -189,6 +189,10 @@ class ClusterNode(
         }
       } catch(e: CancellationException) {
         this.cancel()
+      } finally {
+        onPassiveHandler.close()
+        onTerminatedHandler.close()
+        onObserverSupplier.close()
       }
     }
   }

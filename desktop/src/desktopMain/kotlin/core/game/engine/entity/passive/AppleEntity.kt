@@ -1,46 +1,42 @@
 package d.zhdanov.ccfit.nsu.core.game.engine.entity.passive
 
 import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.game.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.game.engine.GameMap
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.Entity
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.GameType
-import d.zhdanov.ccfit.nsu.core.game.engine.impl.GameEngine
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Coord
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.StateMsg
+import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 
 class AppleEntity(
   x: Int,
   y: Int,
+  override val gameContext: GameContext
 ) : Entity {
   override val head = GameMap.Cell(x, y)
   override var type = GameType.Apple
   override var alive = true
   override val hitBox = listOf(head)
   
-  override fun checkCollisions(entity: Entity, context: GameEngine) {
+  override fun checkCollisions(entity: Entity) {
     if(!alive) return
-    val b = hitBox.first()
-    if(entity.hitBox.any { a -> a.x == b.x && a.y == b.y }) {
+    if(entity !== this && head.x == entity.head.x && head.y == entity.head.y) {
       alive = false
     }
   }
   
-  override fun update(context: GameEngine, sideEffects: List<Entity>) {}
+  override fun update() {
+  }
+  
   override fun hitBoxTravel(function: (x: Int, y: Int) -> Unit) {
-    TODO("Not yet implemented")
   }
   
   override fun shootState(state: SnakesProto.GameState.Builder) {
-    val xyi = hitBox.first()
-val     appleShot = Mess
-    state.foodsBuilderList.add()
-    state.foods.add(Coord(xyi.x, xyi.y))
+    val appleShot = MessageUtils.MessageProducer.getCoordBuilder(head.x, head.y)
+    state.apply {
+      foodsBuilderList.add(appleShot)
+    }
   }
   
-  override fun atDead(context: GameEngine) {
-    context
+  override fun atDead() {
   }
-  
-  
-  override fun restoreState(offsets: List<Coord>) {}
 }

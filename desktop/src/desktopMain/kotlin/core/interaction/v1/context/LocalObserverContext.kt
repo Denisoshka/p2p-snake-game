@@ -2,11 +2,9 @@ package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GamePlayer
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
@@ -14,25 +12,20 @@ import java.net.InetSocketAddress
 class LocalObserverContext(
   private val snake: ObservableSnakeEntity,
   private val localNode: LocalNode,
-  private var lastUpdateSeq: Long = 0L,
 ) : NodePayloadT {
   @Synchronized
   override fun handleEvent(
-    event: SnakesProto.GameMessage.SteerMsg,
-    seq: Long,
-    node: ClusterNode?
+    event: SnakesProto.GameMessage.SteerMsg, seq: Long,
   ): Boolean {
-    snake.changeState(
-      MessageUtils.MessageProducer.DirectionFromProto(event.direction)
-    )
+    snake.changeState(Direction.fromProto(event.direction))
     return true
   }
   
-  override fun observerDetached(node: ClusterNode?) {
+  override fun observerDetached() {
     snake.observerExpired()
   }
   
-  override fun observableDetached(node: ClusterNode?) {
+  override fun observableDetached() {
     localNode.detach()
   }
   
@@ -40,19 +33,19 @@ class LocalObserverContext(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
     deputyAddrId: Pair<InetSocketAddress, Int>?,
-    node: ClusterNode?
   ) {
     localNode.apply {
-      val pl = GamePlayer(
+      val nodeRole = getNodeRole(this, masterAddrId, deputyAddrId) ?: return
+      val msbBldr = MessageUtils.MessageProducer.getGamePlayerMsg(
         name = name,
-        id = localNode.nodeId,
+        id = nodeId,
         ipAddress = null,
         port = null,
-        nodeRole = NodeRole.MASTER,
+        nodeRole = nodeRole,
         playerType = PlayerType.HUMAN,
         score = snake.score
       )
-      state.players.add(pl)
+      state.playersBuilder.addPlayers(msbBldr)
     }
   }
 }
