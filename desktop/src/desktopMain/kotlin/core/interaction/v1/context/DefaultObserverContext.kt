@@ -8,8 +8,8 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
-class DefaultObserverContext(
-  private val node: ClusterNodeT<Node.MsgInfo>
+open class DefaultObserverContext(
+  val node: ClusterNodeT<Node.MsgInfo>
 ) : NodePayloadT {
   override fun handleEvent(
     event: SnakesProto.GameMessage.SteerMsg, seq: Long
@@ -21,6 +21,7 @@ class DefaultObserverContext(
   }
   
   override fun observableDetached() {
+    node.detach()
   }
   
   override fun shootContextState(

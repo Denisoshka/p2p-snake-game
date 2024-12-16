@@ -7,14 +7,13 @@ import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
-class ActiveObserverContext(
-  private val node: ClusterNodeT<Node.MsgInfo>,
-  private val snake: ObservableSnakeEntity,
-) : NodePayloadT {
+open class ActiveObserverContext(
+  node: ClusterNodeT<Node.MsgInfo>,
+  val snake: ObservableSnakeEntity,
+) : DefaultObserverContext(node) {
   private var lastUpdateSeq: Long = 0
   
   init {
