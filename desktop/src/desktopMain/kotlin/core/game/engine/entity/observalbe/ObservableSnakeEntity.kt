@@ -16,25 +16,26 @@ class ObservableSnakeEntity : SnakeEntity, ObservableEntity {
     id: Int, networkGameContext: NetworkGameContext, x: Int, y: Int,
   ) : super(id, networkGameContext, x, y)
   
-  private val subscribers: MutableList<() -> Unit> = mutableListOf()
-  override fun addObserver(action: () -> Unit) {
-    synchronized(subscribers) {
-      if(!super.alive) {
-        action()
-      } else {
-        subscribers.add(action)
-      }
+  private var observer: (() -> Unit)? = null
+  override fun mountObserver(action: () -> Unit) {
+    synchronized(this) {
+      if(observer != null) throw RuntimeException("Observer already initialized")
+      observer = action
+      super.snakeState = SnakeState.ALIVE
     }
   }
   
   override fun observableExpired() {
-    synchronized(subscribers) {
-      subscribers.forEach { it() }
+    synchronized(this) {
+      observer?.invoke()
     }
   }
   
   override fun observerExpired() {
-    super.snakeState = SnakeState.ZOMBIE
+    synchronized(this) {
+      super.snakeState = SnakeState.ZOMBIE
+      observer = null
+    }
   }
   
   override fun atDead() {

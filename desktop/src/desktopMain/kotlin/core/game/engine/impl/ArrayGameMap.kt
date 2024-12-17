@@ -52,7 +52,8 @@ class ArrayGameMap(override var width: Int, override var height: Int) :
   }
   
   override fun findFreeSquare(
-    size: Int, occupiedBy: GameType?
+    occupiedBy: GameType?,
+    size: Int
   ): Pair<Int, Int>? {
     val startX = Random.nextInt(0, height)
     val startY = Random.nextInt(0, width)

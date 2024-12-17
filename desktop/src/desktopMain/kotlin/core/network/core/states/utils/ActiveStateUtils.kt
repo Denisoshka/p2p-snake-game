@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ActiveState
+import d.zhdanov.ccfit.nsu.core.network.node.connected.ActiveState
 import java.net.InetSocketAddress
 
 object ActiveStateUtils {

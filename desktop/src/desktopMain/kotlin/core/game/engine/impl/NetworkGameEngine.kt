@@ -10,8 +10,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.entity.passive.AppleEntity
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.IdService
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.GameConfig
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
+import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -34,12 +33,12 @@ class NetworkGameEngine(
   private val stateConsumer: StateConsumer,
   private val gameConfig: GameConfig,
   private val idService: IdService,
-  override val registeredPlayers: MutableMap<InetSocketAddress, ObservableSnakeEntity>,
 ) : NetworkGameContext {
   override val gameMap: GameMap = ArrayGameMap(
     gameConfig.width, gameConfig.height
   )
-  
+  override val registeredPlayers: MutableMap<InetSocketAddress, ObservableSnakeEntity> =
+    hashMapOf()
   override val sideEffectEntity: MutableList<Entity> = ArrayList()
   override val entities: MutableList<Entity> = ArrayList()
   
@@ -50,7 +49,6 @@ class NetworkGameEngine(
     Channel<Pair<InetSocketAddress, SnakesProto.GameMessage>>(
       joinInStateQ
     )
-  
   
   @OptIn(ExperimentalCoroutinesApi::class)
   private fun CoroutineScope.gameDispatcher() = launch {
@@ -75,8 +73,9 @@ class NetworkGameEngine(
     }
   }
   
-  private fun spawnNewSnake(id: Int): ObservableSnakeEntity? {
+  private fun spawnNewSnake(): ObservableSnakeEntity? {
     val coords = gameMap.findFreeSquare(GameType.Snake) ?: return null
+    val id = idService.nextId
     return ObservableSnakeEntity(
       id, this, coords.first, coords.second
     ).apply {
@@ -84,11 +83,17 @@ class NetworkGameEngine(
     }
   }
   
-  private fun handleNewPlayer(playerInfo: Pair<ClusterNodeT<Node.MsgInfo>, SnakesProto.GameMessage>) {
-    val sn = spawnNewSnake(playerInfo.first.nodeId)?.apply {
-      sideEffectEntity.add(this@apply)
+  private fun handleNewPlayer(playerInfo: Pair<InetSocketAddress, SnakesProto.GameMessage>) {
+    registeredPlayers[playerInfo.first]?.let {
+      it.snakeState = SnakeState.ALIVE
+      stateConsumer.submitAcceptedPlayer(playerInfo to it)
+    } ?: {
+      spawnNewSnake()?.let {
+        sideEffectEntity.add(it)
+        registeredPlayers[playerInfo.first] = it
+        stateConsumer.submitAcceptedPlayer(playerInfo to it)
+      }
     }
-    stateConsumer.submitAcceptedPlayer(playerInfo to sn)
   }
   
   override fun offerPlayer(playerInfo: Pair<InetSocketAddress, SnakesProto.GameMessage>): Boolean {
@@ -98,9 +103,13 @@ class NetworkGameEngine(
   private fun countNextStep(): Long {
     val startTime = System.currentTimeMillis()
     
+    preprocess()
+    
     update()
     checkCollision()
+    
     postProcess()
+    
     newStateAvailable()
     
     val endTime = System.currentTimeMillis()
@@ -111,6 +120,11 @@ class NetworkGameEngine(
       return sleepTime
     }
     return 0
+  }
+  
+  private fun preprocess() {
+
+
   }
   
   private fun update() {

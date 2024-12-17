@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.impl
+package d.zhdanov.ccfit.nsu.core.network.node.connected
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType

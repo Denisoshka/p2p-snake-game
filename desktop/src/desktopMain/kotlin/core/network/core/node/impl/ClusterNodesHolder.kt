@@ -6,7 +6,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttem
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.NodeContext
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
+import d.zhdanov.ccfit.nsu.core.network.node.connected.StateHolder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

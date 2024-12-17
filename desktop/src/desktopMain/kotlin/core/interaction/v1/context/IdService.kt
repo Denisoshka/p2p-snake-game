@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * */
 class IdService(state: SnakesProto.GameState? = null) {
   private val nextNodeIdProvider = AtomicInteger(0)
-  val nextNodeId
+  val nextId
     get() = nextNodeIdProvider.incrementAndGet()
   
   init {

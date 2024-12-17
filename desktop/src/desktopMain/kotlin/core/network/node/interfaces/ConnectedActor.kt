@@ -1,9 +1,9 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
+package d.zhdanov.ccfit.nsu.core.network.states.abstr
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import java.net.InetSocketAddress
 
-interface GameActor : BaseActor {
+interface ConnectedActor : BaseActor {
   fun submitSteerMsg(steerMsg: SnakesProto.GameMessage.SteerMsg)
   fun roleChangeHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage,

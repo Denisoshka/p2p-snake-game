@@ -4,8 +4,8 @@ import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.ContextEvent
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.StateHolder
+import d.zhdanov.ccfit.nsu.core.network.node.connected.ContextEvent
+import d.zhdanov.ccfit.nsu.core.network.node.connected.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking

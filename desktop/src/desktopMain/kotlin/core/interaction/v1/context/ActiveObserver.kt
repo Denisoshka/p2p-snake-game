@@ -1,48 +1,30 @@
 package d.zhdanov.ccfit.nsu.core.interaction.v1.context
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.PlayerType
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.SnakeState
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import java.net.InetSocketAddress
 
-open class ActiveObserverContext(
-  node: ClusterNodeT<Node.MsgInfo>,
-  val snake: ObservableSnakeEntity,
-) : DefaultObserverContext(node) {
-  private var lastUpdateSeq: Long = 0
-  
-  init {
-    snake.mountObserver { this.observableDetached() }
-  }
-  
-  @Synchronized
+class ActiveObserver(
+  override val state: Node.NodeState,
+  override var score: Int
+) : Context.Active {
   override fun handleEvent(
-    event: SnakesProto.GameMessage.SteerMsg, seq: Long,
+    event: SnakesProto.GameMessage.SteerMsg,
+    seq: Long
   ): Boolean {
-    if(seq <= lastUpdateSeq) return false
-    lastUpdateSeq = seq
-    snake.changeState(Direction.fromProto(event.direction))
-    
-    return true
+    TODO("Not yet implemented")
   }
   
-  override fun observerDetached() {
-    snake.snakeState = SnakeState.ZOMBIE
-  }
-  
-  override fun observableDetached() {
-    node.detach()
+  override fun getEvent(): SnakesProto.GameMessage.SteerMsg? {
+    TODO("Not yet implemented")
   }
   
   override fun shootContextState(
     state: SnakesProto.GameState.Builder,
     masterAddrId: Pair<InetSocketAddress, Int>,
-    deputyAddrId: Pair<InetSocketAddress, Int>?,
+    deputyAddrId: Pair<InetSocketAddress, Int>?
   ) {
     this.node.apply {
       val nodeRole = getNodeRole(this, masterAddrId, deputyAddrId) ?: return

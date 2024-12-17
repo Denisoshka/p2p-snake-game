@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.abstr
+package d.zhdanov.ccfit.nsu.core.network.states.abstr
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT

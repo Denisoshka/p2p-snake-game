@@ -12,7 +12,7 @@ import d.zhdanov.ccfit.nsu.core.game.engine.impl.NetworkGameEngine
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.MasterState
+import d.zhdanov.ccfit.nsu.core.network.node.connected.MasterState
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
