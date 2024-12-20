@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.node.connected.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.nethandlers.NetworkHandler
+import d.zhdanov.ccfit.nsu.core.network.core2.nethandler.NetworkHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.bootstrap.Bootstrap
 import io.netty.channel.ChannelHandlerContext

@@ -5,12 +5,11 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.ActiveEntity
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.active.SnakeEntity
-import d.zhdanov.ccfit.nsu.core.game.engine.impl.NetworkGameEngine
+import d.zhdanov.ccfit.nsu.core.game.core.engine.GameContext
+import d.zhdanov.ccfit.nsu.core.game.core.entity.active.ActiveEntity
+import d.zhdanov.ccfit.nsu.core.game.core.entity.active.SnakeEntity
+import d.zhdanov.ccfit.nsu.core.game.core.engine.impl.GameContextImpl
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.LocalObserverContext
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
 import d.zhdanov.ccfit.nsu.core.network.node.connected.MasterState
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -38,7 +37,7 @@ object MasterStateUtils {
     stateHolder: NetworkStateHolder,
     clusterNodesHolder: ClusterNodesHolder,
   ): MasterState {
-    val eng = NetworkGameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
+    val eng = GameContextImpl(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = init(
       eng, gameConfig, gamePlayerInfo
     )
@@ -68,7 +67,7 @@ object MasterStateUtils {
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
   ): MasterState {
-    val eng = NetworkGameEngine(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
+    val eng = GameContextImpl(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val scope = getScope()
     try {
       val entities = initFromState(
@@ -125,7 +124,7 @@ object MasterStateUtils {
   
   
   private fun init(
-    gameEngine: NetworkGameContext,
+    gameEngine: GameContext,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
   ) = gameEngine.initGame(
@@ -133,7 +132,7 @@ object MasterStateUtils {
   ).associateBy { it.id }
   
   private fun initFromState(
-    gameEngine: NetworkGameContext,
+    gameEngine: GameContext,
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
     clusterNodesHolder: ClusterNodesHolder,

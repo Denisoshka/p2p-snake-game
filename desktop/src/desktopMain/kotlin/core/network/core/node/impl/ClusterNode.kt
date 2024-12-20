@@ -1,14 +1,10 @@
 package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalUnacknowledgedMessagesGetAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.NodePayloadT
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -29,10 +25,10 @@ import java.util.concurrent.atomic.AtomicReference
 private val Logger = KotlinLogging.logger { ClusterNode::class.java }
 
 class ClusterNode(
+  nodeState: Node.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
   private val clusterNodesHolder: ClusterNodesHolder,
-  payload: NodePayloadT,
   override val name: String = ""
 ) : ClusterNodeT<Node.MsgInfo> {
   private val onPassiveHandler = Channel<Node.NodeState>()
@@ -43,27 +39,17 @@ class ClusterNode(
   override var lastSend = System.currentTimeMillis()
   
   override val running: Boolean
-    get() = (payload !is PlugObserver)
-  override val payload: NodePayloadT
-    get() = stateHolder.get().second
-  
+    get() = (nodeState <= Node.NodeState.Passive)
   override val nodeState: Node.NodeState
-    get() = stateHolder.get().first
+    get() = stateHolder.get()
   private val resendDelay = clusterNodesHolder.resendDelay
-  private val stateHolder: AtomicReference<Pair<Node.NodeState, NodePayloadT>> =
-    when(payload) {
-      is ActiveObserverContext  -> {
-        AtomicReference(Pair(Node.NodeState.Active, payload))
-      }
-      
-      is DefaultObserverContext -> {
-        AtomicReference(Pair(Node.NodeState.Passive, payload))
-      }
-      
-      else                      -> {
-        throw IllegalNodeRegisterAttempt("illegal initial node state $payload")
-      }
+  private val stateHolder = AtomicReference(nodeState)
+  
+  init {
+    if(nodeState > Node.NodeState.Passive) {
+      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
     }
+  }
   
   /**
    * Use this value within the scope of synchronized([msgForAcknowledge]).

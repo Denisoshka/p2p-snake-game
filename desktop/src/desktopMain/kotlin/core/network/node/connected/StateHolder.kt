@@ -5,8 +5,6 @@ import core.network.core.states.utils.Utils
 import core.network.node.interfaces.StateHolder
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
-import d.zhdanov.ccfit.nsu.core.game.engine.entity.observalbe.ObservableSnakeEntity
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalChangeStateAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
@@ -14,7 +12,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.interfaces.StateConsumer
+import d.zhdanov.ccfit.nsu.core.network.interfaces.StateService
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
 import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
@@ -37,7 +35,7 @@ class StateHolder(
   val nodesHolder: ClusterNodesHolder,
   val netNodesHandler: NetNodeHandler,
   private val unicastNetHandler: UnicastNetHandler,
-) : StateHolder, StateConsumer {
+) : StateHolder, StateService {
   @Volatile var localNode: LocalNode = TODO()
   
   private val gameStateHolder = AtomicReference<SnakesProto.GameState?>()
@@ -165,10 +163,7 @@ class StateHolder(
       masterDeputyHolder.set(dpInfo to null)
       
       val newMsNode = ClusterNode(
-        nodeState = Node.NodeState.Passive,
         nodeId = dpInfo.second,
-        ipAddress = dpInfo.first,
-        clusterNodesHolder = nodesHolder,
       ).apply(nodesHolder::registerNode)
       
       msNode.getUnacknowledgedMessages().map { (ms, _) ->
@@ -231,7 +226,7 @@ class StateHolder(
   override fun submitState(state: SnakesProto.GameState.Builder) {
     val (ms, dp) = masterDeputy ?: return
     for((_, node) in nodesHolder) {
-      node.payload.shootContextState(state, ms, dp)
+      node.shootContextState(state, ms, dp)
     }
     state.build()
     for((_, node) in nodesHolder) {
@@ -239,26 +234,14 @@ class StateHolder(
     }
   }
   
-  override fun submitAcceptedPlayer(playerData: Pair<Pair<ClusterNodeT<Node.MsgInfo>, SnakesProto.GameMessage>, ObservableSnakeEntity?>) {
-    val (nodeInitMsg, entity) = playerData
-    val (node, initMsg) = nodeInitMsg
-    if(entity == null) {
-      node.apply {
-        val err = MessageUtils.MessageProducer.getErrorMsg(
-          nextSeqNum, RetryJoinLater
-        )
-        sendToNode(err)
-        shutdown()
-      }
-    } else {
-      node.apply {
-        val seq = initMsg.msgSeq
-        val ack = MessageUtils.MessageProducer.getAckMsg(
-          seq, node.nodeId, localNode.nodeId
-        )
-        sendToNode(ack)
-      }
-//      node.mountPayload(ActiveObserverContext(node, entity))
+  override fun submitNewRegisteredPlayer(
+    ipAddr: InetSocketAddress, initMessage: SnakesProto.GameMessage, id: Int?
+  ) {
+    id ?: return
+    val nodeState = when(initMessage.join.requestedRole) {
+      SnakesProto.NodeRole.VIEWER -> Node.NodeState.Passive
+      else                        -> Node.NodeState.Active
     }
+    nodesHolder.registerNode(ipAddr, id)
   }
 }

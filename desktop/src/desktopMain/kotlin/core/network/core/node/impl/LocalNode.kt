@@ -1,9 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core.node.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.ActiveObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.DefaultObserverContext
-import d.zhdanov.ccfit.nsu.core.interaction.v1.context.PlugObserver
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node

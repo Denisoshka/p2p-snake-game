@@ -4,7 +4,7 @@ import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.game.engine.NetworkGameContext
+import d.zhdanov.ccfit.nsu.core.game.core.engine.GameContext
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
@@ -12,26 +12,23 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.Logger
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.RetryJoinLater
 import d.zhdanov.ccfit.nsu.core.network.states.abstr.ConnectedActor
 import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
+
+private val Logger = KotlinLogging.logger { MasterState::class.java }
 
 class MasterState(
   val stateHolder: StateHolder,
   val localNode: LocalNode,
-  val gameEngine: NetworkGameContext,
+  val gameEngine: GameContext,
   val gameConfig: InternalGameConfig,
 ) : NodeState.MasterStateT, ConnectedActor {
   private val gameController: GameController = stateHolder.gameController
   val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   
-  init {
-    Logger.info { "$this init" }
-    gameEngine.launch()
-  }
   
   override fun joinHandle(
     ipAddress: InetSocketAddress, message: SnakesProto.GameMessage

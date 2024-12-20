@@ -2,7 +2,7 @@ package d.zhdanov.ccfit.nsu.core.network.nethandlers.impl
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.node.connected.NetworkController
-import d.zhdanov.ccfit.nsu.core.network.nethandlers.UnicastNetworkHandler
+import d.zhdanov.ccfit.nsu.core.network.core2.nethandler.UnicastNetHandler
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.Unpooled
@@ -20,7 +20,8 @@ private val logger = KotlinLogging.logger {}
 
 class UnicastNetHandler(
   context: NetworkController,
-) : UnicastNetworkHandler {
+) :
+  UnicastNetHandler {
   private lateinit var channel: DatagramChannel
   private var group: NioEventLoopGroup? = null
   private val bootstrap: Bootstrap = Bootstrap()

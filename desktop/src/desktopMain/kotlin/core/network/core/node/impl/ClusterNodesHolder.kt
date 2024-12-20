@@ -71,7 +71,14 @@ class ClusterNodesHolder(
       return node
     }
     return ret
-//    throw IllegalNodeRegisterAttempt("node already registered")
+  }
+  
+  override fun registerNode(
+    ipAddress: InetSocketAddress, id: Int, name: String
+  ) {
+    nodesByIp.computeIfAbsent(ipAddress) {
+      val node = ClusterNode(id, ipAddress, this, )
+    }
   }
   
   override suspend fun handleNodeTermination(
