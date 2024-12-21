@@ -1,28 +1,26 @@
-package d.zhdanov.ccfit.nsu.core.network.node.connected
+package d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state
 
 import core.network.core.connection.lobby.impl.NetNode
-import core.network.core.connection.lobby.impl.NetNodeHandler
-import core.network.core.states.utils.ActiveStateUtils
 import core.network.core.states.utils.MasterStateUtils
-import core.network.core.states.utils.PassiveStateUtils
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
-import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.MessageType
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.Logger
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.states.BaseActor
+import d.zhdanov.ccfit.nsu.core.network.core2.states.Event
+import d.zhdanov.ccfit.nsu.core.network.core2.states.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
 
-class LobbyState(
+private val Logger = KotlinLogging.logger { LobbyStateImpl::class.java }
+
+class LobbyStateImpl(
   private val stateHolder: StateHolder,
-) : NodeState.LobbyStateT {
-  private val gameController: GameController = stateHolder.gameController
-  private val netNodesHandler: NetNodeHandler = stateHolder.netNodesHandler
+) : NodeState.LobbyState, BaseActor {
+  private val gameController = stateHolder.gameController
+  private val nodesHolder = stateHolder.nodesHolder
   
   fun requestJoinToGame(
     event: Event.State.ByController.JoinReq
@@ -31,7 +29,7 @@ class LobbyState(
       event.gameAnnouncement.host, event.gameAnnouncement.port
     )
     
-    val node = netNodesHandler[addr] ?: run {
+    val node = nodesHolder[addr] ?: run {
       val resendDelay = getResendDelay(
         event.gameAnnouncement.announcement.config.stateDelayMs
       )
@@ -39,12 +37,12 @@ class LobbyState(
         event.gameAnnouncement.announcement.config.stateDelayMs
       )
       val newNode = NetNode(
-        context = netNodesHandler,
+        context = nodesHolder,
         ipAddress = addr,
         resendDelay = resendDelay.toLong(),
         thresholdDelay = thresholdDelay.toLong(),
       )
-      netNodesHandler.registerNode(newNode)
+      nodesHolder.registerNode(newNode)
     }
     val msg = MessageUtils.MessageProducer.getJoinMsg(
       msgSeq = stateHolder.nextSeqNum,
@@ -68,10 +66,10 @@ class LobbyState(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
   ) {
-    val node = netNodesHandler[ipAddress] ?: return
+    val node = nodesHolder[ipAddress] ?: return
     val onAckMsg = node.ackMessage(message) ?: return
     if(onAckMsg.req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN) {
-      Logger.trace {
+      d.zhdanov.ccfit.nsu.core.network.node.connected.Logger.trace {
         "receive join ack from $ipAddress with id ${message.receiverId}"
       }
       
@@ -82,9 +80,8 @@ class LobbyState(
   override fun errorHandle(
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
-    msgT: MessageType
   ) {
-    val node = netNodesHandler[ipAddress] ?: return
+    val node = nodesHolder[ipAddress] ?: return
     val onAckMsg = node.ackMessage(message) ?: return
     if(onAckMsg.req.typeCase == SnakesProto.GameMessage.TypeCase.JOIN) {
       Logger.trace {
@@ -95,89 +92,99 @@ class LobbyState(
   
   
   override fun toMaster(
-    changeAccessToken: Any,
-    nodesHandler: ClusterNodesHolder,
+    nodesHolder: ClusterNodesHolder,
     event: Event.State.ByController.LaunchGame
   ): NodeState {
     try {
       val playerInfo = GamePlayerInfo(event.internalGameConfig.playerName, 0)
-      nodesHandler.launch()
       MasterStateUtils.prepareMasterContext(
-        clusterNodesHolder = nodesHandler,
+        clusterNodesHolder = nodesHolder,
         gamePlayerInfo = playerInfo,
         gameConfig = event.internalGameConfig,
         stateHolder = stateHolder,
       ).apply {
         stateHolder.setupNewState(this, changeAccessToken)
       }
+      gameController.openGameScreen(event.internalGameConfig)
     } catch(e: Exception) {
       Logger.error(e) { "unexpected error during launch game" }
       throw e
     }
-    gameController.openGameScreen(event.internalGameConfig)
   }
   
   override fun toActive(
-    nodesHandler: ClusterNodesHolder,
+    nodesHolder: ClusterNodesHolder,
     event: Event.State.ByInternal.JoinReqAck,
-    changeAccessToken: Any
   ): NodeState {
     try {
       val destAddr = InetSocketAddress(
         event.onEventAck.gameAnnouncement.host,
         event.onEventAck.gameAnnouncement.port
       )
-      nodesHandler.launch()
-      ActiveStateUtils.prepareActiveState(
-        clusterNodesHolder = nodesHandler,
+      val localNode = nodesHolder.launch(
+        event.gamePlayerInfo.playerId, ClusterNode.NodeState.Passive
+      )
+      /** register master */
+      this.nodesHolder.registerNode(
+        ipAddress = destAddr,
+        id = event.senderId,
+        nodeRole = ClusterNode.NodeState.Active
+      )
+      gameController.openGameScreen(event.internalGameConfig)
+      return ActiveStateImpl(
+        localNode = localNode,
         stateHolder = stateHolder,
-        destAddr = destAddr,
-        internalGameConfig = event.internalGameConfig,
-        masterId = event.senderId,
-        playerId = event.gamePlayerInfo.playerId
-      ).apply { stateHolder.setupNewState(this, changeAccessToken) }
+        gameConfig = event.internalGameConfig
+      )
     } catch(e: Exception) {
-      nodesHandler.shutdown()
+      nodesHolder.shutdown()
       Logger.trace { "joined as ${SnakesProto.NodeRole.NORMAL} to $event" }
       throw e
     }
-    gameController.openGameScreen(event.internalGameConfig)
   }
   
   
   override fun toPassive(
-    clusterNodesHolder: ClusterNodesHolder,
+    nodesHolder: ClusterNodesHolder,
     event: Event.State.ByInternal.JoinReqAck,
-    changeAccessToken: Any
   ): NodeState {
     try {
       val destAddr = InetSocketAddress(
         event.onEventAck.gameAnnouncement.host,
         event.onEventAck.gameAnnouncement.port
       )
-      clusterNodesHolder.launch()
-      PassiveStateUtils.createPassiveState(
-        stateHolder = stateHolder,
-        clusterNodesHolder = clusterNodesHolder,
-        destAddr = destAddr,
-        internalGameConfig = event.internalGameConfig,
-        masterId = event.senderId,
-        playerId = event.gamePlayerInfo.playerId,
-      ).apply { stateHolder.setupNewState(this, changeAccessToken) }
+      val localNode = nodesHolder.launch(
+        nodeId = event.gamePlayerInfo.playerId,
+        nodeRole = ClusterNode.NodeState.Passive
+      )
+      /** register master */
+      this.nodesHolder.registerNode(
+        ipAddress = destAddr,
+        id = event.senderId,
+        nodeRole = ClusterNode.NodeState.Active
+      )
+      gameController.openGameScreen(event.internalGameConfig)
+      return PassiveStateImpl(
+        localNode = localNode,
+        gameConfig = event.internalGameConfig,
+        stateHolder = stateHolder
+      )
     } catch(e: Exception) {
       Logger.error(e) { "unexpected error during switch to passive game" }
-      clusterNodesHolder.shutdown()
+      nodesHolder.shutdown()
       throw e
     }
   }
   
   override fun atNodeDetachPostProcess(
-    node: ClusterNodeT<Node.MsgInfo>,
+    node: ClusterNode,
     msInfo: Pair<InetSocketAddress, Int>,
-    dpInfo: Pair<InetSocketAddress, Int>?,
-    accessToken: Any
+    dpInfo: Pair<InetSocketAddress, Int>?
   ): NodeState? {
-    TODO("Not yet implemented")
+    /**
+     * not handle
+     */
+    return null
   }
   
   companion object LobbyStateDelayProvider {

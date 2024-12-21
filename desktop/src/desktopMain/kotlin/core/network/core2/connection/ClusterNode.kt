@@ -30,6 +30,4 @@ interface ClusterNode {
   data class MsgInfo(
     val req: SnakesProto.GameMessage, var lastCheck: Long
   )
-  
-  
 }

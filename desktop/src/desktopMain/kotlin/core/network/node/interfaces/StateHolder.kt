@@ -1,7 +1,7 @@
 package core.network.node.interfaces
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.NodeState
 import java.net.InetSocketAddress
 
 interface StateHolder {

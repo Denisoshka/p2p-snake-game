@@ -1,18 +1,18 @@
 package core.network.core2.connection.impl
 
+import d.zhdanov.ccfit.nsu.SnakesProto
+import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalNodeRegisterAttempt
 import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
-import d.zhdanov.ccfit.nsu.core.network.core2.connection.impl.ClusterNodeImpl
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.onSuccess
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
@@ -21,25 +21,48 @@ private val Logger = KotlinLogging.logger { LocalClusterNodeImpl::class.java }
 
 class LocalClusterNodeImpl(
   nodeRole: ClusterNode.NodeState,
-  nodeId: Int,
-  nodeHolder: ClusterNodesHolder
-) : ClusterNodeImpl(
-  nodeRole, nodeId, LocalIpAddress, nodeHolder
-) {
+  override val nodeId: Int,
+  override val nodeHolder: ClusterNodesHolder,
+  override val ipAddress: InetSocketAddress,
+) : ClusterNode {
   private val onSwitchToPassive = Channel<ClusterNode.NodeState>(capacity = 1)
   private val onTerminatedHandler = Channel<ClusterNode.NodeState>(capacity = 1)
   private val stateHolder = AtomicReference<ClusterNode.NodeState>()
+  override val nodeState: ClusterNode.NodeState
+    get() = stateHolder.get()
   
   override var lastReceive: Long
-    get() = super.lastReceive
+    get() = System.currentTimeMillis()
     set(value) {}
   
   override var lastSend: Long
-    get() = super.lastSend
+    get() = System.currentTimeMillis()
     set(value) {}
+  
+  init {
+    if(nodeRole > ClusterNode.NodeState.Passive) {
+      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeRole")
+    }
+  }
+  
+  override fun sendToNode(msg: SnakesProto.GameMessage) {
+  }
+  
+  override fun sendToNodeWithAck(msg: SnakesProto.GameMessage) {
+  }
+  
+  override fun ackMessage(message: SnakesProto.GameMessage): SnakesProto.GameMessage? {
+    return null
+  }
+  
+  override fun addMessageForAck(message: SnakesProto.GameMessage) {
+  }
+  
+  override fun addAllMessageForAck(messages: Iterable<SnakesProto.GameMessage>) {
+  }
+  
   override fun CoroutineScope.startObservation(): Job {
     return launch {
-      var nextDelay = 0L
       try {
         Logger.trace { "${this@LocalClusterNodeImpl} startObservation" }
         while(isActive) {
@@ -59,29 +82,12 @@ class LocalClusterNodeImpl(
             
             onTerminatedHandler.onReceive { state ->
               Logger.trace {
-                "${this@ClusterNodeImpl} receive switch to $state state"
+                "${this@LocalClusterNodeImpl} receive switch to $state state"
               }
               onTerminatedHandler.close()
               stateHolder.set(ClusterNode.NodeState.Terminated)
-              this@ClusterNodeImpl.nodeHolder.apply {
-                handleNodeTermination(this@ClusterNodeImpl)
-              }
-            }
-            
-            onTimeout(nextDelay) {
-              when(nodeState) {
-                ClusterNode.NodeState.Active, ClusterNode.NodeState.Passive -> {
-                  nextDelay = onProcessing()
-                }
-                
-                ClusterNode.NodeState.Terminated                            -> {
-                  /**
-                   * по идее сюда вообще никогда не должны попасть
-                   */
-                  /**
-                   * по идее сюда вообще никогда не должны попасть
-                   */
-                }
+              this@LocalClusterNodeImpl.nodeHolder.apply {
+                handleNodeTermination(this@LocalClusterNodeImpl)
               }
             }
           }
@@ -95,6 +101,19 @@ class LocalClusterNodeImpl(
     }
   }
   
-  companion object LocalIp {
-    val LocalIpAddress = InetSocketAddress(InetAddress.getLocalHost(), 0)
+  override fun markAsPassive() {
+    onSwitchToPassive.trySend(ClusterNode.NodeState.Passive).onSuccess {
+      Logger.trace { "$this mark as passive" }
+    }
   }
+  
+  override fun shutdown() {
+    onTerminatedHandler.trySend(ClusterNode.NodeState.Terminated).onSuccess {
+      Logger.trace { "$this shutdowned" }
+    }
+  }
+  
+  override fun getUnacknowledgedMessages(): List<SnakesProto.GameMessage> {
+    return emptyList()
+  }
+}

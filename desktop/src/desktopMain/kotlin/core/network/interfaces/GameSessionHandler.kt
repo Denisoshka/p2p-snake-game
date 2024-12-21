@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.interfaces
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
+import d.zhdanov.ccfit.nsu.core.network.core2.states.Event
 
 interface GameSessionHandler {
   fun handleJoinToGameReq(joinReq: Event.State.ByController.JoinReq)

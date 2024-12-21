@@ -1,25 +1,26 @@
-package d.zhdanov.ccfit.nsu.core.network.node.connected
+package d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state
 
-import core.network.core.states.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.Logger
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.ConnectedActor
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.states.ConnectedActor
+import d.zhdanov.ccfit.nsu.core.network.core2.states.Event
+import d.zhdanov.ccfit.nsu.core.network.core2.states.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.StateHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.utils.Utils
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
 
-class PassiveState(
-  val localNode: LocalNode,
-  val gameConfig: InternalGameConfig,
+private val Logger = KotlinLogging.logger { PassiveStateImpl::class.java }
+
+class PassiveStateImpl(
+  private val localNode: ClusterNode,
+  private val gameConfig: InternalGameConfig,
   private val stateHolder: StateHolder,
-) : NodeState.PassiveStateT, ConnectedActor {
+) : NodeState.PassiveState, ConnectedActor {
   private val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   private val gameController: GameController = stateHolder.gameController
   
@@ -94,7 +95,7 @@ class PassiveState(
       Logger.trace {
         "apply ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
       }
-      stateHolder.sendUnicast(ack, ipAddress)
+      nodesHolder.sendUnicast(ack, ipAddress)
     } else {
       Logger.trace {
         "receive incorrect ${message.typeCase} receiverRole : ${message.roleChange.receiverRole} senderRole : ${message.roleChange.senderRole}"
@@ -121,24 +122,23 @@ class PassiveState(
   }
   
   override fun toLobby(
-    event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
+    event: Event.State.ByController.SwitchToLobby
   ): NodeState {
     nodesHolder.shutdown()
     gameController.openLobby()
-    return LobbyState(stateHolder = stateHolder)
+    return LobbyStateImpl(stateHolder = stateHolder)
   }
   
   override fun atNodeDetachPostProcess(
-    node: ClusterNodeT<Node.MsgInfo>,
+    node: ClusterNode,
     msInfo: Pair<InetSocketAddress, Int>,
-    dpInfo: Pair<InetSocketAddress, Int>?,
-    accessToken: Any
+    dpInfo: Pair<InetSocketAddress, Int>?
   ): NodeState? {
     /**
      * Я хз просто лишняя перестраховка, чтобы не реагировать на рандомные ноды
      * */
     return if(node.nodeId == msInfo.second && dpInfo == null) {
-      toLobby(Event.State.ByController.SwitchToLobby, accessToken)
+      toLobby(Event.State.ByController.SwitchToLobby)
     } else {
       null
     }

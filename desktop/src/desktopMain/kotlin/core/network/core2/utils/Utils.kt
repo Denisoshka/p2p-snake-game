@@ -1,10 +1,9 @@
-package core.network.core.states.utils
+package d.zhdanov.ccfit.nsu.core.network.core2.utils
 
 import d.zhdanov.ccfit.nsu.SnakesProto
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.node.connected.ContextEvent
-import d.zhdanov.ccfit.nsu.core.network.node.connected.StateHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.states.StateHolder
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -36,7 +35,7 @@ object Utils {
   }
   
   fun submitState(
-    player: LocalObserverContext,
+//    player: LocalObserverContext,
     stateSeq: Int,
     clusterNodesHolder: ClusterNodesHolder,
     stateHolder: StateHolder,
@@ -70,7 +69,7 @@ object Utils {
   fun nonLobbyNonMasterOnPingMsg(
     stateHolder: StateHolder,
     nodesHolder: ClusterNodesHolder,
-    localNode: LocalNode,
+    localNode: ClusterNode,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage,
   ) {
@@ -99,7 +98,7 @@ object Utils {
   fun onStateMsg(
     stateHolder: StateHolder,
     nodesHolder: ClusterNodesHolder,
-    localNode: LocalNode,
+    localNode: ClusterNode,
     ipAddress: InetSocketAddress,
     message: SnakesProto.GameMessage
   ) {
@@ -120,11 +119,12 @@ object Utils {
       )
     }
   }
+  
   fun onNonMasterSubmitSteer(
     stateHolder: StateHolder,
     nodesHolder: ClusterNodesHolder,
     steerMsg: SnakesProto.GameMessage.SteerMsg
-  ){
+  ) {
     val (ms, _) = stateHolder.masterDeputy ?: return
     nodesHolder[ms.first]?.let {
       val steer = MessageUtils.MessageProducer.getSteerMsg(
@@ -134,14 +134,15 @@ object Utils {
       it.addMessageForAck(steer)
     }
   }
-  fun onMasterSubmitSteer(  ){
+  
+  fun onMasterSubmitSteer() {
   
   }
   
   fun atFromMasterNodeDeputyNow(
     master: Pair<InetSocketAddress, Int>,
     deputy: Pair<InetSocketAddress, Int>?,
-    localNode: LocalNode,
+    localNode: ClusterNode,
     stateHolder: StateHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
@@ -157,20 +158,20 @@ object Utils {
   
   fun atFromMasterPlayerDead(
     master: Pair<InetSocketAddress, Int>,
-    localNode: LocalNode,
+    localNode: ClusterNode,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
   ): Boolean {
     if(message.receiverId != localNode.nodeId) return false
     if(master.second != message.senderId || ipAddress != master.first) return false
-    localNode.detach()
+    localNode.markAsPassive()
     return true
   }
   
   fun atFromMasterNodeMasterNow(
     master: Pair<InetSocketAddress, Int>,
     deputy: Pair<InetSocketAddress, Int>?,
-    localNode: LocalNode,
+    localNode: ClusterNode,
     nodesHolder: ClusterNodesHolder,
     message: SnakesProto.GameMessage,
     ipAddress: InetSocketAddress,
@@ -178,7 +179,7 @@ object Utils {
     if(master.second != message.senderId || ipAddress != master.first) return false
     if(deputy?.second != message.receiverId) return false
     if(deputy.second != localNode.nodeId) return false
-    nodesHolder[ipAddress]?.detach()
+    nodesHolder[ipAddress]?.markAsPassive()
     return true
   }
   
@@ -190,7 +191,7 @@ object Utils {
     ipAddress: InetSocketAddress,
   ): Boolean {
     if(message.senderId != deputy?.second || ipAddress != deputy.first) return false
-    nodesHolder[master.first]?.detach()
+    nodesHolder[master.first]?.shutdown()
     return true
   }
   
@@ -204,10 +205,10 @@ object Utils {
   }
   
   fun findDeputyInState(
-    msId: Int, state: SnakesProto.GameState
+    msId: Int, oldMsId: Int, state: SnakesProto.GameState
   ): SnakesProto.GamePlayer? {
     return state.players.playersList.firstOrNull {
-      it.id != msId && it.ipAddress.isNotBlank() && it.port in PortValuesRange && it.role == SnakesProto.NodeRole.NORMAL
+      it.id != msId && it.id != oldMsId && it.ipAddress.isNotBlank() && it.port in PortValuesRange && it.role == SnakesProto.NodeRole.NORMAL
     }
   }
 }

@@ -23,17 +23,17 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val Logger = KotlinLogging.logger { ClusterNodeImpl::class.java }
 
-open class ClusterNodeImpl(
+class ClusterNodeImpl(
   nodeRole: ClusterNode.NodeState,
   override val nodeId: Int,
   override val ipAddress: InetSocketAddress,
-  final override val nodeHolder: ClusterNodesHolder,
+  override val nodeHolder: ClusterNodesHolder,
 ) : ClusterNode {
   private val onSwitchToPassive = Channel<ClusterNode.NodeState>(capacity = 1)
   private val onTerminatedHandler = Channel<ClusterNode.NodeState>(capacity = 1)
   private val thresholdDelay = nodeHolder.thresholdDelay
   private val resendDelay = nodeHolder.resendDelay
-  final override val nodeState: ClusterNode.NodeState
+  override val nodeState: ClusterNode.NodeState
     get() = stateHolder.get()
   override var lastReceive: Long = System.currentTimeMillis()
   override var lastSend: Long = System.currentTimeMillis()
@@ -42,8 +42,8 @@ open class ClusterNodeImpl(
     TreeMap(MessageUtils.messageComparator)
   
   init {
-    if(nodeState > ClusterNode.NodeState.Passive) {
-      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeState")
+    if(nodeRole > ClusterNode.NodeState.Passive) {
+      throw IllegalNodeRegisterAttempt("illegal initial node state $nodeRole")
     }
   }
   

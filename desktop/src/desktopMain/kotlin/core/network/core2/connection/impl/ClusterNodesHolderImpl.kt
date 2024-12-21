@@ -1,5 +1,6 @@
 package d.zhdanov.ccfit.nsu.core.network.core2.connection.impl
 
+import core.network.core2.connection.impl.LocalClusterNodeImpl
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
@@ -19,8 +20,8 @@ class ClusterNodesHolderImpl(
   private val unicastHandler: UnicastNetHandler,
 ) : ClusterNodesHolder {
   @Volatile private var nodesScope: CoroutineScope? = null
-  private val nodesByIp =
-    ConcurrentHashMap<InetSocketAddress, ClusterNodeImpl>()
+  @Volatile private var _localNode: ClusterNode? = null
+  private val nodesByIp = ConcurrentHashMap<InetSocketAddress, ClusterNode>()
   
   override val launched: Boolean
     get() = nodesScope?.isActive ?: false
@@ -28,24 +29,28 @@ class ClusterNodesHolderImpl(
     get() = stateHolder.nextSeqNum
   
   @Synchronized
-  override fun launch() {
+  override fun launch(
+    nodeId: Int, nodeRole: ClusterNode.NodeState
+  ): ClusterNode {
     this.nodesScope ?: TODO("Not yet implemented")
     nodesScope = CoroutineScope(Dispatchers.IO)
+    val locNode = appendLocalNode(nodeId, nodeRole)
+    return locNode
   }
   
   @Synchronized
   override fun shutdown() {
     nodesScope?.cancel()
-    TODO("Not yet implemented")
+    clear()
   }
   
   override fun clear() {
+//    todo нужно ли оставить локальную ноду?
     nodesByIp.clear()
   }
   
   override fun registerNode(
-    ipAddress: InetSocketAddress,
-    id: Int
+    ipAddress: InetSocketAddress, id: Int, nodeRole: ClusterNode.NodeState
   ): ClusterNode {
     TODO("Not yet implemented")
   }
@@ -60,13 +65,31 @@ class ClusterNodesHolderImpl(
   }
   
   override fun sendUnicast(
-    msg: SnakesProto.GameMessage,
-    nodeAddress: InetSocketAddress
+    msg: SnakesProto.GameMessage, nodeAddress: InetSocketAddress
   ) {
     unicastHandler.sendUnicastMessage(msg, nodeAddress)
   }
   
   override fun get(ipAddress: InetSocketAddress): ClusterNode? {
     return nodesByIp[ipAddress]
+  }
+  
+  override fun iterator(): Iterator<Map.Entry<InetSocketAddress, ClusterNode>> {
+    return nodesByIp.entries.iterator()
+  }
+  
+  private fun appendLocalNode(
+    nodeId: Int, nodeRole: ClusterNode.NodeState
+  ): ClusterNode {
+    nodesByIp[ClusterNodesHolder.LocalIpAddress] = LocalClusterNodeImpl(
+      nodeRole = nodeRole,
+      nodeId = nodeId,
+      nodeHolder = this,
+      ipAddress = ClusterNodesHolder.LocalIpAddress
+    ).apply {
+      with(this) { nodesScope!!.startObservation() }
+      _localNode = this
+      return this
+    }
   }
 }

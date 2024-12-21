@@ -11,7 +11,7 @@ import d.zhdanov.ccfit.nsu.core.game.core.entity.active.SnakeEntity
 import d.zhdanov.ccfit.nsu.core.game.core.engine.impl.GameContextImpl
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.network.core.exceptions.IllegalMasterLaunchAttempt
-import d.zhdanov.ccfit.nsu.core.network.node.connected.MasterState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state.MasterStateImpl
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -36,7 +36,7 @@ object MasterStateUtils {
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
     clusterNodesHolder: ClusterNodesHolder,
-  ): MasterState {
+  ): MasterStateImpl {
     val eng = GameContextImpl(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val entities = init(
       eng, gameConfig, gamePlayerInfo
@@ -47,7 +47,7 @@ object MasterStateUtils {
     val scope = getScope()
     try {
       Logger.info { "master inited" }
-      return MasterState(
+      return MasterStateImpl(
         gameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,
@@ -66,7 +66,7 @@ object MasterStateUtils {
     gameConfig: InternalGameConfig,
     gamePlayerInfo: GamePlayerInfo,
     stateHolder: NetworkStateHolder,
-  ): MasterState {
+  ): MasterStateImpl {
     val eng = GameContextImpl(JoinPerUpdateQ, stateHolder, gameConfig.gameSettings)
     val scope = getScope()
     try {
@@ -82,7 +82,7 @@ object MasterStateUtils {
         entities, gamePlayerInfo, stateHolder
       )
       Logger.info { "master inited" }
-      return MasterState(
+      return MasterStateImpl(
         gameConfig = gameConfig,
         gameEngine = eng,
         stateHolder = stateHolder,

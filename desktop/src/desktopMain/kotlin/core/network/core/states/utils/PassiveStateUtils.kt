@@ -4,7 +4,7 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
-import d.zhdanov.ccfit.nsu.core.network.node.connected.PassiveState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state.PassiveStateImpl
 import java.net.InetSocketAddress
 
 object PassiveStateUtils {
@@ -15,7 +15,7 @@ object PassiveStateUtils {
     internalGameConfig: InternalGameConfig,
     masterId: Int,
     playerId: Int
-  ): PassiveState {
+  ): PassiveStateImpl {
     val masterNode = ClusterNode(
       nodeState = Node.NodeState.Passive,
       nodeId = masterId,
@@ -24,7 +24,7 @@ object PassiveStateUtils {
       name = ""
     )
     clusterNodesHolder.registerNode(masterNode)
-    return PassiveState(
+    return PassiveStateImpl(
       nodeId = playerId,
       stateHolder = stateHolder,
       gameConfig = internalGameConfig,

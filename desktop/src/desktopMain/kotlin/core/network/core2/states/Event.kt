@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.core.states.events
+package d.zhdanov.ccfit.nsu.core.network.core2.states
 
 import d.zhdanov.ccfit.nsu.core.network.core.node.Node
 import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT

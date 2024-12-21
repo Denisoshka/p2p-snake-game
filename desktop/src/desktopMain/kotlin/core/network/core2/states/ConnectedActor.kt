@@ -1,4 +1,4 @@
-package d.zhdanov.ccfit.nsu.core.network.states.abstr
+package d.zhdanov.ccfit.nsu.core.network.core2.states
 
 import d.zhdanov.ccfit.nsu.SnakesProto
 import java.net.InetSocketAddress

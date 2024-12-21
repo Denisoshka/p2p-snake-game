@@ -1,7 +1,7 @@
 package d.zhdanov.ccfit.nsu.core.network.node.connected
 
 import core.network.core.connection.lobby.impl.NetNodeHandler
-import core.network.core.states.utils.Utils
+import d.zhdanov.ccfit.nsu.core.network.core2.utils.Utils
 import core.network.node.interfaces.StateHolder
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
@@ -14,7 +14,8 @@ import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
 import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
 import d.zhdanov.ccfit.nsu.core.network.interfaces.StateService
 import d.zhdanov.ccfit.nsu.core.network.nethandlers.impl.UnicastNetHandler
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state.LobbyStateImpl
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,7 @@ class StateHolder(
     get() = gameStateHolder.get()
   
   private val stateHolder: AtomicReference<NodeState> = AtomicReference(
-    LobbyState(TODO(), TODO(), TODO())
+    LobbyStateImpl(TODO(), TODO(), TODO())
   )
   override val networkState: NodeState
     get() = stateHolder.get()
@@ -122,7 +123,7 @@ class StateHolder(
    * вообще не трогать в иных местах кроме как nodesNonLobbyWatcherRoutine,
    * потому что это костыль чтобы не было гонки данных изза кривого доступа к
    * функциям которые меняют состояние
-   * */
+   **/
   private val accessToken = Any()
   private fun CoroutineScope.clusterObserverActor() = launch {
     try {

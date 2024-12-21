@@ -1,29 +1,28 @@
-package d.zhdanov.ccfit.nsu.core.network.node.connected
+package d.zhdanov.ccfit.nsu.core.network.core2.states.impl.state
 
 import core.network.core.states.utils.MasterStateUtils
-import core.network.core.states.utils.Utils
+import d.zhdanov.ccfit.nsu.core.network.core2.utils.Utils
 import d.zhdanov.ccfit.nsu.SnakesProto
 import d.zhdanov.ccfit.nsu.controllers.GameController
 import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.GamePlayerInfo
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.NodeRole
-import d.zhdanov.ccfit.nsu.core.network.core.node.ClusterNodeT
-import d.zhdanov.ccfit.nsu.core.network.core.node.Node
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNode
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.ClusterNodesHolder
-import d.zhdanov.ccfit.nsu.core.network.core.node.impl.LocalNode
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
-import d.zhdanov.ccfit.nsu.core.network.core.states.impl.Logger
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.ConnectedActor
-import d.zhdanov.ccfit.nsu.core.network.states.abstr.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNode
+import d.zhdanov.ccfit.nsu.core.network.core2.connection.ClusterNodesHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.states.NodeState
+import d.zhdanov.ccfit.nsu.core.network.core2.states.StateHolder
+import d.zhdanov.ccfit.nsu.core.network.core2.states.ConnectedActor
 import d.zhdanov.ccfit.nsu.core.utils.MessageUtils
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.net.InetSocketAddress
 
-class ActiveState(
-  private val localNode: LocalNode,
+private val Logger = KotlinLogging.logger { ActiveStateImpl::class.java }
+
+class ActiveStateImpl(
+  private val localNode: ClusterNode,
   private val stateHolder: StateHolder,
   private val gameConfig: InternalGameConfig,
-) : NodeState.ActiveStateT, ConnectedActor {
+) : NodeState.ActiveState, ConnectedActor {
   private val nodesHolder: ClusterNodesHolder = stateHolder.nodesHolder
   private val gameController: GameController = stateHolder.gameController
   
@@ -148,7 +147,7 @@ class ActiveState(
   }
   
   override fun toMaster(
-    gameState: SnakesProto.GameState, accessToken: Any
+    gameState: SnakesProto.GameState
   ): NodeState {
     val (newMs, newDp) = stateHolder.masterDeputy!!
     newDp?.let {
@@ -177,10 +176,10 @@ class ActiveState(
     val newMs = localNode.ipAddress to localNode.nodeId
     stateHolder.reconfigureMasterDeputy(newMs to null, accessToken)
     val gamePlayerInfo = GamePlayerInfo(
-      this@ActiveState.internalGameConfig.playerName, localNode.nodeId
+      this@ActiveStateImpl.internalGameConfig.playerName, localNode.nodeId
     )
     Logger.info {
-      "activeDeputyHandleMasterDetach MasterNow config: ${this@ActiveState.internalGameConfig} player: $gamePlayerInfo"
+      "activeDeputyHandleMasterDetach MasterNow config: ${this@ActiveStateImpl.internalGameConfig} player: $gamePlayerInfo"
     }
     
     try {
@@ -230,10 +229,10 @@ class ActiveState(
   
   override fun toLobby(
     event: Event.State.ByController.SwitchToLobby, changeAccessToken: Any
-  ): LobbyState {
+  ): LobbyStateImpl {
     nodesHolder.shutdown()
     gameController.openLobby()
-    return LobbyState(stateHolder = stateHolder)
+    return LobbyStateImpl(stateHolder = stateHolder)
   }
   
   override fun toPassive(
@@ -254,7 +253,7 @@ class ActiveState(
        * ну если мастера вдруг не будет то мы обратимся к deputy
        * */
     }
-    return PassiveState(
+    return PassiveStateImpl(
       localNode = localNode,
       gameConfig = gameConfig,
       stateHolder = stateHolder,

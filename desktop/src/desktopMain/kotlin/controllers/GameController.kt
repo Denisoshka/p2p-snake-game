@@ -10,7 +10,7 @@ import d.zhdanov.ccfit.nsu.core.game.InternalGameConfig
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.Direction
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.AnnouncementMsg
 import d.zhdanov.ccfit.nsu.core.interaction.v1.messages.types.SteerMsg
-import d.zhdanov.ccfit.nsu.core.network.core.states.events.Event
+import d.zhdanov.ccfit.nsu.core.network.core2.states.Event
 import d.zhdanov.ccfit.nsu.view.screens.GameScreen
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
